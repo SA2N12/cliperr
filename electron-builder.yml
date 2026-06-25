@@ -1,0 +1,32 @@
+appId: com.tiktokclip.app
+productName: TikTokClip
+directories:
+  buildResources: build
+  output: dist
+files:
+  - out/**/*
+  - package.json
+# Les binaires natifs et bundlés doivent rester hors de l'asar pour être
+# exécutables. manager.unpacked() réécrit le chemin app.asar → app.asar.unpacked.
+asarUnpack:
+  - '**/*.node'
+  - node_modules/ffmpeg-static/**
+  - node_modules/ffprobe-static/**
+  - node_modules/better-sqlite3/**
+win:
+  target:
+    - nsis
+  artifactName: ${productName}-${version}-setup.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+mac:
+  target:
+    - dmg
+  category: public.app-category.video
+linux:
+  target:
+    - AppImage
+  category: AudioVideo

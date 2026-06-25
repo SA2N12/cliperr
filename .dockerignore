@@ -1,0 +1,10 @@
+node_modules
+out
+dist
+dist-web
+.git
+.claude
+*.log
+data
+**/*.db
+**/*.db-*

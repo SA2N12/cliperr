@@ -1,0 +1,9 @@
+# Reverse proxy HTTPS (certificat Let's Encrypt automatique).
+# Le domaine vient de la variable d'env DOMAIN (.env).
+{$DOMAIN} {
+	reverse_proxy app:8080
+	# Uploads vidéo volumineux : pas de limite de taille de requête.
+	request_body {
+		max_size 0
+	}
+}

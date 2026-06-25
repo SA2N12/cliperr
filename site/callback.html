@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cliperr — Autorisation TikTok</title>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        max-width: 640px;
+        margin: 60px auto;
+        padding: 0 20px;
+        line-height: 1.6;
+        color: #1a1a1a;
+        text-align: center;
+      }
+      .code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 1.1rem;
+        background: #f4f4f6;
+        border: 1px solid #ddd;
+        border-radius: 10px;
+        padding: 14px;
+        word-break: break-all;
+        margin: 16px 0;
+      }
+      button {
+        font: inherit;
+        cursor: pointer;
+        background: #fe2c55;
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        padding: 10px 18px;
+        font-weight: 600;
+      }
+      .muted { color: #666; }
+      .err { color: #c0392b; }
+    </style>
+  </head>
+  <body>
+    <h1>Cliperr</h1>
+    <div id="content"></div>
+    <script>
+      const params = new URLSearchParams(location.search)
+      const code = params.get('code')
+      const error = params.get('error')
+      const el = document.getElementById('content')
+      if (error) {
+        el.innerHTML =
+          '<p class="err">Autorisation refusée : ' + error + '</p><p class="muted">Réessaie depuis l\'application.</p>'
+      } else if (code) {
+        el.innerHTML =
+          '<p>Autorisation réussie ✅</p>' +
+          '<p class="muted">Copie ce code et colle-le dans l\'application (champ « Valider le code ») :</p>' +
+          '<div class="code" id="code">' + code + '</div>' +
+          '<button id="copy">Copier le code</button>'
+        document.getElementById('copy').onclick = async () => {
+          await navigator.clipboard.writeText(code)
+          document.getElementById('copy').textContent = 'Copié ✓'
+        }
+      } else {
+        el.innerHTML = '<p class="muted">Aucun code dans l\'URL. Lance l\'autorisation depuis l\'application.</p>'
+      }
+    </script>
+  </body>
+</html>

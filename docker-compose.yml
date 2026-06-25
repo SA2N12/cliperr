@@ -1,0 +1,29 @@
+# Stack TikTokClip : serveur web + provider PO token bgutil.
+# En prod, place un reverse proxy HTTPS (Caddy) devant `app` (voir README-web.md).
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - SECRET_KEY=${SECRET_KEY}
+      - DATA_DIR=/data
+      - PORT=8080
+      - BGUTIL_URL=http://bgutil-provider:4416
+      - NODE_ENV=production
+    volumes:
+      - ttc-data:/data
+    # Accessible seulement en local (debug). En prod, Caddy expose 80/443.
+    ports:
+      - '127.0.0.1:8090:8080'
+    depends_on:
+      - bgutil-provider
+
+  # Génère les PO tokens YouTube (utile seulement si tu télécharges par URL —
+  # sur un VPS, YouTube reste souvent bloqué : privilégie l'upload de fichier).
+  bgutil-provider:
+    image: brainicism/bgutil-ytdlp-pot-provider
+    restart: unless-stopped
+
+volumes:
+  ttc-data:

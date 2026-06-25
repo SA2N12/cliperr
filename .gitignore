@@ -1,0 +1,17 @@
+node_modules/
+out/
+dist/
+dist-web/
+.tmp-bin/
+.claude/
+*.log
+.DS_Store
+
+# App data / generated artifacts
+data/
+clips/
+downloads/
+models/
+.env
+.env.*
+!.env.example
