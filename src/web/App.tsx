@@ -9,7 +9,7 @@ import {
   type PublishOverrides
 } from './api'
 
-type Page = 'dashboard' | 'sources' | 'clips' | 'queue' | 'published' | 'settings'
+type Page = 'dashboard' | 'generate' | 'history' | 'clips' | 'queue' | 'published' | 'settings'
 
 const ICONS: Record<string, string> = {
   dashboard: 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z',
@@ -25,7 +25,8 @@ const ICONS: Record<string, string> = {
   check: 'M20 6L9 17l-5-5',
   send: 'M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z',
   clock: 'M12 7v5l3 2M12 3a9 9 0 100 18 9 9 0 000-18z',
-  folder: 'M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z'
+  folder: 'M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z',
+  list: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01'
 }
 function Icon({ name, size = 18 }: { name: string; size?: number }): JSX.Element {
   return (
@@ -93,6 +94,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
   const [log, setLog] = useState<string[]>([])
   const [ttProfile, setTtProfile] = useState<{ nickname: string | null; avatarUrl: string | null } | null>(null)
   const [toast, setToast] = useState('')
+  const [progress, setProgress] = useState<Record<number, ProgressEvent>>({})
 
   const pushLog = useCallback((m: string) => setLog((l) => [`${new Date().toLocaleTimeString()}  ${m}`, ...l].slice(0, 200)), [])
   const refresh = useCallback(async () => {
@@ -108,6 +110,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
       onLog: (m) => pushLog(m),
       onProgress: (e: ProgressEvent) => {
         pushLog(`[${e.stage}] ${e.status} ${Math.round((e.progress || 0) * 100)}%${e.message ? ' — ' + e.message : ''}`)
+        setProgress((pm) => ({ ...pm, [e.sourceId]: e }))
         if (e.status === 'done' || e.status === 'error') refresh().catch(() => undefined)
       }
     })
@@ -135,7 +138,8 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
 
   const nav: { id: Page; label: string; icon: string }[] = [
     { id: 'dashboard', label: 'Tableau de bord', icon: 'dashboard' },
-    { id: 'sources', label: 'Sources', icon: 'sources' },
+    { id: 'generate', label: 'Générer', icon: 'spark' },
+    { id: 'history', label: 'Historique', icon: 'list' },
     { id: 'clips', label: 'Clips', icon: 'clips' },
     { id: 'queue', label: 'File d’attente', icon: 'clock' },
     { id: 'published', label: 'Publiés', icon: 'send' },
@@ -176,7 +180,8 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
 
       <main className="main">
         {page === 'dashboard' && <Dashboard sources={sources} clips={clips} log={log} go={setPage} onRefresh={refresh} />}
-        {page === 'sources' && <Sources sources={sources} onRefresh={refresh} toast={showToast} goClips={() => setPage('clips')} />}
+        {page === 'generate' && <Generate sources={sources} progress={progress} onRefresh={refresh} toast={showToast} goHistory={() => setPage('history')} />}
+        {page === 'history' && <History sources={sources} clips={clips} progress={progress} onRefresh={refresh} toast={showToast} goClips={() => setPage('clips')} />}
         {page === 'clips' && <Clips clips={clips} sources={sources} onRefresh={refresh} toast={showToast} ttProfile={ttProfile} />}
         {page === 'queue' && <Queue clips={clips} go={setPage} />}
         {page === 'published' && <Published clips={clips} go={setPage} />}
@@ -316,10 +321,10 @@ function Dashboard({ sources, clips, log, go, onRefresh }: { sources: SourceDTO[
           <p>Vue d'ensemble de ton pipeline de clipping en temps réel.</p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
-          <button className="btn" onClick={() => go('sources')}>
+          <button className="btn" onClick={() => go('generate')}>
             <Icon name="spark" size={16} /> Générer
           </button>
-          <button className="btn dark" onClick={() => go('sources')}>+ Nouvelle source</button>
+          <button className="btn dark" onClick={() => go('generate')}>+ Nouvelle génération</button>
           <button className="btn icon-btn" onClick={() => onRefresh()} title="Rafraîchir">
             <Icon name="refresh" size={16} />
           </button>
@@ -431,22 +436,37 @@ function Dashboard({ sources, clips, log, go, onRefresh }: { sources: SourceDTO[
   )
 }
 
-function Sources({ sources, onRefresh, toast, goClips }: { sources: SourceDTO[]; onRefresh: () => Promise<void>; toast: (m: string) => void; goClips: () => void }): JSX.Element {
+const STAGE_LABELS: Record<string, string> = {
+  ingest: 'Téléchargement / import',
+  transcribe: 'Transcription',
+  highlights: 'Sélection des moments (IA)',
+  reframe: 'Génération des clips',
+  metadata: 'Génération des légendes'
+}
+
+function Generate({ sources, progress, onRefresh, toast, goHistory }: { sources: SourceDTO[]; progress: Record<number, ProgressEvent>; onRefresh: () => Promise<void>; toast: (m: string) => void; goHistory: () => void }): JSX.Element {
+  const [step, setStep] = useState<'import' | 'count'>('import')
   const [tab, setTab] = useState<'upload' | 'url'>('upload')
   const [url, setUrl] = useState('')
   const [busy, setBusy] = useState(false)
-  const [counts, setCounts] = useState<Record<number, number>>({})
   const [uploadPct, setUploadPct] = useState<number | null>(null)
   const [dragging, setDragging] = useState(false)
+  const [newSource, setNewSource] = useState<SourceDTO | null>(null)
+  const [clipCount, setClipCount] = useState(3)
   const fileRef = useRef<HTMLInputElement>(null)
 
+  function imported(src: SourceDTO): void {
+    setNewSource(src)
+    setStep('count')
+  }
   async function addUrl(): Promise<void> {
     if (!url.trim()) return
     setBusy(true)
     try {
-      await api.addSource(url.trim())
+      const src = await api.addSource(url.trim())
       setUrl('')
       await onRefresh()
+      imported(src)
     } catch (e) {
       toast(`Erreur : ${String((e as Error).message)}`)
     } finally {
@@ -456,9 +476,7 @@ function Sources({ sources, onRefresh, toast, goClips }: { sources: SourceDTO[];
   async function uploadFile(file: File): Promise<void> {
     if (!file) return
     if (file.size < 100 * 1024) {
-      toast(
-        `Fichier trop petit (${file.size} octets) — ce n’est pas une vidéo valide. Ton téléchargement est sûrement incomplet : vérifie la taille du fichier (doit être en Mo/Go).`
-      )
+      toast(`Fichier trop petit (${file.size} octets) — ce n’est pas une vidéo valide (téléchargement incomplet ?).`)
       return
     }
     if (!file.type.startsWith('video/') && !/\.(mp4|mov|mkv|webm|avi|m4v)$/i.test(file.name)) {
@@ -467,9 +485,9 @@ function Sources({ sources, onRefresh, toast, goClips }: { sources: SourceDTO[];
     }
     setUploadPct(0)
     try {
-      await api.uploadSource(file, (r) => setUploadPct(Math.round(r * 100)))
+      const src = await api.uploadSource(file, (r) => setUploadPct(Math.round(r * 100)))
       await onRefresh()
-      toast(`Vidéo « ${file.name} » importée ✅`)
+      imported(src)
     } catch (err) {
       toast(`Upload échoué : ${String((err as Error).message)}`)
     } finally {
@@ -478,99 +496,164 @@ function Sources({ sources, onRefresh, toast, goClips }: { sources: SourceDTO[];
     }
   }
   function onFile(e: ChangeEvent<HTMLInputElement>): void {
-    const file = e.target.files?.[0]
-    if (file) void uploadFile(file)
+    const f = e.target.files?.[0]
+    if (f) void uploadFile(f)
   }
-  async function run(id: number): Promise<void> {
+  async function launch(): Promise<void> {
+    if (!newSource) return
+    setBusy(true)
     try {
-      await api.runPipeline(id, counts[id] ?? 3)
+      await api.runPipeline(newSource.id, clipCount)
+      toast(`Génération lancée (${clipCount} clip${clipCount > 1 ? 's' : ''})`)
+      setNewSource(null)
+      setClipCount(3)
+      setStep('import')
+      setTab('upload')
       await onRefresh()
-      toast('Pipeline lancé')
     } catch (e) {
       toast(`Erreur : ${String((e as Error).message)}`)
+    } finally {
+      setBusy(false)
     }
   }
+
+  const active = sources.filter((s) => s.status === 'queued' || s.status === 'running')
 
   return (
     <>
       <div className="page-head">
         <div>
-          <h1>Sources</h1>
-          <p>Importe directement un fichier, ou télécharge depuis une URL.</p>
+          <h1>Générer</h1>
+          <p>Importe une vidéo, choisis le nombre de clips, lance la génération.</p>
         </div>
+        <button className="btn" onClick={goHistory}><Icon name="list" size={16} /> Historique</button>
       </div>
 
-      <div className="card" style={{ marginBottom: 16 }}>
-        <div className="tabs">
-          <button className={`tab ${tab === 'upload' ? 'on' : ''}`} onClick={() => setTab('upload')}>
-            <Icon name="upload" size={16} /> Importer un fichier
-          </button>
-          <button className={`tab ${tab === 'url' ? 'on' : ''}`} onClick={() => setTab('url')}>
-            <Icon name="sources" size={16} /> Télécharger (URL)
-          </button>
+      <div className="card" style={{ marginBottom: 18 }}>
+        <div className="stepper">
+          <div className={`step ${step === 'import' ? 'on' : 'done'}`}><span className="n">1</span> Importer</div>
+          <div className="step-line" />
+          <div className={`step ${step === 'count' ? 'on' : ''}`}><span className="n">2</span> Nombre de clips</div>
         </div>
 
-        {tab === 'upload' && (
-          <div>
-            <div
-              className={`dropzone ${dragging ? 'drag' : ''}`}
-              onClick={() => uploadPct === null && fileRef.current?.click()}
-              onDragOver={(e) => {
-                e.preventDefault()
-                if (!dragging) setDragging(true)
-              }}
-              onDragLeave={(e) => {
-                e.preventDefault()
-                setDragging(false)
-              }}
-              onDrop={(e) => {
-                e.preventDefault()
-                setDragging(false)
-                const f = e.dataTransfer.files?.[0]
-                if (f) void uploadFile(f)
-              }}
-            >
-              <div className="dz-icon"><Icon name="upload" size={24} /></div>
-              <div style={{ fontWeight: 600, fontSize: 15 }}>
-                {uploadPct !== null ? `Upload en cours… ${uploadPct}%` : 'Glisse ton fichier vidéo ici'}
+        {step === 'import' && (
+          <div style={{ marginTop: 18 }}>
+            <div className="tabs">
+              <button className={`tab ${tab === 'upload' ? 'on' : ''}`} onClick={() => setTab('upload')}><Icon name="upload" size={16} /> Importer un fichier</button>
+              <button className={`tab ${tab === 'url' ? 'on' : ''}`} onClick={() => setTab('url')}><Icon name="sources" size={16} /> Télécharger (URL)</button>
+            </div>
+            {tab === 'upload' ? (
+              <div>
+                <div
+                  className={`dropzone ${dragging ? 'drag' : ''}`}
+                  onClick={() => uploadPct === null && fileRef.current?.click()}
+                  onDragOver={(e) => { e.preventDefault(); if (!dragging) setDragging(true) }}
+                  onDragLeave={(e) => { e.preventDefault(); setDragging(false) }}
+                  onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files?.[0]; if (f) void uploadFile(f) }}
+                >
+                  <div className="dz-icon"><Icon name="upload" size={24} /></div>
+                  <div style={{ fontWeight: 600, fontSize: 15 }}>{uploadPct !== null ? `Upload en cours… ${uploadPct}%` : 'Glisse ton fichier vidéo ici'}</div>
+                  <div className="small" style={{ marginTop: 4 }}>ou clique pour parcourir · mp4, mov, mkv, webm</div>
+                </div>
+                {uploadPct !== null && <div className="bar" style={{ marginTop: 12 }}><div style={{ width: `${uploadPct}%` }} /></div>}
+                <input ref={fileRef} type="file" accept="video/*" hidden onChange={onFile} />
               </div>
-              <div className="small" style={{ marginTop: 4 }}>ou clique pour parcourir · mp4, mov, mkv, webm</div>
-            </div>
-            {uploadPct !== null && <div className="bar" style={{ marginTop: 12 }}><div style={{ width: `${uploadPct}%` }} /></div>}
-            <input ref={fileRef} type="file" accept="video/*" hidden onChange={onFile} />
+            ) : (
+              <div>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <input className="input-full" style={{ flex: 1, minWidth: 260 }} placeholder="URL YouTube / Twitch…" value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addUrl()} />
+                  <button className="btn primary" onClick={addUrl} disabled={busy}>Continuer</button>
+                </div>
+                <p className="muted small" style={{ marginTop: 10 }}>⚠️ Sur ce serveur, YouTube par URL est souvent bloqué — préfère l’import de fichier.</p>
+              </div>
+            )}
           </div>
         )}
 
-        {tab === 'url' && (
-          <div>
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              <input className="input-full" style={{ flex: 1, minWidth: 260 }} placeholder="URL YouTube / Twitch…" value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addUrl()} />
-              <button className="btn primary" onClick={addUrl} disabled={busy}>Ajouter l'URL</button>
+        {step === 'count' && newSource && (
+          <div style={{ marginTop: 18 }}>
+            <div className="muted small">Vidéo</div>
+            <div style={{ fontWeight: 600, marginBottom: 18 }}>{newSource.title || newSource.url?.split(/[\\/]/).pop()}</div>
+            <label className="muted small">Nombre de clips à générer</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 8 }}>
+              <input type="range" min={1} max={10} value={clipCount} onChange={(e) => setClipCount(Number(e.target.value))} style={{ flex: 1 }} />
+              <div style={{ fontSize: 30, fontWeight: 700, color: 'var(--accent-strong)', minWidth: 40, textAlign: 'center' }}>{clipCount}</div>
             </div>
-            <p className="muted small" style={{ marginTop: 10 }}>
-              ⚠️ Sur ce serveur (IP datacenter), YouTube bloque souvent le téléchargement par URL. Si ça échoue, télécharge la vidéo dans ton navigateur puis utilise l’onglet « Importer un fichier ».
-            </p>
+            <div style={{ display: 'flex', gap: 8, marginTop: 20, justifyContent: 'flex-end' }}>
+              <button className="btn" onClick={() => { setStep('import'); setNewSource(null) }}>Retour</button>
+              <button className="btn primary" onClick={launch} disabled={busy}>{busy ? 'Lancement…' : '🚀 Lancer la génération'}</button>
+            </div>
           </div>
         )}
       </div>
 
+      {active.length > 0 && (
+        <div>
+          <h3 style={{ margin: '0 0 10px' }}>Générations en cours ({active.length})</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {active.map((s) => {
+              const p = progress[s.id]
+              const pct = s.status === 'queued' ? 0 : Math.round((p?.progress ?? 0) * 100)
+              const stage = s.status === 'queued' ? 'En file d’attente' : STAGE_LABELS[p?.stage ?? 'ingest'] ?? p?.stage ?? '…'
+              return (
+                <div key={s.id} className="card">
+                  <div className="row" style={{ marginBottom: 8 }}>
+                    <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.title || s.url?.split(/[\\/]/).pop()}</strong>
+                    <span className="pill-badge"><span className="dot" /> {s.status === 'queued' ? 'En attente' : 'En cours'}</span>
+                  </div>
+                  <div className="muted small" style={{ marginBottom: 6 }}>{stage}{p?.message ? ` — ${p.message}` : ''}</div>
+                  <div className="bar"><div style={{ width: `${pct}%`, transition: 'width .4s' }} /></div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
+function History({ sources, clips, onRefresh, toast, goClips }: { sources: SourceDTO[]; clips: ClipDTO[]; progress: Record<number, ProgressEvent>; onRefresh: () => Promise<void>; toast: (m: string) => void; goClips: () => void }): JSX.Element {
+  const [counts, setCounts] = useState<Record<number, number>>({})
+  async function run(id: number): Promise<void> {
+    try {
+      await api.runPipeline(id, counts[id] ?? 3)
+      await onRefresh()
+      toast('Génération relancée')
+    } catch (e) {
+      toast(`Erreur : ${String((e as Error).message)}`)
+    }
+  }
+  const statusLabel = (s: string): string =>
+    ({ done: 'Terminé', running: 'En cours', queued: 'En attente', error: 'Erreur', pending: 'Non lancé' } as Record<string, string>)[s] || s
+  const busy = (s: string): boolean => s === 'running' || s === 'queued'
+
+  return (
+    <>
+      <div className="page-head">
+        <div>
+          <h1>Historique</h1>
+          <p>Toutes tes générations (vidéos sources, statut, nombre de clips).</p>
+        </div>
+      </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {sources.length === 0 && <div className="card muted">Aucune source. Importe une vidéo pour commencer.</div>}
-        {sources.map((s) => (
+        {sources.length === 0 && <div className="card muted">Aucune génération pour l’instant.</div>}
+        {[...sources].reverse().map((s) => (
           <div key={s.id} className="card">
             <div className="row">
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.title || s.url}</div>
-                <div className="muted small">#{s.id} · {s.author || 'auteur inconnu'} · {s.status}{s.error ? ` · ${s.error}` : ''}</div>
+                <div className="muted small">
+                  #{s.id} · {clips.filter((c) => c.sourceId === s.id).length} clip(s) · {statusLabel(s.status)}
+                  {s.error ? ` · ${s.error}` : ''}
+                </div>
               </div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <label className="muted small" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                   Clips
-                  <input type="number" min={1} max={10} value={counts[s.id] ?? 3} disabled={s.status === 'running'} onChange={(e) => setCounts((m) => ({ ...m, [s.id]: Math.min(10, Math.max(1, Math.round(Number(e.target.value) || 1))) }))} style={{ width: 56 }} />
+                  <input type="number" min={1} max={10} value={counts[s.id] ?? 3} disabled={busy(s.status)} onChange={(e) => setCounts((m) => ({ ...m, [s.id]: Math.min(10, Math.max(1, Math.round(Number(e.target.value) || 1))) }))} style={{ width: 56 }} />
                 </label>
-                <button className="btn primary" onClick={() => run(s.id)} disabled={s.status === 'running'}>
-                  {s.status === 'running' ? 'En cours…' : 'Lancer'}
-                </button>
+                <button className="btn" onClick={() => run(s.id)} disabled={busy(s.status)}>{busy(s.status) ? '…' : 'Relancer'}</button>
                 <button className="btn" onClick={goClips}>Voir clips</button>
               </div>
             </div>

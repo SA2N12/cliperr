@@ -308,6 +308,9 @@ app.post('/api/pipeline/run', wrap((req, res) => {
   const sourceId = Number(req.body?.sourceId)
   const clipCount = Math.min(10, Math.max(1, Math.round(Number(req.body?.clipCount ?? 3))))
   if (!sourceId) return res.status(400).json({ error: 'sourceId manquant' })
+  // Marque la source « en file d'attente » immédiatement (avant son tour).
+  repo.updateSource(sourceId, { status: 'queued', error: null })
+  emitProgress({ sourceId, stage: 'ingest', status: 'running', progress: 0, message: 'En file d’attente…' })
   const job = pipelineChain.then(() => runForSource(sourceId, clipCount))
   pipelineChain = job.then(() => undefined, () => undefined)
   res.json({ ok: true })

@@ -15,7 +15,7 @@ export function initDb(dataDir: string): BetterSQLite3Database<typeof schema> {
   _sqlite.exec(schema.SCHEMA_DDL)
   // Au démarrage, aucune source n'est réellement en cours : on débloque celles
   // restées en "running" suite à une fermeture/redémarrage de l'app.
-  _sqlite.exec("UPDATE sources SET status = 'pending' WHERE status = 'running'")
+  _sqlite.exec("UPDATE sources SET status = 'pending' WHERE status IN ('running', 'queued')")
   _db = drizzle(_sqlite, { schema })
   return _db
 }
