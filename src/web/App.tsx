@@ -412,10 +412,12 @@ function Dashboard({ sources, clips, log, go, onRefresh }: { sources: SourceDTO[
 }
 
 function Sources({ sources, onRefresh, toast, goClips }: { sources: SourceDTO[]; onRefresh: () => Promise<void>; toast: (m: string) => void; goClips: () => void }): JSX.Element {
+  const [tab, setTab] = useState<'upload' | 'url'>('upload')
   const [url, setUrl] = useState('')
   const [busy, setBusy] = useState(false)
   const [counts, setCounts] = useState<Record<number, number>>({})
   const [uploadPct, setUploadPct] = useState<number | null>(null)
+  const [dragging, setDragging] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   async function addUrl(): Promise<void> {
@@ -431,20 +433,27 @@ function Sources({ sources, onRefresh, toast, goClips }: { sources: SourceDTO[];
       setBusy(false)
     }
   }
-  async function onFile(e: ChangeEvent<HTMLInputElement>): Promise<void> {
-    const file = e.target.files?.[0]
+  async function uploadFile(file: File): Promise<void> {
     if (!file) return
+    if (!file.type.startsWith('video/')) {
+      toast('Ce fichier n’est pas une vidéo.')
+      return
+    }
     setUploadPct(0)
     try {
       await api.uploadSource(file, (r) => setUploadPct(Math.round(r * 100)))
       await onRefresh()
-      toast('Vidéo importée ✅')
+      toast(`Vidéo « ${file.name} » importée ✅`)
     } catch (err) {
       toast(`Upload échoué : ${String((err as Error).message)}`)
     } finally {
       setUploadPct(null)
       if (fileRef.current) fileRef.current.value = ''
     }
+  }
+  function onFile(e: ChangeEvent<HTMLInputElement>): void {
+    const file = e.target.files?.[0]
+    if (file) void uploadFile(file)
   }
   async function run(id: number): Promise<void> {
     try {
@@ -461,20 +470,62 @@ function Sources({ sources, onRefresh, toast, goClips }: { sources: SourceDTO[];
       <div className="page-head">
         <div>
           <h1>Sources</h1>
-          <p>Importe une vidéo (recommandé sur serveur) ou colle une URL.</p>
+          <p>Importe directement un fichier, ou télécharge depuis une URL.</p>
         </div>
       </div>
 
       <div className="card" style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <input className="input-full" style={{ flex: 1, minWidth: 260 }} placeholder="URL YouTube / Twitch…" value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addUrl()} />
-          <button className="btn primary" onClick={addUrl} disabled={busy}>Ajouter l'URL</button>
-          <button className="btn" onClick={() => fileRef.current?.click()} disabled={uploadPct !== null}>
-            <Icon name="upload" size={16} /> {uploadPct !== null ? `Upload ${uploadPct}%` : 'Importer un fichier'}
+        <div className="tabs">
+          <button className={`tab ${tab === 'upload' ? 'on' : ''}`} onClick={() => setTab('upload')}>
+            <Icon name="upload" size={16} /> Importer un fichier
           </button>
-          <input ref={fileRef} type="file" accept="video/*" hidden onChange={onFile} />
+          <button className={`tab ${tab === 'url' ? 'on' : ''}`} onClick={() => setTab('url')}>
+            <Icon name="sources" size={16} /> Télécharger (URL)
+          </button>
         </div>
-        {uploadPct !== null && <div className="bar" style={{ marginTop: 10 }}><div style={{ width: `${uploadPct}%` }} /></div>}
+
+        {tab === 'upload' && (
+          <div>
+            <div
+              className={`dropzone ${dragging ? 'drag' : ''}`}
+              onClick={() => uploadPct === null && fileRef.current?.click()}
+              onDragOver={(e) => {
+                e.preventDefault()
+                if (!dragging) setDragging(true)
+              }}
+              onDragLeave={(e) => {
+                e.preventDefault()
+                setDragging(false)
+              }}
+              onDrop={(e) => {
+                e.preventDefault()
+                setDragging(false)
+                const f = e.dataTransfer.files?.[0]
+                if (f) void uploadFile(f)
+              }}
+            >
+              <div className="dz-icon"><Icon name="upload" size={24} /></div>
+              <div style={{ fontWeight: 600, fontSize: 15 }}>
+                {uploadPct !== null ? `Upload en cours… ${uploadPct}%` : 'Glisse ton fichier vidéo ici'}
+              </div>
+              <div className="small" style={{ marginTop: 4 }}>ou clique pour parcourir · mp4, mov, mkv, webm</div>
+            </div>
+            {uploadPct !== null && <div className="bar" style={{ marginTop: 12 }}><div style={{ width: `${uploadPct}%` }} /></div>}
+            <input ref={fileRef} type="file" accept="video/*" hidden onChange={onFile} />
+          </div>
+        )}
+
+        {tab === 'url' && (
+          <div>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <input className="input-full" style={{ flex: 1, minWidth: 260 }} placeholder="URL YouTube / Twitch…" value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addUrl()} />
+              <button className="btn primary" onClick={addUrl} disabled={busy}>Ajouter l'URL</button>
+            </div>
+            <p className="muted small" style={{ marginTop: 10 }}>
+              ⚠️ Sur ce serveur (IP datacenter), YouTube bloque souvent le téléchargement par URL. Si ça échoue, télécharge la vidéo dans ton navigateur puis utilise l’onglet « Importer un fichier ».
+            </p>
+          </div>
+        )}
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
