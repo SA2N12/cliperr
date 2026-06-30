@@ -103,6 +103,7 @@ async function runForSource(sourceId: number, clipCount: number): Promise<void> 
   const backend = repo.getSetting(FLAG_TRANSCRIBE_BACKEND) || 'groq'
   const groqKey = getEncrypted('groq_key')
   const cookiesFile = repo.getSetting('ytdlp_cookies_file') || null
+  const autoApprove = repo.getSetting('auto_approve') === '1'
 
   repo.updateSource(sourceId, { status: 'running', error: null })
   try {
@@ -131,8 +132,8 @@ async function runForSource(sourceId: number, clipCount: number): Promise<void> 
         emit: send,
         onMeta: (m) => repo.updateSource(sourceId, { title: m.title, author: m.author, durationSec: m.durationSec }),
         onSourceFile: (fp) => repo.updateSource(sourceId, { filePath: fp }),
-        onClip: (c) =>
-          repo.createClip({
+        onClip: (c) => {
+          const clip = repo.createClip({
             sourceId,
             startSec: c.startSec,
             endSec: c.endSec,
@@ -142,7 +143,9 @@ async function runForSource(sourceId: number, clipCount: number): Promise<void> 
             title: c.title,
             description: c.description,
             hashtags: c.hashtags
-          }),
+          })
+          if (autoApprove) repo.setClipReview(clip.id, 'approved')
+        },
         onUsage: (m, usage) => addSpend(m, usage)
       },
       { apiKey, model, transcribe, reframeFocus, detectFace, cookiesFromBrowser: null, cookiesFile, clipCount }
