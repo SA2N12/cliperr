@@ -155,6 +155,43 @@ async function runForSource(sourceId: number, clipCount: number): Promise<void> 
   }
 }
 
+// Prochaine occurrence d'une expression cron (5 champs), à la minute près.
+function cronNext(expr: string, from: Date): Date | null {
+  const fields = expr.trim().split(/\s+/)
+  if (fields.length !== 5) return null
+  const [min, hr, dom, mon, dow] = fields
+  const match = (val: number, field: string, base: number): boolean => {
+    if (field === '*') return true
+    for (const part of field.split(',')) {
+      if (part.startsWith('*/')) {
+        const step = Number(part.slice(2))
+        if (step > 0 && (val - base) % step === 0) return true
+      } else if (part.includes('-')) {
+        const [a, b] = part.split('-').map(Number)
+        if (val >= a && val <= b) return true
+      } else if (Number(part) === val) return true
+    }
+    return false
+  }
+  const d = new Date(from)
+  d.setSeconds(0, 0)
+  d.setMinutes(d.getMinutes() + 1)
+  for (let i = 0; i < 366 * 24 * 60; i++) {
+    const dowVal = d.getDay() // 0=dimanche
+    if (
+      match(d.getMinutes(), min, 0) &&
+      match(d.getHours(), hr, 0) &&
+      match(d.getDate(), dom, 1) &&
+      match(d.getMonth() + 1, mon, 1) &&
+      (match(dowVal, dow, 0) || match(dowVal === 0 ? 7 : dowVal, dow, 0))
+    ) {
+      return d
+    }
+    d.setMinutes(d.getMinutes() + 1)
+  }
+  return null
+}
+
 // ── Scheduler ──
 let task: ScheduledTask | null = null
 function reloadScheduler(): void {
@@ -339,6 +376,22 @@ app.post('/api/ytdlp/install-pot', wrap(async (_req, res) => {
 app.post('/api/scheduler/reload', wrap((_req, res) => {
   reloadScheduler()
   res.json({ ok: true })
+}))
+app.get('/api/scheduler/status', wrap((_req, res) => {
+  const enabled = repo.getSetting('schedule_enabled') === '1'
+  const cron = repo.getSetting('schedule_cron') || '*/30 * * * *'
+  const lastRunAt = Number(repo.getSetting('schedule_last_run')) || null
+  let nextRunAt: number | null = null
+  let intervalSec: number | null = null
+  if (enabled) {
+    const n1 = cronNext(cron, new Date())
+    if (n1) {
+      nextRunAt = n1.getTime()
+      const n2 = cronNext(cron, n1)
+      if (n2) intervalSec = Math.round((n2.getTime() - n1.getTime()) / 1000)
+    }
+  }
+  res.json({ enabled, cron, nextRunAt, intervalSec, lastRunAt })
 }))
 
 // TikTok

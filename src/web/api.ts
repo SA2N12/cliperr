@@ -79,6 +79,10 @@ export const api = {
   updateYtDlp: () => post('/api/ytdlp/update'),
   installPot: () => post('/api/ytdlp/install-pot'),
   reloadScheduler: () => post('/api/scheduler/reload'),
+  schedulerStatus: () =>
+    req<{ enabled: boolean; cron: string; nextRunAt: number | null; intervalSec: number | null; lastRunAt: number | null }>(
+      '/api/scheduler/status'
+    ),
 
   // TikTok
   tiktokStatus: () => req<{ connected: boolean; hasConfig: boolean; hasSecret: boolean }>('/api/tiktok/status'),

@@ -9,7 +9,7 @@ import {
   type PublishOverrides
 } from './api'
 
-type Page = 'dashboard' | 'sources' | 'clips' | 'settings'
+type Page = 'dashboard' | 'sources' | 'clips' | 'queue' | 'settings'
 
 const ICONS: Record<string, string> = {
   dashboard: 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z',
@@ -23,7 +23,8 @@ const ICONS: Record<string, string> = {
   refresh: 'M21 12a9 9 0 11-3-6.7L21 8M21 3v5h-5',
   spark: 'M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4L12 3z',
   check: 'M20 6L9 17l-5-5',
-  send: 'M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z'
+  send: 'M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z',
+  clock: 'M12 7v5l3 2M12 3a9 9 0 100 18 9 9 0 000-18z'
 }
 function Icon({ name, size = 18 }: { name: string; size?: number }): JSX.Element {
   return (
@@ -135,6 +136,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
     { id: 'dashboard', label: 'Tableau de bord', icon: 'dashboard' },
     { id: 'sources', label: 'Sources', icon: 'sources' },
     { id: 'clips', label: 'Clips', icon: 'clips' },
+    { id: 'queue', label: 'File d’attente', icon: 'clock' },
     { id: 'settings', label: 'Réglages', icon: 'settings' }
   ]
 
@@ -174,6 +176,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
         {page === 'dashboard' && <Dashboard sources={sources} clips={clips} log={log} go={setPage} onRefresh={refresh} />}
         {page === 'sources' && <Sources sources={sources} onRefresh={refresh} toast={showToast} goClips={() => setPage('clips')} />}
         {page === 'clips' && <Clips clips={clips} onRefresh={refresh} toast={showToast} ttProfile={ttProfile} />}
+        {page === 'queue' && <Queue clips={clips} go={setPage} />}
         {page === 'settings' && <Settings toast={showToast} onTtProfile={setTtProfile} />}
       </main>
       {toast && <div className="toast">{toast}</div>}
@@ -709,6 +712,113 @@ function PublishModal({ clip, ttNickname, onClose, onDone, toast }: { clip: Clip
         </div>
       </div>
     </div>
+  )
+}
+
+function fmtCountdown(ms: number): string {
+  if (ms <= 0) return 'imminent…'
+  const s = Math.floor(ms / 1000)
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const sec = s % 60
+  if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m ${String(sec).padStart(2, '0')}s`
+  return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
+}
+
+const CRON_LABELS: Record<string, string> = {
+  '*/5 * * * *': 'toutes les 5 min',
+  '*/15 * * * *': 'toutes les 15 min',
+  '*/30 * * * *': 'toutes les 30 min',
+  '0 * * * *': 'toutes les heures',
+  '0 */3 * * *': 'toutes les 3 h'
+}
+
+function Queue({ clips, go }: { clips: ClipDTO[]; go: (p: Page) => void }): JSX.Element {
+  const [status, setStatus] = useState<{ enabled: boolean; cron: string; nextRunAt: number | null; intervalSec: number | null; lastRunAt: number | null } | null>(null)
+  const [now, setNow] = useState(Date.now())
+  useEffect(() => {
+    const load = (): void => {
+      api.schedulerStatus().then(setStatus).catch(() => undefined)
+    }
+    load()
+    const poll = window.setInterval(load, 20000)
+    const tick = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => {
+      window.clearInterval(poll)
+      window.clearInterval(tick)
+    }
+  }, [])
+
+  const queue = clips
+    .filter((c) => c.reviewStatus === 'approved' && c.publishStatus !== 'published')
+    .sort((a, b) => a.createdAt - b.createdAt)
+  const interval = (status?.intervalSec ?? 1800) * 1000
+  const next = status?.nextRunAt ?? null
+  const remaining = next ? next - now : 0
+
+  return (
+    <>
+      <div className="page-head">
+        <div>
+          <h1>File d’attente</h1>
+          <p>Les clips validés sont publiés automatiquement, un par un, selon ta planification.</p>
+        </div>
+      </div>
+
+      {!status?.enabled ? (
+        <div className="card" style={{ textAlign: 'center', padding: 36 }}>
+          <div className="dz-icon" style={{ margin: '0 auto 12px' }}><Icon name="clock" size={24} /></div>
+          <div style={{ fontWeight: 600 }}>Planification désactivée</div>
+          <p className="muted small">Active la publication automatique dans les Réglages pour mettre les clips en file.</p>
+          <button className="btn primary" style={{ marginTop: 6 }} onClick={() => go('settings')}>Aller aux Réglages</button>
+        </div>
+      ) : (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div className="row">
+            <div>
+              <div className="muted small">Prochaine publication dans</div>
+              <div style={{ fontSize: 40, fontWeight: 700, letterSpacing: '-0.5px', color: 'var(--accent-strong)' }}>
+                {queue.length ? fmtCountdown(remaining) : '—'}
+              </div>
+              <div className="muted small">
+                {queue.length
+                  ? `${queue.length} clip${queue.length > 1 ? 's' : ''} en attente · ${CRON_LABELS[status.cron] ?? status.cron}`
+                  : `Aucun clip en attente · vérifie ${CRON_LABELS[status.cron] ?? status.cron}`}
+              </div>
+            </div>
+            <span className="pill-badge"><span className="dot" /> Planif active</span>
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {status?.enabled && queue.length === 0 && (
+          <div className="card muted">Aucun clip validé en attente. Valide des clips dans l’onglet Clips pour les mettre en file.</div>
+        )}
+        {queue.map((c, i) => {
+          const eta = next ? next + i * interval : null
+          return (
+            <div key={c.id} className="card">
+              <div className="row" style={{ gap: 12 }}>
+                <div style={{ width: 54, flexShrink: 0 }}>
+                  {c.filePath && (
+                    <video src={clipUrl(c.filePath)} muted preload="metadata" style={{ width: 54, borderRadius: 8, background: '#000', aspectRatio: '9 / 16' }} />
+                  )}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title || `Clip ${Math.round(c.startSec)}s`}</div>
+                  <div className="muted small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.hashtags || c.description || '—'}</div>
+                </div>
+                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  {i === 0 ? <span className="chip">Prochain</span> : <span className="muted" style={{ fontWeight: 600 }}>#{i + 1}</span>}
+                  {eta && <div className="muted small" style={{ marginTop: 4 }}>≈ {new Date(eta).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>}
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </>
   )
 }
 
