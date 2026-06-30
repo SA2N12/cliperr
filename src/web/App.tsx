@@ -24,7 +24,8 @@ const ICONS: Record<string, string> = {
   spark: 'M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4L12 3z',
   check: 'M20 6L9 17l-5-5',
   send: 'M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z',
-  clock: 'M12 7v5l3 2M12 3a9 9 0 100 18 9 9 0 000-18z'
+  clock: 'M12 7v5l3 2M12 3a9 9 0 100 18 9 9 0 000-18z',
+  folder: 'M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z'
 }
 function Icon({ name, size = 18 }: { name: string; size?: number }): JSX.Element {
   return (
@@ -176,7 +177,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
       <main className="main">
         {page === 'dashboard' && <Dashboard sources={sources} clips={clips} log={log} go={setPage} onRefresh={refresh} />}
         {page === 'sources' && <Sources sources={sources} onRefresh={refresh} toast={showToast} goClips={() => setPage('clips')} />}
-        {page === 'clips' && <Clips clips={clips} onRefresh={refresh} toast={showToast} ttProfile={ttProfile} />}
+        {page === 'clips' && <Clips clips={clips} sources={sources} onRefresh={refresh} toast={showToast} ttProfile={ttProfile} />}
         {page === 'queue' && <Queue clips={clips} go={setPage} />}
         {page === 'published' && <Published clips={clips} go={setPage} />}
         {page === 'settings' && <Settings toast={showToast} onTtProfile={setTtProfile} />}
@@ -580,44 +581,100 @@ function Sources({ sources, onRefresh, toast, goClips }: { sources: SourceDTO[];
   )
 }
 
-function Clips({ clips, onRefresh, toast, ttProfile }: { clips: ClipDTO[]; onRefresh: () => Promise<void>; toast: (m: string) => void; ttProfile: { nickname: string | null } | null }): JSX.Element {
+function ClipCard({ c, onReview, onPublish }: { c: ClipDTO; onReview: (id: number, s: ClipDTO['reviewStatus']) => void; onPublish: (c: ClipDTO) => void }): JSX.Element {
+  return (
+    <div className="card" style={{ padding: 12 }}>
+      {c.filePath ? (
+        <video src={clipUrl(c.filePath)} controls style={{ width: '100%', borderRadius: 10, background: '#000', aspectRatio: '9 / 16' }} />
+      ) : (
+        <div className="muted small">Pas d’aperçu</div>
+      )}
+      <div style={{ fontWeight: 600, marginTop: 8, fontSize: 14 }}>{c.title || `Clip ${Math.round(c.startSec)}s`}</div>
+      {c.hashtags && <div className="small" style={{ color: 'var(--accent)', marginTop: 2 }}>{c.hashtags}</div>}
+      <div className="row" style={{ marginTop: 8 }}>
+        <span className="small muted">{c.score != null ? `score ${(c.score * 100).toFixed(0)}%` : ''}</span>
+        <span className="chip" style={{ background: c.publishStatus === 'published' ? '#dcfce7' : 'var(--accent-soft)', color: c.publishStatus === 'published' ? 'var(--good)' : 'var(--accent-strong)' }}>{c.publishStatus}</span>
+      </div>
+      <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
+        {c.reviewStatus !== 'approved' && <button className="btn small" onClick={() => onReview(c.id, 'approved')}>Approuver</button>}
+        {c.reviewStatus !== 'rejected' && <button className="btn small" onClick={() => onReview(c.id, 'rejected')}>Rejeter</button>}
+        <button className="btn primary small" onClick={() => onPublish(c)}>{c.publishStatus === 'published' ? 'Republier' : 'Publier'}</button>
+      </div>
+    </div>
+  )
+}
+
+function Clips({ clips, sources, onRefresh, toast, ttProfile }: { clips: ClipDTO[]; sources: SourceDTO[]; onRefresh: () => Promise<void>; toast: (m: string) => void; ttProfile: { nickname: string | null } | null }): JSX.Element {
   const [modal, setModal] = useState<ClipDTO | null>(null)
+  const [open, setOpen] = useState<number | null>(null)
   async function review(id: number, status: ClipDTO['reviewStatus']): Promise<void> {
     await api.reviewClip(id, status)
     await onRefresh()
   }
+  const groups = new Map<number, ClipDTO[]>()
+  for (const c of clips) {
+    const arr = groups.get(c.sourceId) ?? []
+    arr.push(c)
+    groups.set(c.sourceId, arr)
+  }
+  const srcMap = new Map(sources.map((s) => [s.id, s]))
+  const srcTitle = (id: number): string => {
+    const s = srcMap.get(id)
+    return s?.title || s?.url?.split(/[\\/]/).pop() || `Source #${id}`
+  }
+  const gridStyle = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 16 } as const
+
+  if (open !== null) {
+    const list = (groups.get(open) ?? []).slice().sort((a, b) => a.startSec - b.startSec)
+    return (
+      <>
+        <div className="page-head">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button className="btn icon-btn" onClick={() => setOpen(null)} title="Retour aux dossiers">←</button>
+            <div>
+              <h1 style={{ fontSize: 22 }}>{srcTitle(open)}</h1>
+              <p>{list.length} clip{list.length > 1 ? 's' : ''} découpé{list.length > 1 ? 's' : ''} sur cette vidéo</p>
+            </div>
+          </div>
+        </div>
+        <div style={gridStyle}>
+          {list.map((c) => <ClipCard key={c.id} c={c} onReview={review} onPublish={(x) => setModal(x)} />)}
+        </div>
+        {modal && <PublishModal clip={modal} ttNickname={ttProfile?.nickname ?? null} onClose={() => setModal(null)} onDone={onRefresh} toast={toast} />}
+      </>
+    )
+  }
+
+  const folders = [...groups.entries()].sort((a, b) => b[0] - a[0])
   return (
     <>
       <div className="page-head">
         <div>
-          <h1>Clips ({clips.length})</h1>
-          <p>Valide, prévisualise et publie tes clips verticaux.</p>
+          <h1>Clips</h1>
+          <p>Tes clips rangés par vidéo source. Clique un dossier pour voir ses clips.</p>
         </div>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 16 }}>
-        {clips.length === 0 && <div className="card muted">Aucun clip généré pour l'instant.</div>}
-        {clips.map((c) => (
-          <div key={c.id} className="card" style={{ padding: 12 }}>
-            {c.filePath ? (
-              <video src={clipUrl(c.filePath)} controls style={{ width: '100%', borderRadius: 10, background: '#000', aspectRatio: '9 / 16' }} />
-            ) : (
-              <div className="muted small">Pas d'aperçu</div>
-            )}
-            <div style={{ fontWeight: 600, marginTop: 8, fontSize: 14 }}>{c.title || `Clip ${Math.round(c.startSec)}s`}</div>
-            {c.hashtags && <div className="small" style={{ color: 'var(--accent)', marginTop: 2 }}>{c.hashtags}</div>}
-            <div className="row" style={{ marginTop: 8 }}>
-              <span className="small muted">{c.score != null ? `score ${(c.score * 100).toFixed(0)}%` : ''}</span>
-              <span className="chip" style={{ background: c.publishStatus === 'published' ? '#dcfce7' : 'var(--accent-soft)', color: c.publishStatus === 'published' ? 'var(--good)' : 'var(--accent-strong)' }}>{c.publishStatus}</span>
-            </div>
-            <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
-              {c.reviewStatus !== 'approved' && <button className="btn small" onClick={() => review(c.id, 'approved')}>Approuver</button>}
-              {c.reviewStatus !== 'rejected' && <button className="btn small" onClick={() => review(c.id, 'rejected')}>Rejeter</button>}
-              <button className="btn primary small" onClick={() => setModal(c)}>{c.publishStatus === 'published' ? 'Republier' : 'Publier'}</button>
-            </div>
-          </div>
-        ))}
-      </div>
-      {modal && <PublishModal clip={modal} ttNickname={ttProfile?.nickname ?? null} onClose={() => setModal(null)} onDone={onRefresh} toast={toast} />}
+      {folders.length === 0 ? (
+        <div className="card muted">Aucun clip généré pour l’instant.</div>
+      ) : (
+        <div className="folder-grid">
+          {folders.map(([sid, list]) => {
+            const pub = list.filter((c) => c.publishStatus === 'published').length
+            return (
+              <div key={sid} className="card folder" onClick={() => setOpen(sid)}>
+                <div className="fic"><Icon name="folder" /></div>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{srcTitle(sid)}</div>
+                  <div className="muted small">
+                    {list.length} clip{list.length > 1 ? 's' : ''}
+                    {pub > 0 ? ` · ${pub} publié${pub > 1 ? 's' : ''}` : ''}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </>
   )
 }

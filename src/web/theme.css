@@ -535,3 +535,35 @@ textarea:focus {
   justify-content: center;
   margin-bottom: 12px;
 }
+
+/* Dossiers (Clips par vidéo) */
+.folder-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 14px;
+}
+.folder {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, transform 0.1s;
+}
+.folder:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.folder:active {
+  transform: scale(0.99);
+}
+.folder .fic {
+  width: 46px;
+  height: 46px;
+  border-radius: 11px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
