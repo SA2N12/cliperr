@@ -3,9 +3,11 @@
 # téléchargé au 1er lancement dans le volume /data.
 FROM node:20-bookworm-slim
 
-# Outils de build pour better-sqlite3 (au cas où pas de prebuilt)
+# Outils de build pour better-sqlite3 + polices pour les sous-titres (libass).
+# fonts-liberation fournit "Liberation Sans" (équivalent Arial) + fontconfig
+# permet à libass de trouver/substituer la police du fichier .ass.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 make g++ ca-certificates \
+    python3 make g++ ca-certificates fontconfig fonts-liberation \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
