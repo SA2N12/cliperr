@@ -1044,6 +1044,8 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
   const [keyStatus, setKeyStatus] = useState<{ has: boolean; masked: string | null }>({ has: false, masked: null })
   const [groqKey, setGroqKey] = useState('')
   const [groqHas, setGroqHas] = useState(false)
+  const [rapidKey, setRapidKey] = useState('')
+  const [rapidHas, setRapidHas] = useState(false)
   const [tt, setTt] = useState<{ connected: boolean; hasConfig: boolean; hasSecret: boolean } | null>(null)
   const [ttCode, setTtCode] = useState('')
   const [secret, setSecret] = useState('')
@@ -1056,6 +1058,7 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
     ;['publish_mode', 'highlights_model', 'transcribe_enabled', 'transcribe_backend', 'reframe_focus', 'tiktok_privacy', 'tiktok_client_key', 'tiktok_redirect', 'schedule_enabled', 'schedule_cron'].forEach((k) => loadFlag(k).catch(() => undefined))
     api.apiKeyStatus().then(setKeyStatus).catch(() => undefined)
     api.groqStatus().then((r) => setGroqHas(r.has)).catch(() => undefined)
+    api.rapidApiStatus().then((r) => setRapidHas(r.has)).catch(() => undefined)
     api.tiktokStatus().then(setTt).catch(() => undefined)
   }, [loadFlag])
 
@@ -1083,6 +1086,21 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
             <option value="sonnet">Sonnet 4.6 — équilibré</option>
             <option value="opus">Opus 4.8 — max</option>
           </select>
+        </Field>
+      </div>
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <h3 style={{ marginTop: 0 }}>Téléchargement des vidéos (URL YouTube)</h3>
+        <p className="small" style={{ marginTop: 0 }}>
+          Sur le serveur, YouTube bloque le téléchargement direct. Avec une clé RapidAPI
+          (API « YouTube Media Downloader »), l'onglet URL télécharge la vidéo via l'API,
+          sans cookies ni navigateur.
+        </p>
+        <Field label={rapidHas ? 'Clé RapidAPI configurée ✓' : 'Clé RapidAPI'}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input className="input-full" style={{ flex: 1 }} type="password" placeholder="x-rapidapi-key…" value={rapidKey} onChange={(e) => setRapidKey(e.target.value)} />
+            <button className="btn primary" onClick={async () => { await api.setRapidApiKey(rapidKey); setRapidKey(''); setRapidHas((await api.rapidApiStatus()).has); toast('Clé RapidAPI enregistrée') }} disabled={!rapidKey.trim()}>Enregistrer</button>
+          </div>
         </Field>
       </div>
 

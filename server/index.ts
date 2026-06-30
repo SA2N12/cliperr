@@ -30,6 +30,8 @@ import {
 import { runPipeline, type ReframeFocus } from '../src/main/pipeline/orchestrator'
 import { transcribeSource, transcribeWithGroq, type Word } from '../src/main/pipeline/transcribe'
 import { detectFaceCenterX } from '../src/main/pipeline/face'
+import { isLocalFile } from '../src/main/pipeline/ingest'
+import { downloadViaApi, isYouTubeUrl, type SourceMetaApi } from './ytdl-api'
 import type { PipelineContext } from '../src/main/pipeline/context'
 import type { Usage } from '../src/main/pipeline/highlights'
 import type { ProgressEvent } from '../src/shared/types'
@@ -102,12 +104,39 @@ async function runForSource(sourceId: number, clipCount: number): Promise<void> 
   const transcribeEnabled = repo.getSetting(FLAG_TRANSCRIBE) === '1'
   const backend = repo.getSetting(FLAG_TRANSCRIBE_BACKEND) || 'groq'
   const groqKey = getEncrypted('groq_key')
+  const rapidApiKey = getEncrypted('rapidapi_key')
   const cookiesFile = repo.getSetting('ytdlp_cookies_file') || null
   const autoApprove = repo.getSetting('auto_approve') === '1'
 
   repo.updateSource(sourceId, { status: 'running', error: null })
   try {
     const ctx = await getContext()
+
+    // Téléchargement via RapidAPI : sur le VPS, l'IP datacenter est bloquée par
+    // YouTube → yt-dlp échoue. Si une clé est configurée et que l'URL est YouTube,
+    // on récupère le MP4 via l'API et on passe ensuite un fichier LOCAL au pipeline
+    // (qui le détecte via isLocalFile et saute yt-dlp).
+    let effectiveUrl = source.url
+    let apiMeta: SourceMetaApi | null = null
+    if (rapidApiKey && !isLocalFile(source.url) && isYouTubeUrl(source.url)) {
+      const dl = await downloadViaApi(
+        ctx,
+        rapidApiKey,
+        source.url,
+        sourceId,
+        (ratio) =>
+          send({ sourceId, stage: 'ingest', status: 'running', progress: ratio, message: 'Téléchargement (API)…' }),
+        log
+      )
+      effectiveUrl = dl.filePath
+      apiMeta = dl.meta
+      repo.updateSource(sourceId, {
+        title: apiMeta.title,
+        author: apiMeta.author,
+        durationSec: apiMeta.durationSec,
+        filePath: dl.filePath
+      })
+    }
     const transcribe: ((sourceFile: string, sid: number) => Promise<Word[]>) | null =
       !transcribeEnabled
         ? null
@@ -127,10 +156,15 @@ async function runForSource(sourceId: number, clipCount: number): Promise<void> 
 
     await runPipeline(
       ctx,
-      { id: source.id, url: source.url },
+      { id: source.id, url: effectiveUrl },
       {
         emit: send,
-        onMeta: (m) => repo.updateSource(sourceId, { title: m.title, author: m.author, durationSec: m.durationSec }),
+        onMeta: (m) =>
+          repo.updateSource(sourceId, {
+            title: apiMeta?.title ?? m.title,
+            author: apiMeta?.author ?? m.author,
+            durationSec: m.durationSec ?? apiMeta?.durationSec
+          }),
         onSourceFile: (fp) => repo.updateSource(sourceId, { filePath: fp }),
         onClip: (c) => {
           const clip = repo.createClip({
@@ -365,6 +399,13 @@ app.post('/api/settings/spend/reset', wrap((_req, res) => {
 app.get('/api/settings/groq', wrap((_req, res) => res.json({ has: !!getEncrypted('groq_key') })))
 app.post('/api/settings/groq', wrap((req, res) => {
   setEncrypted('groq_key', String(req.body?.key ?? ''))
+  res.json({ ok: true })
+}))
+
+// Clé RapidAPI (téléchargement vidéo côté serveur, contourne le blocage YouTube)
+app.get('/api/settings/rapidapi', wrap((_req, res) => res.json({ has: !!getEncrypted('rapidapi_key') })))
+app.post('/api/settings/rapidapi', wrap((req, res) => {
+  setEncrypted('rapidapi_key', String(req.body?.key ?? ''))
   res.json({ ok: true })
 }))
 

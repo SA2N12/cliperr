@@ -74,6 +74,8 @@ export const api = {
   resetSpend: () => post('/api/settings/spend/reset'),
   groqStatus: () => req<{ has: boolean }>('/api/settings/groq'),
   setGroqKey: (key: string) => post('/api/settings/groq', { key }),
+  rapidApiStatus: () => req<{ has: boolean }>('/api/settings/rapidapi'),
+  setRapidApiKey: (key: string) => post('/api/settings/rapidapi', { key }),
 
   // yt-dlp / scheduler
   updateYtDlp: () => post('/api/ytdlp/update'),
