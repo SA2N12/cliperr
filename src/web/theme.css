@@ -320,3 +320,159 @@ textarea:focus {
   max-width: 420px;
   z-index: 200;
 }
+
+/* Sidebar extras */
+.pill-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+.pill-badge .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.side-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  color: var(--muted-2);
+  font-size: 13px;
+  margin: 6px 4px 10px;
+}
+.side-search .kbd {
+  margin-left: auto;
+  font-size: 11px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1px 6px;
+  color: var(--muted);
+}
+
+/* Header buttons */
+.btn.dark {
+  background: #1f2430;
+  border-color: #1f2430;
+  color: #fff;
+}
+.btn.dark:hover {
+  background: #2b3140;
+}
+.icon-btn {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  justify-content: center;
+}
+
+/* Stat cards */
+.stat-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+.trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+.trend.up {
+  color: #16a34a;
+  background: #e9f9ef;
+}
+.trend.down {
+  color: #dc2626;
+  background: #fdeaea;
+}
+.breakdown {
+  margin-top: 14px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.breakdown .line {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+}
+.breakdown .line .k {
+  color: var(--muted);
+}
+.breakdown .line .v {
+  font-weight: 600;
+}
+
+/* Chart */
+.metrics-row {
+  display: flex;
+  gap: 24px;
+  border-top: 1px solid var(--border);
+  margin-top: 14px;
+  padding-top: 14px;
+}
+.metric .ml {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--muted-2);
+  text-transform: uppercase;
+}
+.metric .mv {
+  font-size: 18px;
+  font-weight: 700;
+  margin-top: 2px;
+}
+.dotlabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--accent-strong);
+  text-transform: uppercase;
+}
+.dotlabel .d {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* Funnel rows + gauge */
+.funnel-row .ic {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.gauge-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid var(--border);
+  margin-top: 16px;
+  padding-top: 16px;
+}

@@ -18,7 +18,12 @@ const ICONS: Record<string, string> = {
   settings: 'M10.3 3.2a1 1 0 011.4 0l1 1a1 1 0 00.9.3l1.4-.2a1 1 0 011 .6l.6 1.3a1 1 0 00.7.6l1.3.3a1 1 0 01.8 1.1l-.2 1.4a1 1 0 00.3.9l1 1a1 1 0 010 1.4l-1 1a1 1 0 00-.3.9l.2 1.4M12 9a3 3 0 100 6 3 3 0 000-6z',
   logout: 'M16 17l5-5-5-5M21 12H9M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4',
   upload: 'M12 16V4M7 9l5-5 5 5M5 20h14',
-  play: 'M5 3l14 9-14 9z'
+  play: 'M5 3l14 9-14 9z',
+  search: 'M11 19a8 8 0 100-16 8 8 0 000 16zM21 21l-4.3-4.3',
+  refresh: 'M21 12a9 9 0 11-3-6.7L21 8M21 3v5h-5',
+  spark: 'M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4L12 3z',
+  check: 'M20 6L9 17l-5-5',
+  send: 'M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z'
 }
 function Icon({ name, size = 18 }: { name: string; size?: number }): JSX.Element {
   return (
@@ -122,7 +127,13 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
   return (
     <div className="app">
       <aside className="sidebar">
-        <div className="brand"><span className="logo">T</span> TikTokClip</div>
+        <div className="row" style={{ padding: '6px 8px 8px' }}>
+          <div className="brand" style={{ padding: 0 }}><span className="logo">C</span> Cliperr</div>
+          <span className="pill-badge"><span className="dot" /> live</span>
+        </div>
+        <div className="side-search">
+          <Icon name="search" size={15} /> Rechercher <span className="kbd">Ctrl K</span>
+        </div>
         {nav.map((n) => (
           <button key={n.id} className={`nav-item ${page === n.id ? 'active' : ''}`} onClick={() => setPage(n.id)}>
             <Icon name={n.icon} /> {n.label}
@@ -167,21 +178,116 @@ function StatCard({ icon, label, value, sub }: { icon: string; label: string; va
   )
 }
 
+function TrendBadge({ value, label }: { value: number; label?: string }): JSX.Element {
+  const up = value >= 0
+  return (
+    <span className={`trend ${up ? 'up' : 'down'}`}>
+      {up ? '↑' : '↓'} {label ?? `${up ? '+' : ''}${value}%`}
+    </span>
+  )
+}
+
+type Bucket = { label: string; count: number }
+function buildBuckets(clips: ClipDTO[], mode: 'jour' | 'semaine' | 'mois'): Bucket[] {
+  const now = Date.now()
+  if (mode === 'jour') {
+    const h = 3600000
+    const base = Math.floor(now / h)
+    const arr: Bucket[] = Array.from({ length: 24 }, (_, i) => ({
+      label: `${new Date(now - (23 - i) * h).getHours()}h`,
+      count: 0
+    }))
+    for (const c of clips) {
+      const idx = 23 - (base - Math.floor(c.createdAt / h))
+      if (idx >= 0 && idx < 24) arr[idx].count++
+    }
+    return arr
+  }
+  const days = mode === 'semaine' ? 7 : 30
+  const d1 = 86400000
+  const base = Math.floor(now / d1)
+  const arr: Bucket[] = Array.from({ length: days }, (_, i) => {
+    const d = new Date(now - (days - 1 - i) * d1)
+    return { label: `${d.getDate()}/${String(d.getMonth() + 1).padStart(2, '0')}`, count: 0 }
+  })
+  for (const c of clips) {
+    const idx = days - 1 - (base - Math.floor(c.createdAt / d1))
+    if (idx >= 0 && idx < days) arr[idx].count++
+  }
+  return arr
+}
+
+function AreaChart({ data }: { data: Bucket[] }): JSX.Element {
+  const W = 600
+  const H = 200
+  const max = Math.max(1, ...data.map((d) => d.count))
+  const n = data.length
+  const x = (i: number): number => (n === 1 ? W / 2 : (i / (n - 1)) * W)
+  const y = (v: number): number => H - 6 - (v / max) * (H - 16)
+  const line = data.map((d, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(d.count).toFixed(1)}`).join(' ')
+  const area = `${line} L${x(n - 1).toFixed(1)},${H} L${x(0).toFixed(1)},${H} Z`
+  return (
+    <div>
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: 220, display: 'block' }}>
+        <defs>
+          <linearGradient id="ag" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.28" />
+            <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path d={area} fill="url(#ag)" />
+        <path d={line} fill="none" stroke="var(--accent)" strokeWidth={2.5} vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+      </svg>
+      <div className="row" style={{ marginTop: 6 }}>
+        <span className="small muted">{data[0]?.label}</span>
+        <span className="small muted">{data[Math.floor(n / 2)]?.label}</span>
+        <span className="small muted">{data[n - 1]?.label}</span>
+      </div>
+    </div>
+  )
+}
+
+function Gauge({ pct }: { pct: number }): JSX.Element {
+  const r = 32
+  const c = 2 * Math.PI * r
+  const off = c * (1 - Math.min(1, Math.max(0, pct / 100)))
+  return (
+    <svg width={84} height={84} viewBox="0 0 84 84">
+      <circle cx={42} cy={42} r={r} fill="none" stroke="var(--accent-soft-2)" strokeWidth={8} />
+      <circle cx={42} cy={42} r={r} fill="none" stroke="var(--accent)" strokeWidth={8} strokeLinecap="round" strokeDasharray={c} strokeDashoffset={off} transform="rotate(-90 42 42)" />
+    </svg>
+  )
+}
+
 function Dashboard({ sources, clips, log, go, onRefresh }: { sources: SourceDTO[]; clips: ClipDTO[]; log: string[]; go: (p: Page) => void; onRefresh: () => Promise<void> }): JSX.Element {
   const [spend, setSpend] = useState<{ usd: number; inTokens: number; outTokens: number } | null>(null)
+  const [mode, setMode] = useState<'jour' | 'semaine' | 'mois'>('mois')
   useEffect(() => {
     api.spend().then(setSpend).catch(() => undefined)
   }, [])
+
   const generated = clips.length
   const approved = clips.filter((c) => c.reviewStatus === 'approved').length
   const published = clips.filter((c) => c.publishStatus === 'published').length
+  const pending = clips.filter((c) => c.reviewStatus === 'pending').length
+  const data = buildBuckets(clips, mode)
+  const total = data.reduce((a, b) => a + b.count, 0)
+  const peak = data.reduce((m, b) => (b.count > m.count ? b : m), { label: '—', count: 0 })
+  const avg = data.length ? Math.round((total / data.length) * 10) / 10 : 0
+  const day = 86400000
+  const last7 = clips.filter((c) => c.createdAt >= Date.now() - 7 * day).length
+  const prev7 = clips.filter((c) => c.createdAt >= Date.now() - 14 * day && c.createdAt < Date.now() - 7 * day).length
+  const trend = prev7 === 0 ? (last7 > 0 ? 100 : 0) : Math.round(((last7 - prev7) / prev7) * 100)
+  const pubRate = generated ? Math.round((published / generated) * 1000) / 10 : 0
+
   const funnel = [
     { label: 'Sources', n: sources.length, icon: 'sources' },
     { label: 'Clips générés', n: generated, icon: 'clips' },
-    { label: 'Clips validés', n: approved, icon: 'clips' },
-    { label: 'Publiés', n: published, icon: 'upload' }
+    { label: 'Clips validés', n: approved, icon: 'check' },
+    { label: 'Publiés', n: published, icon: 'send' }
   ]
-  const max = Math.max(1, ...funnel.map((f) => f.n))
+  const fmax = Math.max(1, ...funnel.map((f) => f.n))
+
   return (
     <>
       <div className="page-head">
@@ -190,42 +296,116 @@ function Dashboard({ sources, clips, log, go, onRefresh }: { sources: SourceDTO[
           <p>Vue d'ensemble de ton pipeline de clipping en temps réel.</p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
-          <button className="btn" onClick={() => onRefresh()}>↻ Rafraîchir</button>
-          <button className="btn primary" onClick={() => go('sources')}>+ Nouvelle source</button>
+          <button className="btn" onClick={() => go('sources')}>
+            <Icon name="spark" size={16} /> Générer
+          </button>
+          <button className="btn dark" onClick={() => go('sources')}>+ Nouvelle source</button>
+          <button className="btn icon-btn" onClick={() => onRefresh()} title="Rafraîchir">
+            <Icon name="refresh" size={16} />
+          </button>
         </div>
       </div>
 
       <div className="grid-3">
-        <StatCard icon="sources" label="Sources" value={String(sources.length)} sub={`${sources.filter((s) => s.status === 'done').length} traitées · ${sources.filter((s) => s.status === 'running').length} en cours`} />
-        <StatCard icon="clips" label="Clips générés" value={String(generated)} sub={`${approved} validés · ${published} publiés`} />
-        <StatCard icon="settings" label="Dépense API (estim.)" value={spend ? `$${spend.usd.toFixed(4)}` : '—'} sub={spend ? `${spend.inTokens} in / ${spend.outTokens} out` : ''} />
+        <div className="card">
+          <div className="stat-head">
+            <div className="icon"><Icon name="clips" /></div>
+            <TrendBadge value={trend} />
+          </div>
+          <div className="label" style={{ marginTop: 14 }}>Clips générés</div>
+          <div className="value">{generated}</div>
+          <div className="breakdown">
+            <div className="line"><span className="k">Pic</span><span className="v">{peak.count} le {peak.label}</span></div>
+            <div className="line"><span className="k">7 derniers jours</span><span className="v">{last7}</span></div>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="stat-head">
+            <div className="icon"><Icon name="send" /></div>
+            <TrendBadge value={pubRate} label={`${pubRate}%`} />
+          </div>
+          <div className="label" style={{ marginTop: 14 }}>Clips publiés</div>
+          <div className="value">{published}</div>
+          <div className="breakdown">
+            <div className="line"><span className="k">Validés</span><span className="v">{approved}</span></div>
+            <div className="line"><span className="k">Taux de publication</span><span className="v">{pubRate}%</span></div>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="stat-head">
+            <div className="icon"><Icon name="check" /></div>
+            <span className="pill-badge"><span className="dot" /> {pending} à traiter</span>
+          </div>
+          <div className="label" style={{ marginTop: 14 }}>Clips à valider</div>
+          <div className="value">{pending}</div>
+          <div className="breakdown">
+            <div className="line"><span className="k">Sources</span><span className="v">{sources.length}</span></div>
+            <div className="line"><span className="k">Dépense API</span><span className="v">{spend ? `$${spend.usd.toFixed(4)}` : '—'}</span></div>
+          </div>
+        </div>
       </div>
 
-      <div className="grid-2" style={{ marginTop: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16, marginTop: 16 }}>
         <div className="card">
-          <div className="row" style={{ marginBottom: 12 }}>
-            <strong>Activité en direct</strong>
-            <span className="chip">SSE</span>
+          <div className="row">
+            <div>
+              <strong>Performances</strong>
+              <div className="dotlabel" style={{ marginTop: 4 }}><span className="d" /> Production</div>
+            </div>
+            <div className="seg">
+              {(['jour', 'semaine', 'mois'] as const).map((m) => (
+                <button key={m} className={mode === m ? 'on' : ''} onClick={() => setMode(m)}>
+                  {m === 'jour' ? 'Jour' : m === 'semaine' ? 'Semaine' : 'Mois'}
+                </button>
+              ))}
+            </div>
           </div>
-          <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: 12, color: 'var(--muted)', maxHeight: 320, overflow: 'auto', fontFamily: 'ui-monospace, Menlo, monospace' }}>
-            {log.join('\n') || 'En attente…'}
-          </pre>
+          <div style={{ marginTop: 14 }}><AreaChart data={data} /></div>
+          <div className="metrics-row">
+            <div className="metric"><div className="ml">Total période</div><div className="mv">{total}</div></div>
+            <div className="metric"><div className="ml">Moyenne / {mode === 'jour' ? 'heure' : 'jour'}</div><div className="mv">{avg}</div></div>
+            <div className="metric"><div className="ml">Pic</div><div className="mv">{peak.count} · {peak.label}</div></div>
+          </div>
         </div>
+
         <div className="card">
           <strong>Funnel de conversion</strong>
-          <p className="muted small" style={{ marginTop: 2 }}>Du source au clip publié</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 8 }}>
+          <p className="muted small" style={{ marginTop: 2 }}>Où le pipeline avance</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 12 }}>
             {funnel.map((f) => (
-              <div key={f.label}>
-                <div className="row" style={{ marginBottom: 6 }}>
-                  <span className="small" style={{ fontWeight: 600 }}>{f.label}</span>
-                  <span className="small muted">{f.n}</span>
+              <div key={f.label} className="funnel-row" style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                <div className="ic"><Icon name={f.icon} size={16} /></div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="row" style={{ marginBottom: 6 }}>
+                    <span className="small" style={{ fontWeight: 600 }}>{f.label}</span>
+                    <span className="small muted">{f.n}</span>
+                  </div>
+                  <div className="bar"><div style={{ width: `${(f.n / fmax) * 100}%` }} /></div>
                 </div>
-                <div className="bar"><div style={{ width: `${(f.n / max) * 100}%` }} /></div>
               </div>
             ))}
           </div>
+          <div className="gauge-wrap">
+            <div>
+              <div className="ml">Conversion globale</div>
+              <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--accent-strong)' }}>{pubRate}%</div>
+              <div className="small muted">{published} sur {generated} générés</div>
+            </div>
+            <Gauge pct={pubRate} />
+          </div>
         </div>
+      </div>
+
+      <div className="card" style={{ marginTop: 16 }}>
+        <div className="row" style={{ marginBottom: 10 }}>
+          <strong>Activité en direct</strong>
+          <span className="chip">SSE</span>
+        </div>
+        <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: 12, color: 'var(--muted)', maxHeight: 220, overflow: 'auto', fontFamily: 'ui-monospace, Menlo, monospace' }}>
+          {log.join('\n') || 'En attente…'}
+        </pre>
       </div>
     </>
   )
