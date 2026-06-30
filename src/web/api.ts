@@ -82,7 +82,7 @@ export const api = {
   installPot: () => post('/api/ytdlp/install-pot'),
   reloadScheduler: () => post('/api/scheduler/reload'),
   schedulerStatus: () =>
-    req<{ enabled: boolean; cron: string; nextRunAt: number | null; intervalSec: number | null; lastRunAt: number | null }>(
+    req<{ enabled: boolean; paused: boolean; cron: string; nextRunAt: number | null; intervalSec: number | null; lastRunAt: number | null }>(
       '/api/scheduler/status'
     ),
 

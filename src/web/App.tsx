@@ -19,6 +19,7 @@ const ICONS: Record<string, string> = {
   logout: 'M16 17l5-5-5-5M21 12H9M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4',
   upload: 'M12 16V4M7 9l5-5 5 5M5 20h14',
   play: 'M5 3l14 9-14 9z',
+  pause: 'M8 5v14M16 5v14',
   search: 'M11 19a8 8 0 100-16 8 8 0 000 16zM21 21l-4.3-4.3',
   refresh: 'M21 12a9 9 0 11-3-6.7L21 8M21 3v5h-5',
   spark: 'M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4L12 3z',
@@ -901,12 +902,12 @@ const CRON_LABELS: Record<string, string> = {
 }
 
 function Queue({ clips, go }: { clips: ClipDTO[]; go: (p: Page) => void }): JSX.Element {
-  const [status, setStatus] = useState<{ enabled: boolean; cron: string; nextRunAt: number | null; intervalSec: number | null; lastRunAt: number | null } | null>(null)
+  const [status, setStatus] = useState<{ enabled: boolean; paused: boolean; cron: string; nextRunAt: number | null; intervalSec: number | null; lastRunAt: number | null } | null>(null)
   const [now, setNow] = useState(Date.now())
+  const load = useCallback((): void => {
+    api.schedulerStatus().then(setStatus).catch(() => undefined)
+  }, [])
   useEffect(() => {
-    const load = (): void => {
-      api.schedulerStatus().then(setStatus).catch(() => undefined)
-    }
     load()
     const poll = window.setInterval(load, 20000)
     const tick = window.setInterval(() => setNow(Date.now()), 1000)
@@ -914,7 +915,13 @@ function Queue({ clips, go }: { clips: ClipDTO[]; go: (p: Page) => void }): JSX.
       window.clearInterval(poll)
       window.clearInterval(tick)
     }
-  }, [])
+  }, [load])
+
+  const togglePause = async (): Promise<void> => {
+    const paused = !status?.paused
+    await api.setFlag('queue_paused', paused ? '1' : '0')
+    load()
+  }
 
   const queue = clips
     .filter((c) => c.reviewStatus === 'approved' && c.publishStatus !== 'published')
@@ -930,6 +937,12 @@ function Queue({ clips, go }: { clips: ClipDTO[]; go: (p: Page) => void }): JSX.
           <h1>File d’attente</h1>
           <p>Les clips validés sont publiés automatiquement, un par un, selon ta planification.</p>
         </div>
+        {status?.enabled && (
+          <button className={`btn${status.paused ? ' primary' : ''}`} onClick={togglePause}>
+            <Icon name={status.paused ? 'play' : 'pause'} size={16} />
+            {status.paused ? 'Reprendre' : 'Mettre en pause'}
+          </button>
+        )}
       </div>
 
       {!status?.enabled ? (
@@ -943,17 +956,21 @@ function Queue({ clips, go }: { clips: ClipDTO[]; go: (p: Page) => void }): JSX.
         <div className="card" style={{ marginBottom: 16 }}>
           <div className="row">
             <div>
-              <div className="muted small">Prochaine publication dans</div>
-              <div style={{ fontSize: 40, fontWeight: 700, letterSpacing: '-0.5px', color: 'var(--accent-strong)' }}>
-                {queue.length ? fmtCountdown(remaining) : '—'}
+              <div className="muted small">{status.paused ? 'Publication automatique' : 'Prochaine publication dans'}</div>
+              <div style={{ fontSize: 40, fontWeight: 700, letterSpacing: '-0.5px', color: status.paused ? 'var(--muted)' : 'var(--accent-strong)' }}>
+                {status.paused ? 'En pause' : queue.length ? fmtCountdown(remaining) : '—'}
               </div>
               <div className="muted small">
-                {queue.length
-                  ? `${queue.length} clip${queue.length > 1 ? 's' : ''} en attente · ${CRON_LABELS[status.cron] ?? status.cron}`
-                  : `Aucun clip en attente · vérifie ${CRON_LABELS[status.cron] ?? status.cron}`}
+                {status.paused
+                  ? `${queue.length} clip${queue.length > 1 ? 's' : ''} en attente · reprend quand tu veux`
+                  : queue.length
+                    ? `${queue.length} clip${queue.length > 1 ? 's' : ''} en attente · ${CRON_LABELS[status.cron] ?? status.cron}`
+                    : `Aucun clip en attente · vérifie ${CRON_LABELS[status.cron] ?? status.cron}`}
               </div>
             </div>
-            <span className="pill-badge"><span className="dot" /> Planif active</span>
+            {status.paused
+              ? <span className="chip">⏸ En pause</span>
+              : <span className="pill-badge"><span className="dot" /> Planif active</span>}
           </div>
         </div>
       )}

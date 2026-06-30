@@ -244,6 +244,10 @@ function reloadScheduler(): void {
   }
   task = cron.schedule(expr, () => {
     void (async () => {
+      if (repo.getSetting('queue_paused') === '1') {
+        emitLog('Planification : file en pause, publication ignorée.')
+        return
+      }
       const clip = repo.nextApprovedUnpublished()
       if (!clip) {
         emitLog('Planification : aucun clip validé en attente.')
@@ -426,11 +430,12 @@ app.post('/api/scheduler/reload', wrap((_req, res) => {
 }))
 app.get('/api/scheduler/status', wrap((_req, res) => {
   const enabled = repo.getSetting('schedule_enabled') === '1'
+  const paused = repo.getSetting('queue_paused') === '1'
   const cron = repo.getSetting('schedule_cron') || '*/30 * * * *'
   const lastRunAt = Number(repo.getSetting('schedule_last_run')) || null
   let nextRunAt: number | null = null
   let intervalSec: number | null = null
-  if (enabled) {
+  if (enabled && !paused) {
     const n1 = cronNext(cron, new Date())
     if (n1) {
       nextRunAt = n1.getTime()
@@ -438,7 +443,7 @@ app.get('/api/scheduler/status', wrap((_req, res) => {
       if (n2) intervalSec = Math.round((n2.getTime() - n1.getTime()) / 1000)
     }
   }
-  res.json({ enabled, cron, nextRunAt, intervalSec, lastRunAt })
+  res.json({ enabled, paused, cron, nextRunAt, intervalSec, lastRunAt })
 }))
 
 // TikTok
