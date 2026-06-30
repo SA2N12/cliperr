@@ -112,6 +112,20 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
     return unsub
   }, [refresh, pushLog])
 
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search).get('tiktok')
+    if (!p) return
+    if (p === 'connected') {
+      setToast('TikTok connecté ✅')
+      api.tiktokProfile().then(setTtProfile).catch(() => undefined)
+    } else {
+      setToast('Connexion TikTok échouée')
+    }
+    window.history.replaceState({}, '', '/')
+    const t = window.setTimeout(() => setToast(''), 3500)
+    return () => window.clearTimeout(t)
+  }, [])
+
   const showToast = (m: string): void => {
     setToast(m)
     window.setTimeout(() => setToast(''), 3500)

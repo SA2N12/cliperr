@@ -210,6 +210,23 @@ app.post('/api/login', handleLogin)
 app.post('/api/logout', handleLogout)
 app.get('/api/me', (req, res) => res.json({ authed: isAuthed(req) }))
 
+// Callback OAuth TikTok (public) : TikTok y redirige avec ?code=… ; on échange
+// le code (PKCE) et on revient au dashboard, sans copier-coller manuel.
+app.get('/api/tiktok/callback', async (req, res) => {
+  const code = String(req.query.code ?? '')
+  const err = String(req.query.error ?? '')
+  if (err || !code) {
+    res.redirect('/?tiktok=error')
+    return
+  }
+  try {
+    await submitTikTokCode(code)
+    res.redirect('/?tiktok=connected')
+  } catch {
+    res.redirect('/?tiktok=error')
+  }
+})
+
 // Tout le reste de l'API est protégé
 app.use('/api', requireAuth)
 app.use('/media', requireAuth)
