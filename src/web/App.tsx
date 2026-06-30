@@ -435,7 +435,13 @@ function Sources({ sources, onRefresh, toast, goClips }: { sources: SourceDTO[];
   }
   async function uploadFile(file: File): Promise<void> {
     if (!file) return
-    if (!file.type.startsWith('video/')) {
+    if (file.size < 100 * 1024) {
+      toast(
+        `Fichier trop petit (${file.size} octets) — ce n’est pas une vidéo valide. Ton téléchargement est sûrement incomplet : vérifie la taille du fichier (doit être en Mo/Go).`
+      )
+      return
+    }
+    if (!file.type.startsWith('video/') && !/\.(mp4|mov|mkv|webm|avi|m4v)$/i.test(file.name)) {
       toast('Ce fichier n’est pas une vidéo.')
       return
     }
