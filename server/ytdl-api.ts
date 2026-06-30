@@ -1,5 +1,8 @@
 import { join } from 'path'
-import { mkdir } from 'fs/promises'
+import { mkdir, rm } from 'fs/promises'
+import { createWriteStream } from 'fs'
+import { Readable, PassThrough } from 'stream'
+import { pipeline } from 'stream/promises'
 import { run, type PipelineContext } from '../src/main/pipeline/context'
 
 // Téléchargement de VOD YouTube via l'API RapidAPI « YouTube Media Downloader »
@@ -60,13 +63,23 @@ export function isYouTubeUrl(input: string): boolean {
   return extractVideoId(input) != null
 }
 
-/** Parse la progression ffmpeg (`-progress pipe:1`) → ratio 0..1. */
-function progressRatio(chunk: string, durationSec: number | null): number | null {
-  if (!durationSec || durationSec <= 0) return null
-  const m = chunk.match(/out_time_us=(\d+)/) ?? chunk.match(/out_time_ms=(\d+)/)
-  if (!m) return null
-  const seconds = Number(m[1]) / 1_000_000 // out_time_ms est en microsecondes (héritage ffmpeg)
-  return Math.min(1, seconds / durationSec)
+/**
+ * Télécharge une URL vers un fichier via Node `fetch` (TLS de Node, fiable).
+ * On NE laisse PAS ffmpeg lire les URLs googlevideo directement : son build
+ * statique Linux segfault (SIGSEGV) sur ces flux HTTPS. On télécharge donc
+ * d'abord, puis ffmpeg ne touche que des fichiers locaux.
+ */
+async function dlToFile(url: string, dest: string, onProgress?: (ratio: number) => void): Promise<void> {
+  const res = await fetch(url)
+  if (!res.ok || !res.body) throw new Error(`téléchargement HTTP ${res.status}`)
+  const total = Number(res.headers.get('content-length')) || 0
+  let received = 0
+  const counter = new PassThrough()
+  counter.on('data', (c: Buffer) => {
+    received += c.length
+    if (total > 0) onProgress?.(Math.min(1, received / total))
+  })
+  await pipeline(Readable.fromWeb(res.body as Parameters<typeof Readable.fromWeb>[0]), counter, createWriteStream(dest))
 }
 
 /**
@@ -119,22 +132,31 @@ export async function downloadViaApi(
   const outPath = join(ctx.dirs.downloads, `${sourceId}.mp4`)
   const qLabel = video.quality ?? `${video.height}p`
 
-  log?.(`Téléchargement ${qLabel}${audio ? ' + audio' : ''} et fusion…`)
-  const TIMEOUT = '60000000' // 60 s d'inactivité réseau max par flux
-  const inputArgs = audio
-    ? ['-rw_timeout', TIMEOUT, '-i', video.url, '-rw_timeout', TIMEOUT, '-i', audio.url, '-map', '0:v:0', '-map', '1:a:0']
-    : ['-rw_timeout', TIMEOUT, '-i', video.url, '-map', '0:v:0', '-map', '0:a:0']
-
-  await run(
-    ctx.bin.ffmpeg,
-    ['-y', '-loglevel', 'error', '-progress', 'pipe:1', ...inputArgs, '-c', 'copy', outPath],
-    {
-      onStdout: (chunk) => {
-        const r = progressRatio(chunk, d.lengthSeconds ?? null)
-        if (r != null) onProgress?.(r)
-      }
+  if (!audio) {
+    // Format progressif (vidéo + audio déjà intégrés) : téléchargement direct.
+    log?.(`Téléchargement ${qLabel}…`)
+    await dlToFile(video.url, outPath, (r) => onProgress?.(r))
+  } else {
+    // HD = flux séparés : on télécharge vidéo puis audio, puis fusion locale.
+    const vPath = join(ctx.dirs.downloads, `${sourceId}.video.mp4`)
+    const aPath = join(ctx.dirs.downloads, `${sourceId}.audio.m4a`)
+    try {
+      log?.(`Téléchargement vidéo ${qLabel}…`)
+      await dlToFile(video.url, vPath, (r) => onProgress?.(r * 0.85))
+      log?.('Téléchargement audio…')
+      await dlToFile(audio.url, aPath, (r) => onProgress?.(0.85 + r * 0.1))
+      log?.('Fusion vidéo + audio…')
+      await run(ctx.bin.ffmpeg, [
+        '-y', '-loglevel', 'error',
+        '-i', vPath, '-i', aPath,
+        '-map', '0:v:0', '-map', '1:a:0',
+        '-c', 'copy', outPath
+      ])
+    } finally {
+      await rm(vPath, { force: true })
+      await rm(aPath, { force: true })
     }
-  )
+  }
   onProgress?.(1)
 
   return {
