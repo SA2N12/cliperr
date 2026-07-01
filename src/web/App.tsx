@@ -1107,7 +1107,7 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
     setFlags((f) => ({ ...f, [k]: r.value ?? '' }))
   }, [])
   useEffect(() => {
-    ;['publish_mode', 'highlights_model', 'transcribe_enabled', 'transcribe_backend', 'reframe_focus', 'tiktok_privacy', 'tiktok_client_key', 'tiktok_redirect', 'schedule_enabled', 'schedule_cron', 'uploadpost_user', 'uploadpost_users'].forEach((k) => loadFlag(k).catch(() => undefined))
+    ;['publish_mode', 'highlights_model', 'transcribe_enabled', 'transcribe_backend', 'reframe_focus', 'tiktok_privacy', 'tiktok_client_key', 'tiktok_redirect', 'schedule_enabled', 'schedule_cron', 'uploadpost_user', 'uploadpost_users', 'uploadpost_fallback'].forEach((k) => loadFlag(k).catch(() => undefined))
     api.apiKeyStatus().then(setKeyStatus).catch(() => undefined)
     api.groqStatus().then((r) => setGroqHas(r.has)).catch(() => undefined)
     api.rapidApiStatus().then((r) => setRapidHas(r.has)).catch(() => undefined)
@@ -1263,6 +1263,9 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
                 )}
                 <div className="muted small">Les clips sont publiés en <b>rotation</b> entre les comptes cochés (répartit la limite ~15/jour de chaque compte).</div>
               </div>
+            </Field>
+            <Field label="Bascule automatique si un compte est saturé">
+              <label className="small"><input type="checkbox" checked={flags.uploadpost_fallback !== '0'} onChange={(e) => setFlag('uploadpost_fallback', e.target.checked ? '1' : '0')} /> Activer (la file d'attente passe au compte suivant si la limite TikTok est atteinte)</label>
             </Field>
           </>
         )}
