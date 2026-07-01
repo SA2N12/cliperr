@@ -934,11 +934,22 @@ const CRON_LABELS: Record<string, string> = {
 function Queue({ clips, go }: { clips: ClipDTO[]; go: (p: Page) => void }): JSX.Element {
   const [status, setStatus] = useState<{ enabled: boolean; paused: boolean; cron: string; nextRunAt: number | null; intervalSec: number | null; lastRunAt: number | null } | null>(null)
   const [now, setNow] = useState(Date.now())
+  const [mode, setMode] = useState('')
+  const [accounts, setAccounts] = useState<string[]>([])
+  const [target, setTarget] = useState('')
   const load = useCallback((): void => {
     api.schedulerStatus().then(setStatus).catch(() => undefined)
   }, [])
   useEffect(() => {
     load()
+    api.getFlag('publish_mode').then((r) => setMode(r.value || 'export')).catch(() => undefined)
+    api.getFlag('queue_target').then((r) => setTarget(r.value || '')).catch(() => undefined)
+    Promise.all([api.getFlag('uploadpost_users'), api.getFlag('uploadpost_user')]).then(([us, u]) => {
+      let list: string[] = []
+      if (us.value) { try { const a = JSON.parse(us.value); if (Array.isArray(a)) list = a.filter((x) => typeof x === 'string') } catch { /* ignore */ } }
+      if (!list.length && u.value) list = [u.value]
+      setAccounts(list)
+    }).catch(() => undefined)
     const poll = window.setInterval(load, 20000)
     const tick = window.setInterval(() => setNow(Date.now()), 1000)
     return () => {
@@ -946,6 +957,11 @@ function Queue({ clips, go }: { clips: ClipDTO[]; go: (p: Page) => void }): JSX.
       window.clearInterval(tick)
     }
   }, [load])
+
+  const changeTarget = async (v: string): Promise<void> => {
+    setTarget(v)
+    await api.setFlag('queue_target', v)
+  }
 
   const togglePause = async (): Promise<void> => {
     const paused = !status?.paused
@@ -974,6 +990,16 @@ function Queue({ clips, go }: { clips: ClipDTO[]; go: (p: Page) => void }): JSX.
           </button>
         )}
       </div>
+
+      {mode === 'uploadpost' && accounts.length > 0 && (
+        <div className="card" style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <label className="muted small" style={{ whiteSpace: 'nowrap' }}>Publier vers</label>
+          <select value={target} onChange={(e) => changeTarget(e.target.value)} style={{ flex: 1, minWidth: 260, maxWidth: 420 }}>
+            <option value="">⚡ Optimisé — remplit un compte, bascule au suivant si saturé</option>
+            {accounts.map((a) => <option key={a} value={a}>Compte : {a}</option>)}
+          </select>
+        </div>
+      )}
 
       {!status?.enabled ? (
         <div className="card" style={{ textAlign: 'center', padding: 36 }}>
@@ -1261,11 +1287,8 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
                     ))}
                   </div>
                 )}
-                <div className="muted small">Les clips sont publiés en <b>rotation</b> entre les comptes cochés (répartit la limite ~15/jour de chaque compte).</div>
+                <div className="muted small">Les comptes cochés sont disponibles dans la file d'attente (choix « Optimisé » ou compte précis) et pour la publication manuelle.</div>
               </div>
-            </Field>
-            <Field label="Bascule automatique si un compte est saturé">
-              <label className="small"><input type="checkbox" checked={flags.uploadpost_fallback !== '0'} onChange={(e) => setFlag('uploadpost_fallback', e.target.checked ? '1' : '0')} /> Activer (la file d'attente passe au compte suivant si la limite TikTok est atteinte)</label>
             </Field>
           </>
         )}

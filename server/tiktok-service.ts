@@ -205,9 +205,9 @@ export async function publishClipById(
     // Multi-comptes upload-post : compte choisi manuellement, sinon rotation +
     // bascule automatique sur le compte suivant si celui du tour est saturé.
     if (deps.mode === 'uploadpost') {
+      // Compte forcé (overrides.uploadPostUser) → un seul essai ; sinon « Optimisé »
+      // = rotation entre comptes avec bascule automatique si l'un est saturé.
       const target = overrides?.uploadPostUser?.trim()
-      // Bascule auto entre comptes si saturé : activée par défaut, désactivable en Réglages.
-      const fallback = repo.getSetting('uploadpost_fallback') !== '0'
       const order = target ? [target] : rotationOrder()
       if (!order.length) throw new Error('Aucun compte upload-post configuré')
       let lastErr: unknown = null
@@ -222,7 +222,7 @@ export async function publishClipById(
           return
         } catch (e) {
           lastErr = e
-          if (!target && fallback && isRateLimit(e) && i < order.length - 1) {
+          if (!target && isRateLimit(e) && i < order.length - 1) {
             log?.(`Clip #${id} : compte « ${acc} » saturé (limite TikTok), essai du compte suivant…`)
             continue
           }

@@ -259,8 +259,10 @@ function reloadScheduler(): void {
         emitLog('Planification : aucun clip validé en attente.')
         return
       }
+      // Cible de la file : « Optimisé » (vide → rotation+bascule) ou un compte forcé.
+      const target = repo.getSetting('queue_target') || ''
       try {
-        await publishClipById(clip.id, paths, emitLog)
+        await publishClipById(clip.id, paths, emitLog, target ? { uploadPostUser: target } : undefined)
       } catch (e) {
         // Tous les comptes saturés → on temporise 1 h pour ne pas marteler TikTok
         // (chaque essai en trop recharge le compteur anti-spam du compte).
