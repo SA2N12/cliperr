@@ -30,6 +30,8 @@ export interface PublishOverrides {
   disableStitch?: boolean
   brandOrganic?: boolean
   brandContent?: boolean
+  /** upload-post : force un compte précis (sinon rotation auto). */
+  uploadPostUser?: string
 }
 
 function captionOf(clip: ClipDTO): string {

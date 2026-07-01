@@ -119,14 +119,25 @@ export function uploadPostProfiles(): string[] {
   return single ? [single] : []
 }
 
-/** Choisit le prochain profil en rotation (round-robin) et avance l'index. */
-function pickAndAdvanceUploadPostProfile(): string {
+/** Ordre d'essai des comptes : commence au compte courant (rotation) puis les suivants (fallback). */
+function rotationOrder(): string[] {
   const list = uploadPostProfiles()
-  if (!list.length) return ''
+  if (!list.length) return []
   const idx = parseInt(repo.getSetting('uploadpost_rotation_idx') || '0', 10) || 0
-  const chosen = list[idx % list.length]
-  repo.setSetting('uploadpost_rotation_idx', String((idx + 1) % 1_000_000))
-  return chosen
+  return list.map((_, i) => list[(idx + i) % list.length])
+}
+
+/** Positionne la rotation juste après le compte utilisé avec succès. */
+function setRotationAfter(acc: string): void {
+  const list = uploadPostProfiles()
+  const p = list.indexOf(acc)
+  if (p >= 0) repo.setSetting('uploadpost_rotation_idx', String(p + 1))
+}
+
+/** Vrai si l'erreur est une saturation TikTok (quota anti-spam) → on peut basculer de compte. */
+function isRateLimit(e: unknown): boolean {
+  const m = e instanceof Error ? e.message : String(e)
+  return /spam_risk|too many|rate.?limit/i.test(m)
 }
 
 export function buildPublishDeps(paths: AppPaths): PublishDeps {
@@ -191,8 +202,33 @@ export async function publishClipById(
   repo.setClipPublish(id, 'scheduled')
   try {
     const deps = buildPublishDeps(paths)
-    // Multi-comptes : chaque publication part sur le compte suivant (rotation).
-    if (deps.mode === 'uploadpost') deps.uploadPostUser = pickAndAdvanceUploadPostProfile()
+    // Multi-comptes upload-post : compte choisi manuellement, sinon rotation +
+    // bascule automatique sur le compte suivant si celui du tour est saturé.
+    if (deps.mode === 'uploadpost') {
+      const target = overrides?.uploadPostUser?.trim()
+      const order = target ? [target] : rotationOrder()
+      if (!order.length) throw new Error('Aucun compte upload-post configuré')
+      let lastErr: unknown = null
+      for (let i = 0; i < order.length; i++) {
+        const acc = order[i]
+        deps.uploadPostUser = acc
+        try {
+          const out = await publishClip(clip, deps, overrides)
+          repo.setClipPublish(id, 'published')
+          if (!target) setRotationAfter(acc)
+          log?.(`Clip #${id} publié sur « ${acc} » — ${out.detail}`)
+          return
+        } catch (e) {
+          lastErr = e
+          if (!target && isRateLimit(e) && i < order.length - 1) {
+            log?.(`Clip #${id} : compte « ${acc} » saturé (limite TikTok), essai du compte suivant…`)
+            continue
+          }
+          throw e
+        }
+      }
+      throw lastErr ?? new Error('Publication impossible')
+    }
     const out = await publishClip(clip, deps, overrides)
     repo.setClipPublish(id, 'published')
     log?.(`Clip #${id} publié — ${out.detail}`)

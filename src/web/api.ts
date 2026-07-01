@@ -10,6 +10,7 @@ export interface PublishOverrides {
   disableStitch?: boolean
   brandOrganic?: boolean
   brandContent?: boolean
+  uploadPostUser?: string
 }
 
 async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {

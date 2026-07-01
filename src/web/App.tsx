@@ -797,6 +797,8 @@ function PublishModal({ clip, ttNickname, onClose, onDone, toast }: { clip: Clip
   const [disabledFlags, setDisabledFlags] = useState({ comment: false, duet: false, stitch: false })
   const [commercial, setCommercial] = useState(false)
   const [brand, setBrand] = useState({ organic: false, content: false })
+  const [accounts, setAccounts] = useState<string[]>([])
+  const [account, setAccount] = useState('')
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
@@ -806,6 +808,12 @@ function PublishModal({ clip, ttNickname, onClose, onDone, toast }: { clip: Clip
       if (m === 'uploadpost') {
         setOpts(['PUBLIC_TO_EVERYONE', 'MUTUAL_FOLLOW_FRIENDS', 'FOLLOWER_OF_CREATOR', 'SELF_ONLY'])
         setPrivacy('PUBLIC_TO_EVERYONE')
+        Promise.all([api.getFlag('uploadpost_users'), api.getFlag('uploadpost_user')]).then(([us, u]) => {
+          let list: string[] = []
+          if (us.value) { try { const a = JSON.parse(us.value); if (Array.isArray(a)) list = a.filter((x) => typeof x === 'string') } catch { /* ignore */ } }
+          if (!list.length && u.value) list = [u.value]
+          setAccounts(list)
+        }).catch(() => undefined)
       } else if (m === 'tiktok') {
         api.tiktokCheck().then((info) => {
           setOpts(info.privacyOptions)
@@ -826,7 +834,8 @@ function PublishModal({ clip, ttNickname, onClose, onDone, toast }: { clip: Clip
       disableDuet: !allow.duet,
       disableStitch: !allow.stitch,
       brandOrganic: commercial && brand.organic,
-      brandContent: commercial && brand.content
+      brandContent: commercial && brand.content,
+      uploadPostUser: account || undefined
     }
     try {
       await api.publishClip(clip.id, overrides)
@@ -853,6 +862,15 @@ function PublishModal({ clip, ttNickname, onClose, onDone, toast }: { clip: Clip
           <div className="muted small" style={{ marginBottom: 8 }}>
             Compte : {ttNickname ? `@${ttNickname}` : '—'} · mode {mode === 'tiktok' ? 'Direct' : mode === 'tiktok_draft' ? 'Brouillon' : mode === 'uploadpost' ? 'upload-post' : 'Export'}
           </div>
+          {mode === 'uploadpost' && accounts.length > 1 && (
+            <>
+              <label className="muted small" style={{ display: 'block' }}>Compte de publication</label>
+              <select className="input-full" value={account} onChange={(e) => setAccount(e.target.value)} style={{ marginTop: 4, marginBottom: 4 }}>
+                <option value="">Auto (rotation + bascule si saturé)</option>
+                {accounts.map((a) => <option key={a} value={a}>{a}</option>)}
+              </select>
+            </>
+          )}
           <label className="muted small">Légende</label>
           <textarea className="input-full" rows={4} maxLength={2200} value={caption} onChange={(e) => setCaption(e.target.value)} style={{ marginTop: 4 }} />
           {(mode === 'tiktok' || mode === 'uploadpost') && (
