@@ -1062,42 +1062,88 @@ function Queue({ clips, go }: { clips: ClipDTO[]; go: (p: Page) => void }): JSX.
   )
 }
 
+const UNKNOWN_ACCOUNT = '__unknown__'
+
 function Published({ clips, go }: { clips: ClipDTO[]; go: (p: Page) => void }): JSX.Element {
-  const pub = clips.filter((c) => c.publishStatus === 'published').sort((a, b) => b.createdAt - a.createdAt)
-  return (
-    <>
-      <div className="page-head">
-        <div>
-          <h1>Publiés ({pub.length})</h1>
-          <p>Historique des clips envoyés sur TikTok.</p>
+  const [open, setOpen] = useState<string | null>(null)
+  const pub = clips.filter((c) => c.publishStatus === 'published')
+
+  const groups = new Map<string, ClipDTO[]>()
+  for (const c of pub) {
+    const key = c.publishedAccount || UNKNOWN_ACCOUNT
+    const arr = groups.get(key) ?? []
+    arr.push(c)
+    groups.set(key, arr)
+  }
+  const label = (key: string): string => (key === UNKNOWN_ACCOUNT ? 'Compte inconnu' : key)
+
+  const cardGrid = (list: ClipDTO[]): JSX.Element => (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 16 }}>
+      {list.slice().sort((a, b) => b.createdAt - a.createdAt).map((c) => (
+        <div key={c.id} className="card" style={{ padding: 12 }}>
+          {c.filePath ? (
+            <video src={clipUrl(c.filePath)} controls style={{ width: '100%', borderRadius: 10, background: '#000', aspectRatio: '9 / 16' }} />
+          ) : (
+            <div className="muted small">Pas d’aperçu</div>
+          )}
+          <div style={{ fontWeight: 600, marginTop: 8, fontSize: 14 }}>{c.title || `Clip ${Math.round(c.startSec)}s`}</div>
+          {c.hashtags && <div className="small" style={{ color: 'var(--accent)', marginTop: 2 }}>{c.hashtags}</div>}
+          <div className="row" style={{ marginTop: 8 }}>
+            <span className="small muted" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.publishedAccount || '—'}</span>
+            <span className="chip" style={{ background: '#dcfce7', color: 'var(--good)' }}>✓ publié</span>
+          </div>
         </div>
-      </div>
-      {pub.length === 0 ? (
+      ))}
+    </div>
+  )
+
+  if (pub.length === 0) {
+    return (
+      <>
+        <div className="page-head"><div><h1>Publiés (0)</h1><p>Tes clips publiés, rangés par compte.</p></div></div>
         <div className="card" style={{ textAlign: 'center', padding: 36 }}>
           <div className="dz-icon" style={{ margin: '0 auto 12px' }}><Icon name="send" size={24} /></div>
           <div style={{ fontWeight: 600 }}>Aucun clip publié pour l’instant</div>
           <p className="muted small">Publie des clips depuis l’onglet Clips (ou via la planification) — ils apparaîtront ici.</p>
           <button className="btn primary" style={{ marginTop: 6 }} onClick={() => go('clips')}>Aller aux Clips</button>
         </div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 16 }}>
-          {pub.map((c) => (
-            <div key={c.id} className="card" style={{ padding: 12 }}>
-              {c.filePath ? (
-                <video src={clipUrl(c.filePath)} controls style={{ width: '100%', borderRadius: 10, background: '#000', aspectRatio: '9 / 16' }} />
-              ) : (
-                <div className="muted small">Pas d’aperçu</div>
-              )}
-              <div style={{ fontWeight: 600, marginTop: 8, fontSize: 14 }}>{c.title || `Clip ${Math.round(c.startSec)}s`}</div>
-              {c.hashtags && <div className="small" style={{ color: 'var(--accent)', marginTop: 2 }}>{c.hashtags}</div>}
-              <div className="row" style={{ marginTop: 8 }}>
-                <span className="small muted">{c.score != null ? `score ${(c.score * 100).toFixed(0)}%` : ''}</span>
-                <span className="chip" style={{ background: '#dcfce7', color: 'var(--good)' }}>✓ publié</span>
-              </div>
+      </>
+    )
+  }
+
+  if (open !== null) {
+    const list = groups.get(open) ?? []
+    return (
+      <>
+        <div className="page-head">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button className="btn icon-btn" onClick={() => setOpen(null)} title="Retour aux dossiers">←</button>
+            <div>
+              <h1 style={{ fontSize: 22 }}>{label(open)}</h1>
+              <p>{list.length} clip{list.length > 1 ? 's' : ''} publié{list.length > 1 ? 's' : ''} sur ce compte</p>
             </div>
-          ))}
+          </div>
         </div>
-      )}
+        {cardGrid(list)}
+      </>
+    )
+  }
+
+  const folders = [...groups.entries()].sort((a, b) => b[1].length - a[1].length)
+  return (
+    <>
+      <div className="page-head"><div><h1>Publiés ({pub.length})</h1><p>Tes clips publiés, rangés par compte. Clique un dossier pour voir ses clips.</p></div></div>
+      <div className="folder-grid">
+        {folders.map(([key, list]) => (
+          <div key={key} className="card folder" onClick={() => setOpen(key)}>
+            <div className="fic"><Icon name="folder" /></div>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label(key)}</div>
+              <div className="muted small">{list.length} clip{list.length > 1 ? 's' : ''} publié{list.length > 1 ? 's' : ''}</div>
+            </div>
+          </div>
+        ))}
+      </div>
     </>
   )
 }

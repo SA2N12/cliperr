@@ -34,6 +34,7 @@ function toClipDTO(r: ClipRow): ClipDTO {
     hashtags: r.hashtags,
     reviewStatus: r.reviewStatus as ClipDTO['reviewStatus'],
     publishStatus: r.publishStatus as ClipDTO['publishStatus'],
+    publishedAccount: r.publishedAccount,
     createdAt: r.createdAt
   }
 }

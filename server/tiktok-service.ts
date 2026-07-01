@@ -140,6 +140,13 @@ function isRateLimit(e: unknown): boolean {
   return /spam_risk|too many|rate.?limit/i.test(m)
 }
 
+/** Libellé du « compte » de publication pour les modes hors upload-post (page Publiés). */
+function publishedLabelFor(mode: PublishMode): string {
+  if (mode === 'export') return 'Export dossier'
+  const nick = repo.getSetting('tiktok_nickname')
+  return nick ? `@${nick}` : 'TikTok'
+}
+
 export function buildPublishDeps(paths: AppPaths): PublishDeps {
   const mode = (repo.getSetting(F.mode) as PublishMode) || 'export'
   return {
@@ -216,7 +223,7 @@ export async function publishClipById(
         deps.uploadPostUser = acc
         try {
           const out = await publishClip(clip, deps, overrides)
-          repo.setClipPublish(id, 'published')
+          repo.updateClip(id, { publishStatus: 'published', publishedAccount: acc })
           if (!target) setRotationAfter(acc)
           log?.(`Clip #${id} publié sur « ${acc} » — ${out.detail}`)
           return
@@ -232,7 +239,7 @@ export async function publishClipById(
       throw lastErr ?? new Error('Publication impossible')
     }
     const out = await publishClip(clip, deps, overrides)
-    repo.setClipPublish(id, 'published')
+    repo.updateClip(id, { publishStatus: 'published', publishedAccount: publishedLabelFor(deps.mode) })
     log?.(`Clip #${id} publié — ${out.detail}`)
   } catch (e) {
     repo.setClipPublish(id, 'failed')

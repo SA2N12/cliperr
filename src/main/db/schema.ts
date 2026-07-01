@@ -25,6 +25,7 @@ export const clips = sqliteTable('clips', {
   hashtags: text('hashtags'),
   reviewStatus: text('review_status').notNull().default('pending'),
   publishStatus: text('publish_status').notNull().default('unpublished'),
+  publishedAccount: text('published_account'),
   createdAt: integer('created_at').notNull()
 })
 
@@ -79,6 +80,7 @@ CREATE TABLE IF NOT EXISTS clips (
   hashtags TEXT,
   review_status TEXT NOT NULL DEFAULT 'pending',
   publish_status TEXT NOT NULL DEFAULT 'unpublished',
+  published_account TEXT,
   created_at INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS jobs (

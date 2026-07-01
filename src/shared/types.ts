@@ -38,6 +38,8 @@ export interface ClipDTO {
   hashtags: string | null
   reviewStatus: 'pending' | 'approved' | 'rejected'
   publishStatus: 'unpublished' | 'scheduled' | 'published' | 'failed'
+  /** Compte/profil sur lequel le clip a été publié (upload-post, TikTok…). */
+  publishedAccount: string | null
   createdAt: number
 }
 

@@ -13,6 +13,12 @@ export function initDb(dataDir: string): BetterSQLite3Database<typeof schema> {
   _sqlite.pragma('journal_mode = WAL')
   _sqlite.pragma('foreign_keys = ON')
   _sqlite.exec(schema.SCHEMA_DDL)
+  // Migration légère pour les bases existantes : ajoute les colonnes manquantes
+  // (CREATE TABLE IF NOT EXISTS ne modifie pas une table déjà présente).
+  const clipCols = _sqlite.prepare('PRAGMA table_info(clips)').all() as { name: string }[]
+  if (!clipCols.some((c) => c.name === 'published_account')) {
+    _sqlite.exec('ALTER TABLE clips ADD COLUMN published_account TEXT')
+  }
   // Au démarrage, aucune source n'est réellement en cours : on débloque celles
   // restées en "running" suite à une fermeture/redémarrage de l'app.
   _sqlite.exec("UPDATE sources SET status = 'pending' WHERE status IN ('running', 'queued')")
