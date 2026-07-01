@@ -102,11 +102,15 @@ async function getTikTokAccess(): Promise<string | null> {
 }
 
 export function buildPublishDeps(paths: AppPaths): PublishDeps {
+  const mode = (repo.getSetting(F.mode) as PublishMode) || 'export'
   return {
-    mode: (repo.getSetting(F.mode) as PublishMode) || 'export',
+    mode,
     exportDir: repo.getSetting(F.exportDir) || paths.uploads,
     getTikTokAccess,
-    privacyLevel: repo.getSetting(F.ttPrivacy) || 'SELF_ONLY'
+    // upload-post publie en public sans audit → défaut public pour ce mode.
+    privacyLevel: repo.getSetting(F.ttPrivacy) || (mode === 'uploadpost' ? 'PUBLIC_TO_EVERYONE' : 'SELF_ONLY'),
+    uploadPostKey: getEncrypted('uploadpost_key'),
+    uploadPostUser: repo.getSetting('uploadpost_user') || ''
   }
 }
 

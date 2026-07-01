@@ -1,14 +1,17 @@
 import { exportClip } from './exportFolder'
 import { publishVideo, uploadToInbox } from './tiktok'
+import { uploadPostTikTok } from './uploadpost'
 import type { ClipDTO } from '../../shared/types'
 
-export type PublishMode = 'export' | 'tiktok' | 'tiktok_draft'
+export type PublishMode = 'export' | 'tiktok' | 'tiktok_draft' | 'uploadpost'
 
 export interface PublishDeps {
   mode: PublishMode
   exportDir: string
   getTikTokAccess: () => Promise<string | null>
   privacyLevel?: string
+  uploadPostKey?: string | null
+  uploadPostUser?: string | null
 }
 
 export interface PublishOutcome {
@@ -40,6 +43,20 @@ export async function publishClip(
 ): Promise<PublishOutcome> {
   if (!clip.filePath) throw new Error('Clip sans fichier')
   const caption = overrides.caption ?? captionOf(clip)
+
+  if (deps.mode === 'uploadpost') {
+    const res = await uploadPostTikTok({
+      apiKey: deps.uploadPostKey ?? '',
+      user: deps.uploadPostUser ?? '',
+      filePath: clip.filePath,
+      caption,
+      privacyLevel: overrides.privacyLevel ?? deps.privacyLevel,
+      disableComment: overrides.disableComment,
+      disableDuet: overrides.disableDuet,
+      disableStitch: overrides.disableStitch
+    })
+    return { ok: true, detail: res.url ? `Publié via upload-post → ${res.url}` : 'Publié via upload-post' }
+  }
 
   if (deps.mode === 'tiktok' || deps.mode === 'tiktok_draft') {
     const token = await deps.getTikTokAccess()

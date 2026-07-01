@@ -413,6 +413,13 @@ app.post('/api/settings/rapidapi', wrap((req, res) => {
   res.json({ ok: true })
 }))
 
+// Clé API upload-post (publication TikTok publique via agrégateur audité)
+app.get('/api/settings/uploadpost', wrap((_req, res) => res.json({ has: !!getEncrypted('uploadpost_key') })))
+app.post('/api/settings/uploadpost', wrap((req, res) => {
+  setEncrypted('uploadpost_key', String(req.body?.key ?? ''))
+  res.json({ ok: true })
+}))
+
 // yt-dlp
 app.post('/api/ytdlp/update', wrap(async (_req, res) => {
   await updateYtDlp(paths.bin, emitLog)

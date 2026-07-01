@@ -76,6 +76,8 @@ export const api = {
   setGroqKey: (key: string) => post('/api/settings/groq', { key }),
   rapidApiStatus: () => req<{ has: boolean }>('/api/settings/rapidapi'),
   setRapidApiKey: (key: string) => post('/api/settings/rapidapi', { key }),
+  uploadPostStatus: () => req<{ has: boolean }>('/api/settings/uploadpost'),
+  setUploadPostKey: (key: string) => post('/api/settings/uploadpost', { key }),
 
   // yt-dlp / scheduler
   updateYtDlp: () => post('/api/ytdlp/update'),

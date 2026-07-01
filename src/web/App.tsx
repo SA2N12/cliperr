@@ -800,13 +800,21 @@ function PublishModal({ clip, ttNickname, onClose, onDone, toast }: { clip: Clip
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    api.getFlag('publish_mode').then((r) => setMode(r.value || 'export')).catch(() => undefined)
-    api.tiktokCheck().then((info) => {
-      setOpts(info.privacyOptions)
-      setPrivacy(info.privacyOptions[0] ?? 'SELF_ONLY')
-      setDisabledFlags({ comment: info.commentDisabled, duet: info.duetDisabled, stitch: info.stitchDisabled })
-      setAllow({ comment: !info.commentDisabled, duet: !info.duetDisabled, stitch: !info.stitchDisabled })
-    }).catch(() => setOpts(['SELF_ONLY']))
+    api.getFlag('publish_mode').then((r) => {
+      const m = r.value || 'export'
+      setMode(m)
+      if (m === 'uploadpost') {
+        setOpts(['PUBLIC_TO_EVERYONE', 'MUTUAL_FOLLOW_FRIENDS', 'FOLLOWER_OF_CREATOR', 'SELF_ONLY'])
+        setPrivacy('PUBLIC_TO_EVERYONE')
+      } else if (m === 'tiktok') {
+        api.tiktokCheck().then((info) => {
+          setOpts(info.privacyOptions)
+          setPrivacy(info.privacyOptions[0] ?? 'SELF_ONLY')
+          setDisabledFlags({ comment: info.commentDisabled, duet: info.duetDisabled, stitch: info.stitchDisabled })
+          setAllow({ comment: !info.commentDisabled, duet: !info.duetDisabled, stitch: !info.stitchDisabled })
+        }).catch(() => setOpts(['SELF_ONLY']))
+      }
+    }).catch(() => undefined)
   }, [])
 
   async function publish(): Promise<void> {
@@ -843,11 +851,11 @@ function PublishModal({ clip, ttNickname, onClose, onDone, toast }: { clip: Clip
         <div style={{ flex: 1, minWidth: 0 }}>
           <h3 style={{ marginTop: 0 }}>Vérifier &amp; publier</h3>
           <div className="muted small" style={{ marginBottom: 8 }}>
-            Compte : {ttNickname ? `@${ttNickname}` : '—'} · mode {mode === 'tiktok' ? 'Direct' : mode === 'tiktok_draft' ? 'Brouillon' : 'Export'}
+            Compte : {ttNickname ? `@${ttNickname}` : '—'} · mode {mode === 'tiktok' ? 'Direct' : mode === 'tiktok_draft' ? 'Brouillon' : mode === 'uploadpost' ? 'upload-post' : 'Export'}
           </div>
           <label className="muted small">Légende</label>
           <textarea className="input-full" rows={4} maxLength={2200} value={caption} onChange={(e) => setCaption(e.target.value)} style={{ marginTop: 4 }} />
-          {mode === 'tiktok' && (
+          {(mode === 'tiktok' || mode === 'uploadpost') && (
             <>
               <label className="muted small" style={{ display: 'block', marginTop: 10 }}>Confidentialité</label>
               <select className="input-full" value={privacy} onChange={(e) => setPrivacy(e.target.value)} style={{ marginTop: 4 }}>
@@ -860,14 +868,18 @@ function PublishModal({ clip, ttNickname, onClose, onDone, toast }: { clip: Clip
                     Autoriser {k === 'comment' ? 'les commentaires' : k === 'duet' ? 'les Duos' : 'les Stitch'}
                   </label>
                 ))}
-                <label className="small" style={{ marginTop: 6 }}>
-                  <input type="checkbox" checked={commercial} onChange={(e) => setCommercial(e.target.checked)} /> Divulguer un contenu commercial
-                </label>
-                {commercial && (
-                  <div style={{ marginLeft: 18 }}>
-                    <label className="small" style={{ display: 'block' }}><input type="checkbox" checked={brand.organic} onChange={(e) => setBrand((b) => ({ ...b, organic: e.target.checked }))} /> Votre marque</label>
-                    <label className="small" style={{ display: 'block' }}><input type="checkbox" checked={brand.content} onChange={(e) => setBrand((b) => ({ ...b, content: e.target.checked }))} /> Contenu de marque (tiers)</label>
-                  </div>
+                {mode === 'tiktok' && (
+                  <>
+                    <label className="small" style={{ marginTop: 6 }}>
+                      <input type="checkbox" checked={commercial} onChange={(e) => setCommercial(e.target.checked)} /> Divulguer un contenu commercial
+                    </label>
+                    {commercial && (
+                      <div style={{ marginLeft: 18 }}>
+                        <label className="small" style={{ display: 'block' }}><input type="checkbox" checked={brand.organic} onChange={(e) => setBrand((b) => ({ ...b, organic: e.target.checked }))} /> Votre marque</label>
+                        <label className="small" style={{ display: 'block' }}><input type="checkbox" checked={brand.content} onChange={(e) => setBrand((b) => ({ ...b, content: e.target.checked }))} /> Contenu de marque (tiers)</label>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </>
@@ -1063,6 +1075,8 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
   const [groqHas, setGroqHas] = useState(false)
   const [rapidKey, setRapidKey] = useState('')
   const [rapidHas, setRapidHas] = useState(false)
+  const [upKey, setUpKey] = useState('')
+  const [upHas, setUpHas] = useState(false)
   const [tt, setTt] = useState<{ connected: boolean; hasConfig: boolean; hasSecret: boolean } | null>(null)
   const [ttCode, setTtCode] = useState('')
   const [secret, setSecret] = useState('')
@@ -1072,10 +1086,11 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
     setFlags((f) => ({ ...f, [k]: r.value ?? '' }))
   }, [])
   useEffect(() => {
-    ;['publish_mode', 'highlights_model', 'transcribe_enabled', 'transcribe_backend', 'reframe_focus', 'tiktok_privacy', 'tiktok_client_key', 'tiktok_redirect', 'schedule_enabled', 'schedule_cron'].forEach((k) => loadFlag(k).catch(() => undefined))
+    ;['publish_mode', 'highlights_model', 'transcribe_enabled', 'transcribe_backend', 'reframe_focus', 'tiktok_privacy', 'tiktok_client_key', 'tiktok_redirect', 'schedule_enabled', 'schedule_cron', 'uploadpost_user'].forEach((k) => loadFlag(k).catch(() => undefined))
     api.apiKeyStatus().then(setKeyStatus).catch(() => undefined)
     api.groqStatus().then((r) => setGroqHas(r.has)).catch(() => undefined)
     api.rapidApiStatus().then((r) => setRapidHas(r.has)).catch(() => undefined)
+    api.uploadPostStatus().then((r) => setUpHas(r.has)).catch(() => undefined)
     api.tiktokStatus().then(setTt).catch(() => undefined)
   }, [loadFlag])
 
@@ -1155,8 +1170,27 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
             <option value="export">Export dossier</option>
             <option value="tiktok_draft">Brouillon TikTok</option>
             <option value="tiktok">Direct TikTok (compte privé / app auditée)</option>
+            <option value="uploadpost">upload-post — public, sans audit (payant)</option>
           </select>
         </Field>
+        {flags.publish_mode === 'uploadpost' && (
+          <>
+            <p className="small" style={{ marginTop: 0 }}>
+              Publie en <b>public</b> via l'app auditée d'upload-post (pas d'audit TikTok à passer).
+              Nécessite un plan payant upload-post (TikTok non inclus dans l'offre gratuite). Connecte
+              ton compte TikTok sur upload-post, puis renseigne la clé API et l'identifiant de profil.
+            </p>
+            <Field label={upHas ? 'Clé API upload-post configurée ✓' : 'Clé API upload-post'}>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input className="input-full" style={{ flex: 1 }} type="password" placeholder="Apikey…" value={upKey} onChange={(e) => setUpKey(e.target.value)} />
+                <button className="btn primary" onClick={async () => { await api.setUploadPostKey(upKey); setUpKey(''); setUpHas((await api.uploadPostStatus()).has); toast('Clé upload-post enregistrée') }} disabled={!upKey.trim()}>Enregistrer</button>
+              </div>
+            </Field>
+            <Field label="Identifiant de profil (« user »)">
+              <input className="input-full" value={flags.uploadpost_user || ''} onChange={(e) => setFlag('uploadpost_user', e.target.value)} placeholder="ex. le nom du profil connecté sur upload-post" />
+            </Field>
+          </>
+        )}
         <Field label="Confidentialité (Direct)">
           <select value={flags.tiktok_privacy || 'SELF_ONLY'} onChange={(e) => setFlag('tiktok_privacy', e.target.value)}>
             <option value="SELF_ONLY">Privé (Seulement moi)</option>
