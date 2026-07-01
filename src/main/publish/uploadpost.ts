@@ -92,7 +92,7 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
  */
 async function pollUploadStatus(apiKey: string, requestId: string): Promise<{ url: string | null }> {
   const url = `https://api.upload-post.com/api/uploadposts/status?request_id=${encodeURIComponent(requestId)}`
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 40; i++) {
     let j: StatusResult | null = null
     try {
       const r = await fetch(url, { headers: { Authorization: `Apikey ${apiKey}` } })
@@ -100,19 +100,16 @@ async function pollUploadStatus(apiKey: string, requestId: string): Promise<{ ur
     } catch {
       /* réseau : on réessaie */
     }
-    if (j) {
+    // On n'évalue le résultat QUE lorsque le traitement est terminé : pendant
+    // « processing », results[].success vaut false par défaut → sinon faux échec.
+    if (j && (j.status === 'completed' || j.status === 'failed')) {
       const tk = (j.results ?? []).find((x) => x.platform === 'tiktok') ?? j.results?.[0]
-      if (tk) {
-        if (tk.success === false) {
-          throw new Error(`upload-post : ${tk.error_message || 'échec de la publication'}`)
-        }
-        return { url: tk.post_url ?? null }
-      }
-      if (j.status === 'failed') throw new Error('upload-post : échec de la publication (statut failed)')
+      if (tk?.success === true) return { url: tk.post_url ?? null }
+      throw new Error(`upload-post : ${tk?.error_message || 'échec de la publication'}`)
     }
     await sleep(3000)
   }
-  // Timeout : l'upload est soumis mais pas encore confirmé → on ne fait pas échouer.
+  // Toujours en cours après le délai max : considéré soumis (pas de faux échec).
   return { url: null }
 }
 
