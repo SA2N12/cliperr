@@ -101,6 +101,34 @@ async function getTikTokAccess(): Promise<string | null> {
   }
 }
 
+/** Profils upload-post configurés (liste multi-comptes ; repli sur l'ancien champ unique). */
+export function uploadPostProfiles(): string[] {
+  const raw = repo.getSetting('uploadpost_users')
+  if (raw) {
+    try {
+      const arr = JSON.parse(raw) as unknown
+      if (Array.isArray(arr)) {
+        const list = arr.filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+        if (list.length) return list
+      }
+    } catch {
+      /* JSON invalide : on ignore et on retombe sur le champ unique */
+    }
+  }
+  const single = repo.getSetting('uploadpost_user')
+  return single ? [single] : []
+}
+
+/** Choisit le prochain profil en rotation (round-robin) et avance l'index. */
+function pickAndAdvanceUploadPostProfile(): string {
+  const list = uploadPostProfiles()
+  if (!list.length) return ''
+  const idx = parseInt(repo.getSetting('uploadpost_rotation_idx') || '0', 10) || 0
+  const chosen = list[idx % list.length]
+  repo.setSetting('uploadpost_rotation_idx', String((idx + 1) % 1_000_000))
+  return chosen
+}
+
 export function buildPublishDeps(paths: AppPaths): PublishDeps {
   const mode = (repo.getSetting(F.mode) as PublishMode) || 'export'
   return {
@@ -110,7 +138,7 @@ export function buildPublishDeps(paths: AppPaths): PublishDeps {
     // upload-post publie en public sans audit → défaut public pour ce mode.
     privacyLevel: repo.getSetting(F.ttPrivacy) || (mode === 'uploadpost' ? 'PUBLIC_TO_EVERYONE' : 'SELF_ONLY'),
     uploadPostKey: getEncrypted('uploadpost_key'),
-    uploadPostUser: repo.getSetting('uploadpost_user') || ''
+    uploadPostUser: uploadPostProfiles()[0] ?? ''
   }
 }
 
@@ -162,7 +190,10 @@ export async function publishClipById(
   if (!clip) throw new Error(`Clip #${id} introuvable`)
   repo.setClipPublish(id, 'scheduled')
   try {
-    const out = await publishClip(clip, buildPublishDeps(paths), overrides)
+    const deps = buildPublishDeps(paths)
+    // Multi-comptes : chaque publication part sur le compte suivant (rotation).
+    if (deps.mode === 'uploadpost') deps.uploadPostUser = pickAndAdvanceUploadPostProfile()
+    const out = await publishClip(clip, deps, overrides)
     repo.setClipPublish(id, 'published')
     log?.(`Clip #${id} publié — ${out.detail}`)
   } catch (e) {

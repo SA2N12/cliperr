@@ -78,6 +78,10 @@ export const api = {
   setRapidApiKey: (key: string) => post('/api/settings/rapidapi', { key }),
   uploadPostStatus: () => req<{ has: boolean }>('/api/settings/uploadpost'),
   setUploadPostKey: (key: string) => post('/api/settings/uploadpost', { key }),
+  uploadPostProfiles: () =>
+    req<{ profiles: { username: string; tiktokHandle: string | null; tiktokConnected: boolean; reauthRequired: boolean; blocked: boolean }[] }>(
+      '/api/uploadpost/profiles'
+    ),
 
   // yt-dlp / scheduler
   updateYtDlp: () => post('/api/ytdlp/update'),

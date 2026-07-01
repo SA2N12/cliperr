@@ -32,6 +32,7 @@ import { transcribeSource, transcribeWithGroq, type Word } from '../src/main/pip
 import { detectFaceCenterX } from '../src/main/pipeline/face'
 import { isLocalFile } from '../src/main/pipeline/ingest'
 import { downloadViaApi, isYouTubeUrl, type SourceMetaApi } from './ytdl-api'
+import { listUploadPostProfiles } from '../src/main/publish/uploadpost'
 import type { PipelineContext } from '../src/main/pipeline/context'
 import type { Usage } from '../src/main/pipeline/highlights'
 import type { ProgressEvent } from '../src/shared/types'
@@ -418,6 +419,12 @@ app.get('/api/settings/uploadpost', wrap((_req, res) => res.json({ has: !!getEnc
 app.post('/api/settings/uploadpost', wrap((req, res) => {
   setEncrypted('uploadpost_key', String(req.body?.key ?? ''))
   res.json({ ok: true })
+}))
+// Profils upload-post (multi-comptes) : liste les comptes TikTok connectés côté upload-post
+app.get('/api/uploadpost/profiles', wrap(async (_req, res) => {
+  const key = getEncrypted('uploadpost_key')
+  if (!key) return res.status(400).json({ error: 'Clé API upload-post manquante' })
+  res.json({ profiles: await listUploadPostProfiles(key) })
 }))
 
 // yt-dlp

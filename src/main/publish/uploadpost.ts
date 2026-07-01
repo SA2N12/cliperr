@@ -69,3 +69,51 @@ export async function uploadPostTikTok(p: UploadPostParams): Promise<{ url: stri
   }
   return { url: tt?.url ?? null }
 }
+
+export interface UploadPostProfile {
+  username: string
+  tiktokHandle: string | null
+  tiktokConnected: boolean
+  reauthRequired: boolean
+  blocked: boolean
+}
+
+interface RawProfilesResult {
+  success?: boolean
+  error?: string
+  profiles?: Array<{
+    username?: string
+    blocked?: boolean
+    social_accounts?: { tiktok?: { handle?: string; display_name?: string; reauth_required?: boolean } }
+  }>
+}
+
+/** Liste les profils upload-post et l'état de leur compte TikTok connecté. */
+export async function listUploadPostProfiles(apiKey: string): Promise<UploadPostProfile[]> {
+  if (!apiKey) throw new Error('Clé API upload-post manquante')
+  const res = await fetch('https://api.upload-post.com/api/uploadposts/users', {
+    headers: { Authorization: `Apikey ${apiKey}` }
+  })
+  const text = await res.text()
+  let json: RawProfilesResult
+  try {
+    json = JSON.parse(text) as RawProfilesResult
+  } catch {
+    throw new Error(`upload-post réponse invalide (HTTP ${res.status})`)
+  }
+  if (!res.ok || json.success === false) {
+    throw new Error(`upload-post : ${json.error || `HTTP ${res.status}`}`)
+  }
+  return (json.profiles ?? [])
+    .map((p) => {
+      const tk = p.social_accounts?.tiktok
+      return {
+        username: String(p.username ?? ''),
+        tiktokHandle: tk?.handle ?? tk?.display_name ?? null,
+        tiktokConnected: !!tk,
+        reauthRequired: !!tk?.reauth_required,
+        blocked: !!p.blocked
+      }
+    })
+    .filter((p) => p.username)
+}

@@ -1077,6 +1077,9 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
   const [rapidHas, setRapidHas] = useState(false)
   const [upKey, setUpKey] = useState('')
   const [upHas, setUpHas] = useState(false)
+  const [upProfiles, setUpProfiles] = useState<{ username: string; tiktokHandle: string | null; tiktokConnected: boolean; reauthRequired: boolean; blocked: boolean }[]>([])
+  const [upSelected, setUpSelected] = useState<string[]>([])
+  const [upLoading, setUpLoading] = useState(false)
   const [tt, setTt] = useState<{ connected: boolean; hasConfig: boolean; hasSecret: boolean } | null>(null)
   const [ttCode, setTtCode] = useState('')
   const [secret, setSecret] = useState('')
@@ -1086,7 +1089,7 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
     setFlags((f) => ({ ...f, [k]: r.value ?? '' }))
   }, [])
   useEffect(() => {
-    ;['publish_mode', 'highlights_model', 'transcribe_enabled', 'transcribe_backend', 'reframe_focus', 'tiktok_privacy', 'tiktok_client_key', 'tiktok_redirect', 'schedule_enabled', 'schedule_cron', 'uploadpost_user'].forEach((k) => loadFlag(k).catch(() => undefined))
+    ;['publish_mode', 'highlights_model', 'transcribe_enabled', 'transcribe_backend', 'reframe_focus', 'tiktok_privacy', 'tiktok_client_key', 'tiktok_redirect', 'schedule_enabled', 'schedule_cron', 'uploadpost_user', 'uploadpost_users'].forEach((k) => loadFlag(k).catch(() => undefined))
     api.apiKeyStatus().then(setKeyStatus).catch(() => undefined)
     api.groqStatus().then((r) => setGroqHas(r.has)).catch(() => undefined)
     api.rapidApiStatus().then((r) => setRapidHas(r.has)).catch(() => undefined)
@@ -1099,6 +1102,35 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
     await api.setFlag(k, v)
     if (k === 'schedule_enabled' || k === 'schedule_cron') await api.reloadScheduler()
   }
+
+  // Synchronise la sélection de comptes avec ce qui est enregistré (uploadpost_users, sinon l'ancien champ unique)
+  useEffect(() => {
+    let sel: string[] = []
+    if (flags.uploadpost_users) {
+      try {
+        const a = JSON.parse(flags.uploadpost_users)
+        if (Array.isArray(a)) sel = a.filter((x) => typeof x === 'string')
+      } catch {
+        /* ignore */
+      }
+    }
+    if (!sel.length && flags.uploadpost_user) sel = [flags.uploadpost_user]
+    setUpSelected(sel)
+  }, [flags.uploadpost_users, flags.uploadpost_user])
+
+  const fetchProfiles = async (): Promise<void> => {
+    setUpLoading(true)
+    try {
+      const r = await api.uploadPostProfiles()
+      setUpProfiles(r.profiles)
+    } catch (e) {
+      toast(`upload-post : ${String((e as Error).message)}`)
+    } finally {
+      setUpLoading(false)
+    }
+  }
+  const toggleProfile = (u: string): void =>
+    setUpSelected((s) => (s.includes(u) ? s.filter((x) => x !== u) : [...s, u]))
 
   return (
     <>
@@ -1186,8 +1218,33 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
                 <button className="btn primary" onClick={async () => { await api.setUploadPostKey(upKey); setUpKey(''); setUpHas((await api.uploadPostStatus()).has); toast('Clé upload-post enregistrée') }} disabled={!upKey.trim()}>Enregistrer</button>
               </div>
             </Field>
-            <Field label="Identifiant de profil (« user »)">
-              <input className="input-full" value={flags.uploadpost_user || ''} onChange={(e) => setFlag('uploadpost_user', e.target.value)} placeholder="ex. le nom du profil connecté sur upload-post" />
+            <Field label="Comptes TikTok à utiliser (multi-comptes)">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button className="btn" onClick={fetchProfiles} disabled={upLoading || !upHas}>{upLoading ? 'Chargement…' : 'Récupérer mes comptes'}</button>
+                  <button className="btn primary" onClick={() => setFlag('uploadpost_users', JSON.stringify(upSelected))}>Enregistrer ({upSelected.length})</button>
+                </div>
+                {upProfiles.length === 0 ? (
+                  <div className="muted small">
+                    {upSelected.length ? `Comptes enregistrés : ${upSelected.join(', ')}. ` : ''}
+                    Clique « Récupérer mes comptes » pour lister tes profils upload-post et cocher ceux à utiliser.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {upProfiles.map((p) => (
+                      <label key={p.username} className="small" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <input type="checkbox" checked={upSelected.includes(p.username)} onChange={() => toggleProfile(p.username)} />
+                        <b>{p.username}</b>
+                        {p.tiktokConnected
+                          ? <span className="muted">· @{p.tiktokHandle}{p.reauthRequired ? ' ⚠️ ré-autorisation requise' : ''}</span>
+                          : <span className="muted">· ⚠️ TikTok non connecté</span>}
+                        {p.blocked && <span className="muted">· 🚫 bloqué</span>}
+                      </label>
+                    ))}
+                  </div>
+                )}
+                <div className="muted small">Les clips sont publiés en <b>rotation</b> entre les comptes cochés (répartit la limite ~15/jour de chaque compte).</div>
+              </div>
             </Field>
           </>
         )}
