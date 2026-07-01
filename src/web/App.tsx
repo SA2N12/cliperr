@@ -6,10 +6,11 @@ import {
   type SourceDTO,
   type ClipDTO,
   type ProgressEvent,
-  type PublishOverrides
+  type PublishOverrides,
+  type ViralIdea
 } from './api'
 
-type Page = 'dashboard' | 'generate' | 'history' | 'clips' | 'queue' | 'published' | 'settings'
+type Page = 'dashboard' | 'generate' | 'ideas' | 'history' | 'clips' | 'queue' | 'published' | 'settings'
 
 const ICONS: Record<string, string> = {
   dashboard: 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z',
@@ -20,6 +21,7 @@ const ICONS: Record<string, string> = {
   upload: 'M12 16V4M7 9l5-5 5 5M5 20h14',
   play: 'M5 3l14 9-14 9z',
   pause: 'M8 5v14M16 5v14',
+  bulb: 'M9 18h6M10 21h4M12 3a6 6 0 00-4 10.5c.7.7 1 1.3 1 2.5h6c0-1.2.3-1.8 1-2.5A6 6 0 0012 3z',
   search: 'M11 19a8 8 0 100-16 8 8 0 000 16zM21 21l-4.3-4.3',
   refresh: 'M21 12a9 9 0 11-3-6.7L21 8M21 3v5h-5',
   spark: 'M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4L12 3z',
@@ -140,6 +142,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
   const nav: { id: Page; label: string; icon: string }[] = [
     { id: 'dashboard', label: 'Tableau de bord', icon: 'dashboard' },
     { id: 'generate', label: 'Générer', icon: 'spark' },
+    { id: 'ideas', label: 'Idées virales', icon: 'bulb' },
     { id: 'history', label: 'Historique', icon: 'list' },
     { id: 'clips', label: 'Clips', icon: 'clips' },
     { id: 'queue', label: 'File d’attente', icon: 'clock' },
@@ -182,6 +185,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
       <main className="main">
         {page === 'dashboard' && <Dashboard sources={sources} clips={clips} log={log} go={setPage} onRefresh={refresh} />}
         {page === 'generate' && <Generate sources={sources} progress={progress} onRefresh={refresh} toast={showToast} goHistory={() => setPage('history')} />}
+        {page === 'ideas' && <Ideas toast={showToast} go={setPage} />}
         {page === 'history' && <History sources={sources} clips={clips} progress={progress} onRefresh={refresh} toast={showToast} goClips={() => setPage('clips')} />}
         {page === 'clips' && <Clips clips={clips} sources={sources} onRefresh={refresh} toast={showToast} ttProfile={ttProfile} />}
         {page === 'queue' && <Queue clips={clips} go={setPage} />}
@@ -1144,6 +1148,158 @@ function Published({ clips, go }: { clips: ClipDTO[]; go: (p: Page) => void }): 
           </div>
         ))}
       </div>
+    </>
+  )
+}
+
+function ideaToText(i: ViralIdea): string {
+  return `${i.title}\n\nHook : ${i.hook}\nAngle : ${i.angle}\n\nScript :\n${i.script
+    .map((s, k) => `${k + 1}. ${s}`)
+    .join('\n')}\n\nFormat : ${i.format}\n\n${i.hashtags.join(' ')}`
+}
+
+function Ideas({ toast, go }: { toast: (m: string) => void; go: (p: Page) => void }): JSX.Element {
+  const [niche, setNiche] = useState('')
+  const [count, setCount] = useState(4)
+  const [trends, setTrends] = useState<string[]>([])
+  const [trendsConfigured, setTrendsConfigured] = useState<boolean | null>(null)
+  const [selected, setSelected] = useState<string[]>([])
+  const [ideas, setIdeas] = useState<ViralIdea[]>([])
+  const [loading, setLoading] = useState(false)
+  const [trendsLoading, setTrendsLoading] = useState(false)
+
+  const loadTrends = useCallback(async (): Promise<void> => {
+    setTrendsLoading(true)
+    try {
+      const r = await api.trends()
+      setTrendsConfigured(r.configured)
+      setTrends(r.hashtags)
+    } catch {
+      setTrendsConfigured(false)
+    } finally {
+      setTrendsLoading(false)
+    }
+  }, [])
+  useEffect(() => {
+    void loadTrends()
+  }, [loadTrends])
+
+  const toggle = (t: string): void => setSelected((s) => (s.includes(t) ? s.filter((x) => x !== t) : [...s, t]))
+
+  const generate = async (): Promise<void> => {
+    if (!niche.trim()) {
+      toast('Indique une niche ou un thème')
+      return
+    }
+    setLoading(true)
+    try {
+      const r = await api.generateIdeas(niche.trim(), count, selected)
+      setIdeas(r.ideas)
+      if (!r.ideas.length) toast('Aucune idée générée — réessaie')
+    } catch (e) {
+      toast(`Erreur : ${String((e as Error).message)}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const copy = (text: string): void => {
+    navigator.clipboard?.writeText(text)
+    toast('Copié ✓')
+  }
+
+  return (
+    <>
+      <div className="page-head">
+        <div>
+          <h1>Idées virales</h1>
+          <p>Génère des idées et scripts de vidéos par IA, ancrés sur les tendances TikTok du moment.</p>
+        </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="row">
+          <h3 style={{ margin: 0 }}>Tendances TikTok</h3>
+          <button className="btn" onClick={loadTrends} disabled={trendsLoading}>
+            <Icon name="refresh" size={15} /> {trendsLoading ? '…' : 'Actualiser'}
+          </button>
+        </div>
+        {trendsConfigured === false ? (
+          <div style={{ marginTop: 8 }}>
+            <p className="muted small">
+              Pour afficher les vraies tendances TikTok, abonne-toi à une API de tendances sur RapidAPI (ta clé
+              RapidAPI existante fonctionnera). Tu peux déjà générer des idées ci-dessous, ou cibler des tendances
+              à la main dans la niche.
+            </p>
+            <button className="btn" onClick={() => go('settings')}>Aller aux Réglages</button>
+          </div>
+        ) : trends.length === 0 ? (
+          <p className="muted small" style={{ marginBottom: 0, marginTop: 8 }}>Aucune tendance récupérée pour l’instant.</p>
+        ) : (
+          <>
+            <p className="muted small" style={{ marginTop: 8 }}>
+              Clique des tendances pour ancrer tes idées dessus ({selected.length} sélectionnée{selected.length > 1 ? 's' : ''}).
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {trends.map((t) => (
+                <button
+                  key={t}
+                  className="chip"
+                  onClick={() => toggle(t)}
+                  style={{ cursor: 'pointer', border: selected.includes(t) ? '1px solid var(--accent)' : '1px solid transparent', background: selected.includes(t) ? '#ede9fe' : undefined }}
+                >
+                  #{t}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <div style={{ flex: 1, minWidth: 240 }}>
+            <label className="muted small" style={{ display: 'block', marginBottom: 6 }}>Niche / thème</label>
+            <input className="input-full" placeholder="ex. gaming FIFA, coulisses de concerts, humour du quotidien…" value={niche} onChange={(e) => setNiche(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void generate()} />
+          </div>
+          <div>
+            <label className="muted small" style={{ display: 'block', marginBottom: 6 }}>Nombre</label>
+            <select value={count} onChange={(e) => setCount(Number(e.target.value))}>
+              {[3, 4, 5, 6, 8].map((n) => <option key={n} value={n}>{n} idées</option>)}
+            </select>
+          </div>
+          <button className="btn primary" onClick={generate} disabled={loading}>
+            <Icon name="spark" size={15} /> {loading ? 'Génération…' : 'Générer'}
+          </button>
+        </div>
+      </div>
+
+      {ideas.length > 0 ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {ideas.map((idea, i) => (
+            <div key={i} className="card">
+              <div className="row" style={{ alignItems: 'flex-start' }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 16 }}>{idea.title}</div>
+                  <div className="small" style={{ marginTop: 4 }}><b>Hook :</b> {idea.hook}</div>
+                </div>
+                <button className="btn small" onClick={() => copy(ideaToText(idea))}>Copier</button>
+              </div>
+              <div className="muted small" style={{ marginTop: 6 }}><b>Pourquoi ça marche :</b> {idea.angle}</div>
+              <div style={{ marginTop: 8 }}>
+                <div className="muted small" style={{ fontWeight: 600 }}>Script</div>
+                <ol style={{ margin: '4px 0 0', paddingLeft: 18 }}>
+                  {idea.script.map((s, j) => <li key={j} className="small" style={{ marginBottom: 2 }}>{s}</li>)}
+                </ol>
+              </div>
+              <div className="muted small" style={{ marginTop: 8 }}><b>Format :</b> {idea.format}</div>
+              {idea.hashtags.length > 0 && <div className="small" style={{ marginTop: 8, color: 'var(--accent)' }}>{idea.hashtags.join(' ')}</div>}
+            </div>
+          ))}
+        </div>
+      ) : (
+        !loading && <div className="card muted">Entre une niche et clique « Générer » pour obtenir des idées de vidéos virales avec script.</div>
+      )}
     </>
   )
 }

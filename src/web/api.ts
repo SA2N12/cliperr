@@ -13,6 +13,15 @@ export interface PublishOverrides {
   uploadPostUser?: string
 }
 
+export interface ViralIdea {
+  title: string
+  hook: string
+  angle: string
+  script: string[]
+  format: string
+  hashtags: string[]
+}
+
 async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const res = await fetch(path, {
     credentials: 'same-origin',
@@ -63,6 +72,11 @@ export const api = {
   publishClip: (id: number, overrides?: PublishOverrides) =>
     post(`/api/clips/${id}/publish`, { overrides }),
   runPipeline: (sourceId: number, clipCount: number) => post('/api/pipeline/run', { sourceId, clipCount }),
+
+  // Idées virales + tendances
+  generateIdeas: (niche: string, count: number, trends: string[]) =>
+    post<{ ideas: ViralIdea[] }>('/api/ideas', { niche, count, trends }),
+  trends: () => req<{ configured: boolean; hashtags: string[]; error?: string }>('/api/trends'),
 
   // Réglages
   getFlag: (key: string) => req<{ value: string | null }>(`/api/settings/flag/${encodeURIComponent(key)}`),

@@ -33,6 +33,7 @@ import { detectFaceCenterX } from '../src/main/pipeline/face'
 import { isLocalFile } from '../src/main/pipeline/ingest'
 import { downloadViaApi, isYouTubeUrl, type SourceMetaApi } from './ytdl-api'
 import { listUploadPostProfiles } from '../src/main/publish/uploadpost'
+import { generateViralIdeas, fetchTikTokTrends } from './ideas'
 import type { PipelineContext } from '../src/main/pipeline/context'
 import type { Usage } from '../src/main/pipeline/highlights'
 import type { ProgressEvent } from '../src/shared/types'
@@ -369,6 +370,32 @@ app.post('/api/pipeline/run', wrap((req, res) => {
   const job = pipelineChain.then(() => runForSource(sourceId, clipCount))
   pipelineChain = job.then(() => undefined, () => undefined)
   res.json({ ok: true })
+}))
+
+// Idées virales (Claude) + tendances réelles (RapidAPI)
+app.post('/api/ideas', wrap(async (req, res) => {
+  const apiKey = getApiKey()
+  if (!apiKey) return res.status(400).json({ error: 'Configure d’abord ta clé API Claude dans les Réglages.' })
+  const niche = String(req.body?.niche ?? '').trim()
+  if (!niche) return res.status(400).json({ error: 'Précise une niche ou un thème.' })
+  const count = Math.min(8, Math.max(1, Math.round(Number(req.body?.count ?? 4))))
+  const trends = Array.isArray(req.body?.trends) ? (req.body.trends as unknown[]).map(String).slice(0, 25) : []
+  const model = MODEL_MAP[repo.getSetting(FLAG_MODEL) ?? 'haiku'] ?? MODEL_MAP.haiku
+  const { ideas, usage } = await generateViralIdeas({ apiKey, model, niche, count, trends })
+  if (usage) addSpend(model, usage)
+  res.json({ ideas })
+}))
+app.get('/api/trends', wrap(async (_req, res) => {
+  const key = getEncrypted('rapidapi_key')
+  const host = repo.getSetting('trends_host') || 'tiktok-trending-data.p.rapidapi.com'
+  const path = repo.getSetting('trends_path') || ''
+  if (!key || !path) return res.json({ configured: false, hashtags: [] })
+  try {
+    const hashtags = await fetchTikTokTrends(key, host, path)
+    res.json({ configured: true, hashtags })
+  } catch (e) {
+    res.json({ configured: false, hashtags: [], error: String((e as Error)?.message ?? e) })
+  }
 }))
 
 // Réglages génériques
