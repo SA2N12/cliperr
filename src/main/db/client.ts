@@ -22,6 +22,9 @@ export function initDb(dataDir: string): BetterSQLite3Database<typeof schema> {
   // Au démarrage, aucune source n'est réellement en cours : on débloque celles
   // restées en "running" suite à une fermeture/redémarrage de l'app.
   _sqlite.exec("UPDATE sources SET status = 'pending' WHERE status IN ('running', 'queued')")
+  // De même, un clip resté en "scheduled" est un orphelin d'une publication
+  // interrompue (redéploiement) : on le repasse en "failed" pour qu'il soit repris.
+  _sqlite.exec("UPDATE clips SET publish_status = 'failed' WHERE publish_status = 'scheduled'")
   _db = drizzle(_sqlite, { schema })
   return _db
 }

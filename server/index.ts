@@ -265,10 +265,13 @@ function reloadScheduler(): void {
       try {
         await publishClipById(clip.id, paths, emitLog, target ? { uploadPostUser: target } : undefined)
       } catch (e) {
-        // Tous les comptes saturés → on temporise 1 h pour ne pas marteler TikTok
-        // (chaque essai en trop recharge le compteur anti-spam du compte).
         const msg = e instanceof Error ? e.message : String(e)
-        if (/spam_risk|too many|rate.?limit/i.test(msg)) {
+        if (/\b429\b|too many requests/i.test(msg)) {
+          // upload-post limite le nombre de requêtes → pause courte, ça se rétablit vite.
+          repo.setSetting('uploadpost_cooldown_until', String(Date.now() + 8 * 60 * 1000))
+          emitLog('Planification : upload-post limite les requêtes (429) → pause 8 min.')
+        } else if (/spam_risk|too many posts|rate.?limit/i.test(msg)) {
+          // Tous les comptes saturés → pause 1 h pour ne pas marteler l'anti-spam TikTok.
           repo.setSetting('uploadpost_cooldown_until', String(Date.now() + 60 * 60 * 1000))
           emitLog('Planification : tous les comptes saturés → pause anti-spam 1 h.')
         }

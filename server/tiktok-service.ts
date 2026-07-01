@@ -137,7 +137,13 @@ function setRotationAfter(acc: string): void {
 /** Vrai si l'erreur est une saturation TikTok (quota anti-spam) → on peut basculer de compte. */
 function isRateLimit(e: unknown): boolean {
   const m = e instanceof Error ? e.message : String(e)
-  return /spam_risk|too many|rate.?limit/i.test(m)
+  return /spam_risk|too many posts|rate.?limit/i.test(m)
+}
+
+/** Vrai si upload-post limite le NOMBRE de requêtes (throttle global 429) → inutile de basculer, il faut temporiser. */
+function isApiThrottle(e: unknown): boolean {
+  const m = e instanceof Error ? e.message : String(e)
+  return /\b429\b|too many requests/i.test(m)
 }
 
 /** Libellé du « compte » de publication pour les modes hors upload-post (page Publiés). */
@@ -229,8 +235,11 @@ export async function publishClipById(
           return
         } catch (e) {
           lastErr = e
-          if (!target && isRateLimit(e) && i < order.length - 1) {
-            log?.(`Clip #${id} : compte « ${acc} » saturé (limite TikTok), essai du compte suivant…`)
+          // En « Optimisé », on tente le compte suivant sur TOUTE erreur (compte
+          // saturé, non connecté, transitoire…) SAUF un throttle global 429 (où
+          // basculer est inutile : c'est upload-post qui limite les requêtes).
+          if (!target && !isApiThrottle(e) && i < order.length - 1) {
+            log?.(`Clip #${id} : compte « ${acc} » a échoué (${isRateLimit(e) ? 'saturé' : 'erreur'}), essai du compte suivant…`)
             continue
           }
           throw e
