@@ -249,6 +249,11 @@ function reloadScheduler(): void {
         emitLog('Planification : file en pause, publication ignorée.')
         return
       }
+      const cooldownUntil = Number(repo.getSetting('uploadpost_cooldown_until')) || 0
+      if (Date.now() < cooldownUntil) {
+        emitLog(`Planification : pause anti-spam (comptes saturés) jusqu'à ${new Date(cooldownUntil).toLocaleTimeString()}.`)
+        return
+      }
       const clip = repo.nextApprovedUnpublished()
       if (!clip) {
         emitLog('Planification : aucun clip validé en attente.')
@@ -256,8 +261,14 @@ function reloadScheduler(): void {
       }
       try {
         await publishClipById(clip.id, paths, emitLog)
-      } catch {
-        /* statut déjà "failed" */
+      } catch (e) {
+        // Tous les comptes saturés → on temporise 1 h pour ne pas marteler TikTok
+        // (chaque essai en trop recharge le compteur anti-spam du compte).
+        const msg = e instanceof Error ? e.message : String(e)
+        if (/spam_risk|too many|rate.?limit/i.test(msg)) {
+          repo.setSetting('uploadpost_cooldown_until', String(Date.now() + 60 * 60 * 1000))
+          emitLog('Planification : tous les comptes saturés → pause anti-spam 1 h.')
+        }
       }
     })()
   })

@@ -121,7 +121,10 @@ export function nextApprovedUnpublished(): ClipDTO | null {
     .where(eq(clips.reviewStatus, 'approved'))
     .orderBy(clips.createdAt)
     .all()
-  const hit = rows.find((r) => r.publishStatus === 'unpublished' && !!r.filePath)
+  // On (re)publie les clips jamais publiés ET ceux en échec (ex. saturation d'un
+  // compte à un instant donné) : avec la rotation/bascule, un nouvel essai peut
+  // aboutir sur un autre compte.
+  const hit = rows.find((r) => (r.publishStatus === 'unpublished' || r.publishStatus === 'failed') && !!r.filePath)
   return hit ? toClipDTO(hit) : null
 }
 
