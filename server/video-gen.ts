@@ -25,6 +25,8 @@ export interface VideoGenOptions {
   openaiKey: string
   voice?: string
   idea: ViralIdea
+  /** Chemin d'une musique de fond (libre de droits) à mixer sous la voix. */
+  musicTrack?: string
   onProgress?: (msg: string) => void
 }
 
@@ -241,23 +243,31 @@ export async function generateVideoFromIdea(
     log?.('Assemblage final…')
     const list = join(work, 'list.txt')
     await writeFile(list, sceneFiles.map((f) => `file '${f.replace(/'/g, "'\\''")}'`).join('\n'))
+    const concatPath = join(work, 'concat.mp4')
+    await run(ctx.bin.ffmpeg, ['-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', list, '-c', 'copy', concatPath])
+
     await mkdir(ctx.dirs.clips, { recursive: true })
     const finalPath = join(ctx.dirs.clips, `idea-${stamp}.mp4`)
-    await run(ctx.bin.ffmpeg, [
-      '-y',
-      '-loglevel',
-      'error',
-      '-f',
-      'concat',
-      '-safe',
-      '0',
-      '-i',
-      list,
-      '-c',
-      'copy',
-      finalPath
-    ])
-    const total = await mediaDuration(ctx.bin.ffprobe, finalPath)
+    const total = await mediaDuration(ctx.bin.ffprobe, concatPath)
+
+    if (opts.musicTrack) {
+      log?.('Ajout de la musique de fond…')
+      const fadeSt = Math.max(0, total - 2)
+      // Musique bouclée à volume réduit, sous la voix (mix sans normalisation).
+      await run(ctx.bin.ffmpeg, [
+        '-y', '-loglevel', 'error',
+        '-i', concatPath,
+        '-stream_loop', '-1', '-i', opts.musicTrack,
+        '-filter_complex',
+        `[1:a]volume=0.18,afade=t=out:st=${fadeSt.toFixed(2)}:d=2[m];[0:a][m]amix=inputs=2:duration=first:normalize=0[a]`,
+        '-map', '0:v', '-map', '[a]',
+        '-c:v', 'copy', '-c:a', 'aac', '-b:a', '128k',
+        '-t', String(total),
+        finalPath
+      ])
+    } else {
+      await run(ctx.bin.ffmpeg, ['-y', '-loglevel', 'error', '-i', concatPath, '-c', 'copy', finalPath])
+    }
     return { filePath: finalPath, durationSec: total, usage }
   } finally {
     await rm(work, { recursive: true, force: true })

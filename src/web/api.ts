@@ -83,6 +83,13 @@ export const api = {
   generateIdeaVideo: (id: number) => post(`/api/ideas/${id}/video`),
   openaiStatus: () => req<{ has: boolean }>('/api/settings/openai'),
   setOpenaiKey: (key: string) => post('/api/settings/openai', { key }),
+  musicList: () => req<{ tracks: string[] }>('/api/music'),
+  uploadMusic: (file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return req<{ ok: boolean }>('/api/music', { method: 'POST', body: fd })
+  },
+  deleteMusic: (name: string) => req(`/api/music/${encodeURIComponent(name)}`, { method: 'DELETE' }),
   trends: () => req<{ configured: boolean; hashtags: string[]; error?: string }>('/api/trends'),
 
   // Réglages

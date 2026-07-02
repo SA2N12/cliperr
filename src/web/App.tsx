@@ -1532,6 +1532,7 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
   const [upHas, setUpHas] = useState(false)
   const [openaiKey, setOpenaiKey] = useState('')
   const [openaiHas, setOpenaiHas] = useState(false)
+  const [music, setMusic] = useState<string[]>([])
   const [upProfiles, setUpProfiles] = useState<{ username: string; tiktokHandle: string | null; tiktokConnected: boolean; reauthRequired: boolean; blocked: boolean }[]>([])
   const [upSelected, setUpSelected] = useState<string[]>([])
   const [upLoading, setUpLoading] = useState(false)
@@ -1550,6 +1551,7 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
     api.rapidApiStatus().then((r) => setRapidHas(r.has)).catch(() => undefined)
     api.uploadPostStatus().then((r) => setUpHas(r.has)).catch(() => undefined)
     api.openaiStatus().then((r) => setOpenaiHas(r.has)).catch(() => undefined)
+    api.musicList().then((r) => setMusic(r.tracks)).catch(() => undefined)
     api.tiktokStatus().then(setTt).catch(() => undefined)
   }, [loadFlag])
 
@@ -1634,6 +1636,32 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
           <div style={{ display: 'flex', gap: 8 }}>
             <input className="input-full" style={{ flex: 1 }} type="password" placeholder="sk-…" value={openaiKey} onChange={(e) => setOpenaiKey(e.target.value)} />
             <button className="btn primary" onClick={async () => { await api.setOpenaiKey(openaiKey); setOpenaiKey(''); setOpenaiHas((await api.openaiStatus()).has); toast('Clé OpenAI enregistrée') }} disabled={!openaiKey.trim()}>Enregistrer</button>
+          </div>
+        </Field>
+        <Field label="Musiques de fond (libres de droits)">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <label className="btn" style={{ alignSelf: 'flex-start', cursor: 'pointer' }}>
+              <Icon name="upload" size={15} /> Ajouter une musique
+              <input type="file" accept="audio/*" style={{ display: 'none' }} onChange={async (e) => {
+                const f = e.target.files?.[0]; if (!f) return
+                try { await api.uploadMusic(f); setMusic((await api.musicList()).tracks); toast('Musique ajoutée') }
+                catch (err) { toast(`Erreur : ${String((err as Error).message)}`) }
+                e.target.value = ''
+              }} />
+            </label>
+            {music.length === 0 ? (
+              <span className="muted small">Aucune musique. Ajoute des pistes libres de droits : Cliperr en met une (au hasard) sous la voix off, à volume réduit.</span>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {music.map((m) => (
+                  <div key={m} className="small" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Icon name="play" size={12} />
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.replace(/^\d+-/, '')}</span>
+                    <button className="btn small" onClick={async () => { await api.deleteMusic(m); setMusic((await api.musicList()).tracks); toast('Musique supprimée') }} title="Supprimer">🗑</button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </Field>
       </div>

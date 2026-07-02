@@ -2,8 +2,8 @@ import express, { type Request, type Response } from 'express'
 import cookieParser from 'cookie-parser'
 import multer from 'multer'
 import cron, { type ScheduledTask } from 'node-cron'
-import { mkdirSync, existsSync } from 'fs'
-import { join } from 'path'
+import { mkdirSync, existsSync, readdirSync, rmSync } from 'fs'
+import { join, basename } from 'path'
 import Anthropic from '@anthropic-ai/sdk'
 
 import { appPaths, config, assertConfig, type AppPaths } from './config'
@@ -81,6 +81,11 @@ function addSpend(model: string, usage: Usage): void {
 }
 
 const paths: AppPaths = appPaths()
+const musicDir = join(paths.data, 'music')
+const AUDIO_RE = /\.(mp3|m4a|aac|wav|ogg|opus)$/i
+function musicTracks(): string[] {
+  return existsSync(musicDir) ? readdirSync(musicDir).filter((f) => AUDIO_RE.test(f)) : []
+}
 
 let ctxPromise: Promise<PipelineContext> | null = null
 function getContext(): Promise<PipelineContext> {
@@ -302,12 +307,15 @@ async function runVideoGen(ideaId: number): Promise<void> {
   try {
     emitIdeaVideo({ ideaId, status: 'running', message: 'Démarrage…' })
     const ctx = await getContext()
+    const tracks = musicTracks()
+    const musicTrack = tracks.length ? join(musicDir, tracks[Math.floor(Math.random() * tracks.length)]) : undefined
     const { filePath, durationSec, usage } = await generateVideoFromIdea(ctx, {
       anthropicKey,
       anthropicModel: model,
       openaiKey,
       voice: repo.getSetting('tts_voice') || 'onyx',
       idea,
+      musicTrack,
       onProgress: (m) => emitIdeaVideo({ ideaId, status: 'running', message: m })
     })
     if (usage) addSpend(model, usage)
@@ -333,7 +341,7 @@ async function runVideoGen(ideaId: number): Promise<void> {
 
 // ── Bootstrap ──
 assertConfig()
-for (const dir of [paths.downloads, paths.clips, paths.bin, paths.models, paths.uploads]) {
+for (const dir of [paths.downloads, paths.clips, paths.bin, paths.models, paths.uploads, musicDir]) {
   mkdirSync(dir, { recursive: true })
 }
 initDb(paths.data)
@@ -491,6 +499,26 @@ app.post('/api/ideas/:id/video', wrap((req, res) => {
 app.get('/api/settings/openai', wrap((_req, res) => res.json({ has: !!getEncrypted('openai_key') })))
 app.post('/api/settings/openai', wrap((req, res) => {
   setEncrypted('openai_key', String(req.body?.key ?? ''))
+  res.json({ ok: true })
+}))
+
+// Musiques de fond (libres de droits) pour les vidéos IA
+const musicUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, musicDir),
+    filename: (_req, file, cb) => cb(null, `${Date.now()}-${file.originalname.replace(/[^\w.-]/g, '_')}`)
+  }),
+  limits: { fileSize: 25 * 1024 * 1024 }
+})
+app.get('/api/music', wrap((_req, res) => res.json({ tracks: musicTracks() })))
+app.post('/api/music', musicUpload.single('file'), wrap((req, res) => {
+  const f = (req as Request & { file?: Express.Multer.File }).file
+  if (!f) return res.status(400).json({ error: 'Fichier manquant' })
+  res.json({ ok: true })
+}))
+app.delete('/api/music/:name', wrap((req, res) => {
+  const p = join(musicDir, basename(req.params.name))
+  if (existsSync(p)) rmSync(p)
   res.json({ ok: true })
 }))
 app.get('/api/trends', wrap(async (_req, res) => {
