@@ -8,7 +8,8 @@ import Anthropic from '@anthropic-ai/sdk'
 
 import { appPaths, config, assertConfig, type AppPaths } from './config'
 import { handleLogin, handleLogout, isAuthed, requireAuth } from './auth'
-import { sseHandler, emitProgress, emitLog } from './sse'
+import { sseHandler, emitProgress, emitLog, emitIdeaVideo } from './sse'
+import { generateVideoFromIdea } from './video-gen'
 import {
   getApiKey,
   setApiKey,
@@ -287,6 +288,47 @@ function reloadScheduler(): void {
   emitLog(`Planification activée (cron « ${expr} »).`)
 }
 
+// ── Génération de vidéo « faceless » depuis une idée (une à la fois) ──
+let videoChain: Promise<void> = Promise.resolve()
+async function runVideoGen(ideaId: number): Promise<void> {
+  const idea = repo.getIdea(ideaId)
+  if (!idea) return
+  const anthropicKey = getApiKey()
+  const openaiKey = getEncrypted('openai_key')
+  if (!anthropicKey) return emitIdeaVideo({ ideaId, status: 'error', message: 'Clé Claude manquante (Réglages).' })
+  if (!openaiKey) return emitIdeaVideo({ ideaId, status: 'error', message: 'Clé OpenAI manquante (Réglages).' })
+  const model = MODEL_MAP[repo.getSetting(FLAG_MODEL) ?? 'haiku'] ?? MODEL_MAP.haiku
+  try {
+    emitIdeaVideo({ ideaId, status: 'running', message: 'Démarrage…' })
+    const ctx = await getContext()
+    const { filePath, durationSec, usage } = await generateVideoFromIdea(ctx, {
+      anthropicKey,
+      anthropicModel: model,
+      openaiKey,
+      voice: repo.getSetting('tts_voice') || 'onyx',
+      idea,
+      onProgress: (m) => emitIdeaVideo({ ideaId, status: 'running', message: m })
+    })
+    if (usage) addSpend(model, usage)
+    const source = repo.createSource(`idea:${ideaId}`)
+    repo.updateSource(source.id, { status: 'done', title: idea.title, durationSec, filePath })
+    const clip = repo.createClip({
+      sourceId: source.id,
+      startSec: 0,
+      endSec: durationSec,
+      filePath,
+      title: idea.title,
+      description: idea.hook,
+      hashtags: idea.hashtags.join(' '),
+      reason: 'Vidéo générée depuis une idée'
+    })
+    if (repo.getSetting('auto_approve') === '1') repo.setClipReview(clip.id, 'approved')
+    emitIdeaVideo({ ideaId, status: 'done', message: 'Vidéo prête ✅' })
+  } catch (e) {
+    emitIdeaVideo({ ideaId, status: 'error', message: e instanceof Error ? e.message : String(e) })
+  }
+}
+
 // ── Bootstrap ──
 assertConfig()
 for (const dir of [paths.downloads, paths.clips, paths.bin, paths.models, paths.uploads]) {
@@ -432,6 +474,21 @@ app.get('/api/publish/state', wrap(async (_req, res) => {
 app.get('/api/ideas/saved', wrap((_req, res) => res.json({ ideas: repo.listIdeas() })))
 app.delete('/api/ideas/:id', wrap((req, res) => {
   repo.deleteIdea(Number(req.params.id))
+  res.json({ ok: true })
+}))
+// Génère une vidéo « faceless » à partir d'une idée enregistrée (asynchrone, progression via SSE)
+app.post('/api/ideas/:id/video', wrap((req, res) => {
+  const id = Number(req.params.id)
+  if (!repo.getIdea(id)) return res.status(404).json({ error: 'Idée introuvable' })
+  if (!getEncrypted('openai_key')) return res.status(400).json({ error: 'Configure ta clé OpenAI dans les Réglages.' })
+  videoChain = videoChain.then(() => runVideoGen(id)).then(() => undefined, () => undefined)
+  res.json({ ok: true })
+}))
+
+// Clé OpenAI (voix off + images pour la génération de vidéos)
+app.get('/api/settings/openai', wrap((_req, res) => res.json({ has: !!getEncrypted('openai_key') })))
+app.post('/api/settings/openai', wrap((req, res) => {
+  setEncrypted('openai_key', String(req.body?.key ?? ''))
   res.json({ ok: true })
 }))
 app.get('/api/trends', wrap(async (_req, res) => {

@@ -80,6 +80,9 @@ export const api = {
     post<{ ideas: SavedIdea[] }>('/api/ideas', { niche, count, trends }),
   savedIdeas: () => req<{ ideas: SavedIdea[] }>('/api/ideas/saved'),
   deleteIdea: (id: number) => req(`/api/ideas/${id}`, { method: 'DELETE' }),
+  generateIdeaVideo: (id: number) => post(`/api/ideas/${id}/video`),
+  openaiStatus: () => req<{ has: boolean }>('/api/settings/openai'),
+  setOpenaiKey: (key: string) => post('/api/settings/openai', { key }),
   trends: () => req<{ configured: boolean; hashtags: string[]; error?: string }>('/api/trends'),
 
   // Réglages
@@ -138,10 +141,12 @@ export const api = {
 export function subscribe(handlers: {
   onProgress?: (e: ProgressEvent) => void
   onLog?: (m: string) => void
+  onIdeaVideo?: (e: { ideaId: number; status: 'running' | 'done' | 'error'; message: string }) => void
 }): () => void {
   const es = new EventSource('/api/events')
   es.addEventListener('progress', (ev) => handlers.onProgress?.(JSON.parse((ev as MessageEvent).data)))
   es.addEventListener('log', (ev) => handlers.onLog?.(JSON.parse((ev as MessageEvent).data).message))
+  es.addEventListener('ideavideo', (ev) => handlers.onIdeaVideo?.(JSON.parse((ev as MessageEvent).data)))
   return () => es.close()
 }
 

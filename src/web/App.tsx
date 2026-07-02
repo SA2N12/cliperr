@@ -1359,7 +1359,7 @@ function Ideas({ toast, go }: { toast: (m: string) => void; go: (p: Page) => voi
   )
 }
 
-function IdeaCard({ idea, onCopy, meta, onDelete }: { idea: ViralIdea; onCopy: () => void; meta?: string; onDelete?: () => void }): JSX.Element {
+function IdeaCard({ idea, onCopy, meta, onDelete, onGenVideo, gen }: { idea: ViralIdea; onCopy: () => void; meta?: string; onDelete?: () => void; onGenVideo?: () => void; gen?: { status: 'running' | 'done' | 'error'; message: string } }): JSX.Element {
   return (
     <div className="card">
       <div className="row" style={{ alignItems: 'flex-start' }}>
@@ -1369,10 +1369,16 @@ function IdeaCard({ idea, onCopy, meta, onDelete }: { idea: ViralIdea; onCopy: (
           <div className="small" style={{ marginTop: 4 }}><b>Hook :</b> {idea.hook}</div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+          {onGenVideo && <button className="btn primary small" onClick={onGenVideo} disabled={gen?.status === 'running'}>{gen?.status === 'running' ? 'Génération…' : '🎬 Vidéo'}</button>}
           <button className="btn small" onClick={onCopy}>Copier</button>
           {onDelete && <button className="btn small" onClick={onDelete} title="Supprimer">🗑</button>}
         </div>
       </div>
+      {gen && (
+        <div className="small" style={{ marginTop: 8, fontWeight: 600, color: gen.status === 'error' ? '#b91c1c' : gen.status === 'done' ? 'var(--good)' : 'var(--accent-strong)' }}>
+          {gen.status === 'running' ? '⏳ ' : gen.status === 'done' ? '✅ ' : '⚠️ '}{gen.message}
+        </div>
+      )}
       <div className="muted small" style={{ marginTop: 6 }}><b>Pourquoi ça marche :</b> {idea.angle}</div>
       <div style={{ marginTop: 8 }}>
         <div className="muted small" style={{ fontWeight: 600 }}>Script</div>
@@ -1389,6 +1395,7 @@ function IdeaCard({ idea, onCopy, meta, onDelete }: { idea: ViralIdea; onCopy: (
 function MyIdeas({ toast, go }: { toast: (m: string) => void; go: (p: Page) => void }): JSX.Element {
   const [ideas, setIdeas] = useState<SavedIdea[]>([])
   const [loading, setLoading] = useState(true)
+  const [gen, setGen] = useState<Record<number, { status: 'running' | 'done' | 'error'; message: string }>>({})
 
   const load = useCallback(async (): Promise<void> => {
     setLoading(true)
@@ -1404,6 +1411,24 @@ function MyIdeas({ toast, go }: { toast: (m: string) => void; go: (p: Page) => v
   useEffect(() => {
     void load()
   }, [load])
+  useEffect(() => {
+    return subscribe({
+      onIdeaVideo: (e) => {
+        setGen((g) => ({ ...g, [e.ideaId]: { status: e.status, message: e.message } }))
+        if (e.status === 'done') toast('Vidéo prête ✅ — retrouve-la dans Clips')
+        if (e.status === 'error') toast(`Vidéo : ${e.message}`)
+      }
+    })
+  }, [toast])
+
+  const genVideo = async (id: number): Promise<void> => {
+    setGen((g) => ({ ...g, [id]: { status: 'running', message: 'Lancement…' } }))
+    try {
+      await api.generateIdeaVideo(id)
+    } catch (e) {
+      setGen((g) => ({ ...g, [id]: { status: 'error', message: String((e as Error).message) } }))
+    }
+  }
 
   const copy = (text: string): void => {
     navigator.clipboard?.writeText(text)
@@ -1443,6 +1468,8 @@ function MyIdeas({ toast, go }: { toast: (m: string) => void; go: (p: Page) => v
               meta={`${idea.niche} · ${fmtDate(idea.createdAt)}`}
               onCopy={() => copy(ideaToText(idea))}
               onDelete={() => del(idea.id)}
+              onGenVideo={() => genVideo(idea.id)}
+              gen={gen[idea.id]}
             />
           ))}
         </div>
@@ -1470,6 +1497,8 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
   const [rapidHas, setRapidHas] = useState(false)
   const [upKey, setUpKey] = useState('')
   const [upHas, setUpHas] = useState(false)
+  const [openaiKey, setOpenaiKey] = useState('')
+  const [openaiHas, setOpenaiHas] = useState(false)
   const [upProfiles, setUpProfiles] = useState<{ username: string; tiktokHandle: string | null; tiktokConnected: boolean; reauthRequired: boolean; blocked: boolean }[]>([])
   const [upSelected, setUpSelected] = useState<string[]>([])
   const [upLoading, setUpLoading] = useState(false)
@@ -1487,6 +1516,7 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
     api.groqStatus().then((r) => setGroqHas(r.has)).catch(() => undefined)
     api.rapidApiStatus().then((r) => setRapidHas(r.has)).catch(() => undefined)
     api.uploadPostStatus().then((r) => setUpHas(r.has)).catch(() => undefined)
+    api.openaiStatus().then((r) => setOpenaiHas(r.has)).catch(() => undefined)
     api.tiktokStatus().then(setTt).catch(() => undefined)
   }, [loadFlag])
 
@@ -1557,6 +1587,20 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
           <div style={{ display: 'flex', gap: 8 }}>
             <input className="input-full" style={{ flex: 1 }} type="password" placeholder="x-rapidapi-key…" value={rapidKey} onChange={(e) => setRapidKey(e.target.value)} />
             <button className="btn primary" onClick={async () => { await api.setRapidApiKey(rapidKey); setRapidKey(''); setRapidHas((await api.rapidApiStatus()).has); toast('Clé RapidAPI enregistrée') }} disabled={!rapidKey.trim()}>Enregistrer</button>
+          </div>
+        </Field>
+      </div>
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <h3 style={{ marginTop: 0 }}>Génération de vidéos (IA)</h3>
+        <p className="small" style={{ marginTop: 0 }}>
+          Transforme tes idées (page « Mes idées ») en vidéos verticales : voix off + images IA + sous-titres.
+          Nécessite une clé <b>OpenAI</b> (voix off TTS + images DALL·E). Coût ~0,20–0,40 € par vidéo.
+        </p>
+        <Field label={openaiHas ? 'Clé OpenAI configurée ✓' : 'Clé OpenAI'}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input className="input-full" style={{ flex: 1 }} type="password" placeholder="sk-…" value={openaiKey} onChange={(e) => setOpenaiKey(e.target.value)} />
+            <button className="btn primary" onClick={async () => { await api.setOpenaiKey(openaiKey); setOpenaiKey(''); setOpenaiHas((await api.openaiStatus()).has); toast('Clé OpenAI enregistrée') }} disabled={!openaiKey.trim()}>Enregistrer</button>
           </div>
         </Field>
       </div>

@@ -40,3 +40,8 @@ export function emitProgress(ev: unknown): void {
 export function emitLog(message: string): void {
   broadcastRaw('log', { message })
 }
+
+/** Progression de la génération d'une vidéo depuis une idée. */
+export function emitIdeaVideo(ev: { ideaId: number; status: 'running' | 'done' | 'error'; message: string }): void {
+  broadcastRaw('ideavideo', ev)
+}

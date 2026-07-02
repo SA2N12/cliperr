@@ -166,6 +166,11 @@ export function listIdeas(): SavedIdea[] {
   return db().select().from(ideas).orderBy(desc(ideas.createdAt)).all().map(toSavedIdea)
 }
 
+export function getIdea(id: number): SavedIdea | null {
+  const row = db().select().from(ideas).where(eq(ideas.id, id)).get()
+  return row ? toSavedIdea(row) : null
+}
+
 export function deleteIdea(id: number): void {
   db().delete(ideas).where(eq(ideas.id, id)).run()
 }
