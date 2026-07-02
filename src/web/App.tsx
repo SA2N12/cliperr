@@ -54,6 +54,79 @@ function Logo({ size = 26 }: { size?: number }): JSX.Element {
   )
 }
 
+// ── Widget global de suivi des générations (bas droite, dépliable) ──
+const GEN_STAGE_BASE: Record<string, number> = { ingest: 0, transcribe: 22, highlights: 35, extract: 48, reframe: 62, captions: 80, metadata: 92 }
+const GEN_STAGE_RANGE: Record<string, number> = { ingest: 22, transcribe: 13, highlights: 13, extract: 14, reframe: 18, captions: 12, metadata: 8 }
+function creatorPct(status: string, e?: ProgressEvent): number {
+  if (status === 'queued') return 2
+  if (!e) return 5
+  if (e.status === 'error') return 100
+  const base = GEN_STAGE_BASE[e.stage] ?? 0
+  const range = GEN_STAGE_RANGE[e.stage] ?? 10
+  return Math.min(99, base + (e.progress || 0) * range)
+}
+function aiPct(msg: string): number {
+  const m = msg.match(/Sc[eè]ne (\d+)\/(\d+)/i)
+  if (m) {
+    const x = Number(m[1])
+    const n = Number(m[2]) || 1
+    const sub = /image/i.test(msg) ? 0.45 : /montage/i.test(msg) ? 0.85 : 0
+    return 10 + ((x - 1 + sub) / n) * 74
+  }
+  if (/assemblage/i.test(msg)) return 88
+  if (/musique de fond/i.test(msg)) return 93
+  return 6
+}
+
+function GenerationsWidget({ sources, progress, ideaVideo }: { sources: SourceDTO[]; progress: Record<number, ProgressEvent>; ideaVideo: Record<number, { status: 'running' | 'done' | 'error'; message: string }> }): JSX.Element | null {
+  const [open, setOpen] = useState(true)
+  const items: { key: string; label: string; pct: number; msg: string; error: boolean }[] = []
+  for (const s of sources) {
+    if (s.status === 'running' || s.status === 'queued') {
+      const e = progress[s.id]
+      items.push({
+        key: 's' + s.id,
+        label: s.title || s.url?.split(/[\\/]/).pop() || `Clip #${s.id}`,
+        pct: creatorPct(s.status, e),
+        msg: e?.message || (s.status === 'queued' ? 'En file d’attente…' : 'En cours…'),
+        error: e?.status === 'error'
+      })
+    }
+  }
+  for (const [id, v] of Object.entries(ideaVideo)) {
+    if (v.status === 'running') items.push({ key: 'i' + id, label: 'Vidéo IA', pct: aiPct(v.message), msg: v.message, error: false })
+  }
+  if (!items.length) return null
+
+  return (
+    <div style={{ position: 'fixed', right: 16, bottom: 16, zIndex: 60, width: open ? 330 : 'auto', maxWidth: 'calc(100vw - 32px)' }}>
+      <div className="card" style={{ padding: 0, overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,.18)' }}>
+        <button onClick={() => setOpen((o) => !o)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', background: 'var(--accent)', color: '#fff', border: 0, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
+          <span className="dot" style={{ background: '#fff' }} />
+          {items.length} génération{items.length > 1 ? 's' : ''} en cours
+          <span style={{ marginLeft: 'auto', fontSize: 12 }}>{open ? '▾' : '▴'}</span>
+        </button>
+        {open && (
+          <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 340, overflowY: 'auto' }}>
+            {items.map((it) => (
+              <div key={it.key}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                  <span className="small" style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.label}</span>
+                  <span className="muted small">{Math.round(it.pct)}%</span>
+                </div>
+                <div className="muted small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: '2px 0 5px' }}>{it.msg}</div>
+                <div style={{ height: 6, borderRadius: 4, background: 'var(--border)', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${Math.max(3, Math.min(100, it.pct))}%`, background: it.error ? '#b91c1c' : 'var(--accent)', transition: 'width .4s ease' }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 type PubProfile = { username: string; handle: string | null; avatarUrl: string | null }
 
 function Avatar({ url, name, size = 22 }: { url: string | null; name?: string; size?: number }): JSX.Element {
@@ -199,6 +272,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
   const [ttProfile, setTtProfile] = useState<{ nickname: string | null; avatarUrl: string | null } | null>(null)
   const [toast, setToast] = useState('')
   const [progress, setProgress] = useState<Record<number, ProgressEvent>>({})
+  const [ideaVideo, setIdeaVideo] = useState<Record<number, { status: 'running' | 'done' | 'error'; message: string }>>({})
 
   const pushLog = useCallback((m: string) => setLog((l) => [`${new Date().toLocaleTimeString()}  ${m}`, ...l].slice(0, 200)), [])
   const refresh = useCallback(async () => {
@@ -215,6 +289,10 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
       onProgress: (e: ProgressEvent) => {
         pushLog(`[${e.stage}] ${e.status} ${Math.round((e.progress || 0) * 100)}%${e.message ? ' — ' + e.message : ''}`)
         setProgress((pm) => ({ ...pm, [e.sourceId]: e }))
+        if (e.status === 'done' || e.status === 'error') refresh().catch(() => undefined)
+      },
+      onIdeaVideo: (e) => {
+        setIdeaVideo((m) => ({ ...m, [e.ideaId]: { status: e.status, message: e.message } }))
         if (e.status === 'done' || e.status === 'error') refresh().catch(() => undefined)
       }
     })
@@ -307,6 +385,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
         {page === 'published' && <Published clips={clips} go={setPage} />}
         {page === 'settings' && <Settings toast={showToast} onTtProfile={setTtProfile} />}
       </main>
+      <GenerationsWidget sources={sources} progress={progress} ideaVideo={ideaVideo} />
       {toast && <div className="toast">{toast}</div>}
     </div>
   )
