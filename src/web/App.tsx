@@ -162,7 +162,7 @@ function Login({ onOk }: { onOk: () => void }): JSX.Element {
     <div className="login-wrap">
       <div className="card login-card">
         <div className="brand" style={{ justifyContent: 'center' }}>
-<Logo size={28} /> Cliperr
+<Logo size={34} /> Cliperr
         </div>
         <p className="muted small" style={{ marginTop: 0 }}>Connecte-toi pour accéder au dashboard.</p>
         <input
@@ -254,7 +254,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
     <div className="app">
       <aside className="sidebar">
         <div className="row" style={{ padding: '6px 8px 8px' }}>
-          <div className="brand" style={{ padding: 0, display: 'flex', alignItems: 'center', gap: 8 }}><Logo size={24} /> Cliperr</div>
+          <div className="brand" style={{ padding: 0, display: 'flex', alignItems: 'center', gap: 8 }}><Logo size={30} /> Cliperr</div>
           <span className="pill-badge"><span className="dot" /> live</span>
         </div>
         <div className="side-search">
