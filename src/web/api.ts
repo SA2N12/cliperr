@@ -65,6 +65,12 @@ export const api = {
     post(`/api/clips/${id}/publish`, { overrides }),
   runPipeline: (sourceId: number, clipCount: number) => post('/api/pipeline/run', { sourceId, clipCount }),
 
+  // Publication : profil actif + état du quota
+  publishState: () =>
+    req<{ mode: string; profiles: string[]; active: string; quotaReached: boolean; quotaProfile: string | null }>(
+      '/api/publish/state'
+    ),
+
   // Idées virales + tendances
   generateIdeas: (niche: string, count: number, trends: string[]) =>
     post<{ ideas: SavedIdea[] }>('/api/ideas', { niche, count, trends }),

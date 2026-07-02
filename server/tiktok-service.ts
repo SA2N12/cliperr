@@ -119,31 +119,24 @@ export function uploadPostProfiles(): string[] {
   return single ? [single] : []
 }
 
-/** Ordre d'essai des comptes : commence au compte courant (rotation) puis les suivants (fallback). */
-function rotationOrder(): string[] {
-  const list = uploadPostProfiles()
-  if (!list.length) return []
-  const idx = parseInt(repo.getSetting('uploadpost_rotation_idx') || '0', 10) || 0
-  return list.map((_, i) => list[(idx + i) % list.length])
+/** Profil TikTok actif (choisi globalement en haut à droite). Repli sur le 1er profil configuré. */
+export function activeProfile(): string {
+  return (repo.getSetting('active_profile') || uploadPostProfiles()[0] || '').trim()
 }
 
-/** Positionne la rotation juste après le compte utilisé avec succès. */
-function setRotationAfter(acc: string): void {
-  const list = uploadPostProfiles()
-  const p = list.indexOf(acc)
-  if (p >= 0) repo.setSetting('uploadpost_rotation_idx', String(p + 1))
+/** Marque le quota journalier « atteint » pour un profil (déclenche la bannière globale). */
+function setQuotaReached(profile: string): void {
+  if (profile) repo.setSetting(`quota_reached_${profile}`, String(Date.now()))
+}
+/** Efface l'état « quota atteint » (publication de nouveau possible → la bannière disparaît). */
+function clearQuota(profile: string): void {
+  if (profile) repo.deleteSetting(`quota_reached_${profile}`)
 }
 
-/** Vrai si l'erreur est une saturation TikTok (quota anti-spam) → on peut basculer de compte. */
+/** Vrai si l'erreur est une saturation TikTok (quota journalier atteint). */
 function isRateLimit(e: unknown): boolean {
   const m = e instanceof Error ? e.message : String(e)
   return /spam_risk|too many posts|rate.?limit/i.test(m)
-}
-
-/** Vrai si upload-post limite le NOMBRE de requêtes (throttle global 429) → inutile de basculer, il faut temporiser. */
-function isApiThrottle(e: unknown): boolean {
-  const m = e instanceof Error ? e.message : String(e)
-  return /\b429\b|too many requests/i.test(m)
 }
 
 /** Libellé du « compte » de publication pour les modes hors upload-post (page Publiés). */
@@ -162,7 +155,7 @@ export function buildPublishDeps(paths: AppPaths): PublishDeps {
     // upload-post publie en public sans audit → défaut public pour ce mode.
     privacyLevel: repo.getSetting(F.ttPrivacy) || (mode === 'uploadpost' ? 'PUBLIC_TO_EVERYONE' : 'SELF_ONLY'),
     uploadPostKey: getEncrypted('uploadpost_key'),
-    uploadPostUser: uploadPostProfiles()[0] ?? ''
+    uploadPostUser: activeProfile()
   }
 }
 
@@ -215,37 +208,22 @@ export async function publishClipById(
   repo.setClipPublish(id, 'scheduled')
   try {
     const deps = buildPublishDeps(paths)
-    // Multi-comptes upload-post : compte choisi manuellement, sinon rotation +
-    // bascule automatique sur le compte suivant si celui du tour est saturé.
+    // upload-post : on publie sur le PROFIL ACTIF (choisi en haut à droite), ou
+    // sur un compte forcé (overrides). Un seul compte, pas de rotation.
     if (deps.mode === 'uploadpost') {
-      // Compte forcé (overrides.uploadPostUser) → un seul essai ; sinon « Optimisé »
-      // = rotation entre comptes avec bascule automatique si l'un est saturé.
-      const target = overrides?.uploadPostUser?.trim()
-      const order = target ? [target] : rotationOrder()
-      if (!order.length) throw new Error('Aucun compte upload-post configuré')
-      let lastErr: unknown = null
-      for (let i = 0; i < order.length; i++) {
-        const acc = order[i]
-        deps.uploadPostUser = acc
-        try {
-          const out = await publishClip(clip, deps, overrides)
-          repo.updateClip(id, { publishStatus: 'published', publishedAccount: acc })
-          if (!target) setRotationAfter(acc)
-          log?.(`Clip #${id} publié sur « ${acc} » — ${out.detail}`)
-          return
-        } catch (e) {
-          lastErr = e
-          // En « Optimisé », on tente le compte suivant sur TOUTE erreur (compte
-          // saturé, non connecté, transitoire…) SAUF un throttle global 429 (où
-          // basculer est inutile : c'est upload-post qui limite les requêtes).
-          if (!target && !isApiThrottle(e) && i < order.length - 1) {
-            log?.(`Clip #${id} : compte « ${acc} » a échoué (${isRateLimit(e) ? 'saturé' : 'erreur'}), essai du compte suivant…`)
-            continue
-          }
-          throw e
-        }
+      const target = overrides?.uploadPostUser?.trim() || activeProfile()
+      if (!target) throw new Error('Aucun profil TikTok sélectionné')
+      deps.uploadPostUser = target
+      try {
+        const out = await publishClip(clip, deps, overrides)
+        repo.updateClip(id, { publishStatus: 'published', publishedAccount: target })
+        clearQuota(target) // publication réussie → quota de nouveau OK, bannière masquée
+        log?.(`Clip #${id} publié sur « ${target} » — ${out.detail}`)
+        return
+      } catch (e) {
+        if (isRateLimit(e)) setQuotaReached(target) // quota journalier atteint → bannière
+        throw e
       }
-      throw lastErr ?? new Error('Publication impossible')
     }
     const out = await publishClip(clip, deps, overrides)
     repo.updateClip(id, { publishStatus: 'published', publishedAccount: publishedLabelFor(deps.mode) })

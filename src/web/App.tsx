@@ -41,6 +41,47 @@ function Icon({ name, size = 18 }: { name: string; size?: number }): JSX.Element
   )
 }
 
+// Barre globale (haut de chaque page) : bannière « quota atteint » + sélecteur
+// du profil TikTok de publication (le profil actif sur lequel tout se poste).
+function TopBar({ toast }: { toast: (m: string) => void }): JSX.Element | null {
+  const [state, setState] = useState<{ mode: string; profiles: string[]; active: string; quotaReached: boolean; quotaProfile: string | null } | null>(null)
+  const load = useCallback((): void => {
+    api.publishState().then(setState).catch(() => undefined)
+  }, [])
+  useEffect(() => {
+    load()
+    const t = window.setInterval(load, 20000)
+    return () => window.clearInterval(t)
+  }, [load])
+
+  const changeProfile = async (v: string): Promise<void> => {
+    setState((s) => (s ? { ...s, active: v } : s))
+    await api.setFlag('active_profile', v)
+    toast(`Profil de publication : ${v}`)
+    load()
+  }
+
+  if (!state || state.mode !== 'uploadpost' || state.profiles.length === 0) return null
+  return (
+    <div style={{ marginBottom: 16 }}>
+      {state.quotaReached && (
+        <div className="card" style={{ marginBottom: 12, background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 18 }}>⚠️</span>
+          <div className="small">
+            <b>Quota journalier atteint pour « {state.quotaProfile} ».</b> TikTok limite le nombre de publications par jour et par compte. La publication reprendra automatiquement dès que possible — ou choisis un autre profil à droite.
+          </div>
+        </div>
+      )}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8 }}>
+        <label className="muted small" style={{ whiteSpace: 'nowrap' }}>Profil de publication</label>
+        <select value={state.active} onChange={(e) => changeProfile(e.target.value)} style={{ minWidth: 180 }}>
+          {state.profiles.map((p) => <option key={p} value={p}>{p}</option>)}
+        </select>
+      </div>
+    </div>
+  )
+}
+
 export function App(): JSX.Element | null {
   const [authed, setAuthed] = useState<boolean | null>(null)
   useEffect(() => {
@@ -197,6 +238,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
       </aside>
 
       <main className="main">
+        <TopBar toast={showToast} />
         {page === 'dashboard' && <Dashboard sources={sources} clips={clips} log={log} go={setPage} onRefresh={refresh} />}
         {page === 'generate' && <Generate sources={sources} progress={progress} onRefresh={refresh} toast={showToast} goHistory={() => setPage('history')} />}
         {page === 'ideas' && <Ideas toast={showToast} go={setPage} />}
@@ -816,8 +858,6 @@ function PublishModal({ clip, ttNickname, onClose, onDone, toast }: { clip: Clip
   const [disabledFlags, setDisabledFlags] = useState({ comment: false, duet: false, stitch: false })
   const [commercial, setCommercial] = useState(false)
   const [brand, setBrand] = useState({ organic: false, content: false })
-  const [accounts, setAccounts] = useState<string[]>([])
-  const [account, setAccount] = useState('')
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
@@ -827,12 +867,6 @@ function PublishModal({ clip, ttNickname, onClose, onDone, toast }: { clip: Clip
       if (m === 'uploadpost') {
         setOpts(['PUBLIC_TO_EVERYONE', 'MUTUAL_FOLLOW_FRIENDS', 'FOLLOWER_OF_CREATOR', 'SELF_ONLY'])
         setPrivacy('PUBLIC_TO_EVERYONE')
-        Promise.all([api.getFlag('uploadpost_users'), api.getFlag('uploadpost_user')]).then(([us, u]) => {
-          let list: string[] = []
-          if (us.value) { try { const a = JSON.parse(us.value); if (Array.isArray(a)) list = a.filter((x) => typeof x === 'string') } catch { /* ignore */ } }
-          if (!list.length && u.value) list = [u.value]
-          setAccounts(list)
-        }).catch(() => undefined)
       } else if (m === 'tiktok') {
         api.tiktokCheck().then((info) => {
           setOpts(info.privacyOptions)
@@ -853,8 +887,7 @@ function PublishModal({ clip, ttNickname, onClose, onDone, toast }: { clip: Clip
       disableDuet: !allow.duet,
       disableStitch: !allow.stitch,
       brandOrganic: commercial && brand.organic,
-      brandContent: commercial && brand.content,
-      uploadPostUser: account || undefined
+      brandContent: commercial && brand.content
     }
     try {
       await api.publishClip(clip.id, overrides)
@@ -881,15 +914,6 @@ function PublishModal({ clip, ttNickname, onClose, onDone, toast }: { clip: Clip
           <div className="muted small" style={{ marginBottom: 8 }}>
             Compte : {ttNickname ? `@${ttNickname}` : '—'} · mode {mode === 'tiktok' ? 'Direct' : mode === 'tiktok_draft' ? 'Brouillon' : mode === 'uploadpost' ? 'upload-post' : 'Export'}
           </div>
-          {mode === 'uploadpost' && accounts.length > 1 && (
-            <>
-              <label className="muted small" style={{ display: 'block' }}>Compte de publication</label>
-              <select className="input-full" value={account} onChange={(e) => setAccount(e.target.value)} style={{ marginTop: 4, marginBottom: 4 }}>
-                <option value="">Auto (rotation + bascule si saturé)</option>
-                {accounts.map((a) => <option key={a} value={a}>{a}</option>)}
-              </select>
-            </>
-          )}
           <label className="muted small">Légende</label>
           <textarea className="input-full" rows={4} maxLength={2200} value={caption} onChange={(e) => setCaption(e.target.value)} style={{ marginTop: 4 }} />
           {(mode === 'tiktok' || mode === 'uploadpost') && (
@@ -953,22 +977,11 @@ const CRON_LABELS: Record<string, string> = {
 function Queue({ clips, go }: { clips: ClipDTO[]; go: (p: Page) => void }): JSX.Element {
   const [status, setStatus] = useState<{ enabled: boolean; paused: boolean; cron: string; nextRunAt: number | null; intervalSec: number | null; lastRunAt: number | null } | null>(null)
   const [now, setNow] = useState(Date.now())
-  const [mode, setMode] = useState('')
-  const [accounts, setAccounts] = useState<string[]>([])
-  const [target, setTarget] = useState('')
   const load = useCallback((): void => {
     api.schedulerStatus().then(setStatus).catch(() => undefined)
   }, [])
   useEffect(() => {
     load()
-    api.getFlag('publish_mode').then((r) => setMode(r.value || 'export')).catch(() => undefined)
-    api.getFlag('queue_target').then((r) => setTarget(r.value || '')).catch(() => undefined)
-    Promise.all([api.getFlag('uploadpost_users'), api.getFlag('uploadpost_user')]).then(([us, u]) => {
-      let list: string[] = []
-      if (us.value) { try { const a = JSON.parse(us.value); if (Array.isArray(a)) list = a.filter((x) => typeof x === 'string') } catch { /* ignore */ } }
-      if (!list.length && u.value) list = [u.value]
-      setAccounts(list)
-    }).catch(() => undefined)
     const poll = window.setInterval(load, 20000)
     const tick = window.setInterval(() => setNow(Date.now()), 1000)
     return () => {
@@ -976,11 +989,6 @@ function Queue({ clips, go }: { clips: ClipDTO[]; go: (p: Page) => void }): JSX.
       window.clearInterval(tick)
     }
   }, [load])
-
-  const changeTarget = async (v: string): Promise<void> => {
-    setTarget(v)
-    await api.setFlag('queue_target', v)
-  }
 
   const togglePause = async (): Promise<void> => {
     const paused = !status?.paused
@@ -1009,16 +1017,6 @@ function Queue({ clips, go }: { clips: ClipDTO[]; go: (p: Page) => void }): JSX.
           </button>
         )}
       </div>
-
-      {mode === 'uploadpost' && accounts.length > 0 && (
-        <div className="card" style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <label className="muted small" style={{ whiteSpace: 'nowrap' }}>Publier vers</label>
-          <select value={target} onChange={(e) => changeTarget(e.target.value)} style={{ flex: 1, minWidth: 260, maxWidth: 420 }}>
-            <option value="">⚡ Optimisé — remplit un compte, bascule au suivant si saturé</option>
-            {accounts.map((a) => <option key={a} value={a}>Compte : {a}</option>)}
-          </select>
-        </div>
-      )}
 
       {!status?.enabled ? (
         <div className="card" style={{ textAlign: 'center', padding: 36 }}>

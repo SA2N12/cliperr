@@ -46,7 +46,9 @@ import {
   submitTikTokCode,
   checkTikTokCreator,
   getTikTokProfile,
-  publishClipById
+  publishClipById,
+  uploadPostProfiles,
+  activeProfile
 } from './tiktok-service'
 import type { PublishOverrides } from '../src/main/publish/index'
 
@@ -252,7 +254,15 @@ function reloadScheduler(): void {
       }
       const cooldownUntil = Number(repo.getSetting('uploadpost_cooldown_until')) || 0
       if (Date.now() < cooldownUntil) {
-        emitLog(`Planification : pause anti-spam (comptes saturés) jusqu'à ${new Date(cooldownUntil).toLocaleTimeString()}.`)
+        emitLog(`Planification : upload-post limite les requêtes → pause jusqu'à ${new Date(cooldownUntil).toLocaleTimeString()}.`)
+        return
+      }
+      // Profil actif (choisi en haut à droite). Si son quota journalier a été
+      // atteint récemment, on ne retente qu'après ~30 min (auto-détection de reprise).
+      const target = activeProfile()
+      const quotaTs = Number(repo.getSetting(`quota_reached_${target}`)) || 0
+      if (quotaTs && Date.now() - quotaTs < 30 * 60 * 1000) {
+        emitLog(`Planification : quota atteint pour « ${target} » — prochaine tentative dans ~30 min.`)
         return
       }
       const clip = repo.nextApprovedUnpublished()
@@ -260,21 +270,17 @@ function reloadScheduler(): void {
         emitLog('Planification : aucun clip validé en attente.')
         return
       }
-      // Cible de la file : « Optimisé » (vide → rotation+bascule) ou un compte forcé.
-      const target = repo.getSetting('queue_target') || ''
       try {
-        await publishClipById(clip.id, paths, emitLog, target ? { uploadPostUser: target } : undefined)
+        await publishClipById(clip.id, paths, emitLog)
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
         if (/\b429\b|too many requests/i.test(msg)) {
           // upload-post limite le nombre de requêtes → pause courte, ça se rétablit vite.
           repo.setSetting('uploadpost_cooldown_until', String(Date.now() + 8 * 60 * 1000))
           emitLog('Planification : upload-post limite les requêtes (429) → pause 8 min.')
-        } else if (/spam_risk|too many posts|rate.?limit/i.test(msg)) {
-          // Tous les comptes saturés → pause 1 h pour ne pas marteler l'anti-spam TikTok.
-          repo.setSetting('uploadpost_cooldown_until', String(Date.now() + 60 * 60 * 1000))
-          emitLog('Planification : tous les comptes saturés → pause anti-spam 1 h.')
         }
+        // spam_risk : publishClipById a déjà posé le « quota atteint » du profil →
+        // la bannière s'affiche et le scheduler retentera dans ~30 min (voir plus haut).
       }
     })()
   })
@@ -390,6 +396,18 @@ app.post('/api/ideas', wrap(async (req, res) => {
   const saved = ideas.map((idea) => repo.createIdea(niche, idea))
   res.json({ ideas: saved })
 }))
+// État de publication : profils dispo, profil actif, quota journalier atteint
+app.get('/api/publish/state', wrap((_req, res) => {
+  const mode = repo.getSetting('publish_mode') || 'export'
+  const profiles = uploadPostProfiles()
+  const active = activeProfile()
+  const quotaTs = Number(repo.getSetting(`quota_reached_${active}`)) || 0
+  // On considère le quota « atteint » tant que le drapeau a moins de 24 h
+  // (fenêtre glissante TikTok) — sinon on l'ignore (garde-fou anti-bannière figée).
+  const quotaReached = quotaTs > 0 && Date.now() - quotaTs < 24 * 60 * 60 * 1000
+  res.json({ mode, profiles, active, quotaReached, quotaProfile: quotaReached ? active : null })
+}))
+
 app.get('/api/ideas/saved', wrap((_req, res) => res.json({ ideas: repo.listIdeas() })))
 app.delete('/api/ideas/:id', wrap((req, res) => {
   repo.deleteIdea(Number(req.params.id))
