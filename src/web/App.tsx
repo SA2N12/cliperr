@@ -45,7 +45,7 @@ function Logo({ size = 26 }: { size?: number }): JSX.Element {
   return (
     <svg width={size} height={size} viewBox="0 0 100 100" style={{ display: 'block', flexShrink: 0 }}>
       <rect x="6" y="6" width="88" height="88" rx="22" fill="#0b0b0d" />
-      <circle cx="50" cy="50" r="20" fill="none" stroke="#fff" strokeWidth="7" strokeLinecap="round" strokeDasharray="80.28 9.07 6.28 30.02" transform="rotate(60 50 50)" />
+      <circle cx="50" cy="50" r="20" fill="none" stroke="#fff" strokeWidth="7" strokeLinecap="round" strokeDasharray="82.02 7.68 8.38 7.68 4.54 15.36" transform="rotate(60 50 50)" />
     </svg>
   )
 }
