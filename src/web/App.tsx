@@ -141,16 +141,22 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
     window.setTimeout(() => setToast(''), 3500)
   }
 
-  const nav: { id: Page; label: string; icon: string }[] = [
-    { id: 'dashboard', label: 'Tableau de bord', icon: 'dashboard' },
-    { id: 'generate', label: 'Générer', icon: 'spark' },
-    { id: 'ideas', label: 'Idées virales', icon: 'bulb' },
-    { id: 'myideas', label: 'Mes idées', icon: 'bookmark' },
-    { id: 'history', label: 'Historique', icon: 'list' },
-    { id: 'clips', label: 'Clips', icon: 'clips' },
-    { id: 'queue', label: 'File d’attente', icon: 'clock' },
-    { id: 'published', label: 'Publiés', icon: 'send' },
-    { id: 'settings', label: 'Réglages', icon: 'settings' }
+  const navGroups: { id: Page; label: string; icon: string }[][] = [
+    [
+      { id: 'dashboard', label: 'Tableau de bord', icon: 'dashboard' },
+      { id: 'ideas', label: 'Idées virales', icon: 'bulb' },
+      { id: 'myideas', label: 'Mes idées', icon: 'bookmark' }
+    ],
+    [
+      { id: 'generate', label: 'Générer', icon: 'spark' },
+      { id: 'queue', label: 'File d’attente', icon: 'clock' },
+      { id: 'clips', label: 'Clips', icon: 'clips' },
+      { id: 'published', label: 'Publiés', icon: 'send' }
+    ],
+    [
+      { id: 'history', label: 'Historique', icon: 'list' },
+      { id: 'settings', label: 'Réglages', icon: 'settings' }
+    ]
   ]
 
   return (
@@ -163,10 +169,14 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
         <div className="side-search">
           <Icon name="search" size={15} /> Rechercher <span className="kbd">Ctrl K</span>
         </div>
-        {nav.map((n) => (
-          <button key={n.id} className={`nav-item ${page === n.id ? 'active' : ''}`} onClick={() => setPage(n.id)}>
-            <Icon name={n.icon} /> {n.label}
-          </button>
+        {navGroups.map((group, gi) => (
+          <div key={gi} style={{ marginBottom: gi < navGroups.length - 1 ? 14 : 0 }}>
+            {group.map((n) => (
+              <button key={n.id} className={`nav-item ${page === n.id ? 'active' : ''}`} onClick={() => setPage(n.id)}>
+                <Icon name={n.icon} /> {n.label}
+              </button>
+            ))}
+          </div>
         ))}
         <div className="spacer" />
         <div className="user-card">
