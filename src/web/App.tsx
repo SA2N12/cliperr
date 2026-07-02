@@ -10,7 +10,6 @@ import {
   type ViralIdea,
   type SavedIdea
 } from './api'
-import { LOGO_SRC } from './logo'
 
 type Page = 'dashboard' | 'generate' | 'ideas' | 'myideas' | 'history' | 'clips' | 'queue' | 'published' | 'settings'
 
@@ -43,7 +42,16 @@ function Icon({ name, size = 18 }: { name: string; size?: number }): JSX.Element
 }
 
 function Logo({ size = 26 }: { size?: number }): JSX.Element {
-  return <img src={LOGO_SRC} width={size} height={size} alt="Cliperr" style={{ display: 'block', flexShrink: 0 }} />
+  return (
+    <svg width={size} height={size} viewBox="210 40 260 260" xmlns="http://www.w3.org/2000/svg" aria-label="Cliperr" style={{ display: 'block', flexShrink: 0 }}>
+      <rect x="210" y="40" width="260" height="260" rx="40" fill="#0a0a0d" />
+      <g transform="translate(340,170) rotate(-22)" fill="none" stroke="#fff" strokeWidth="16" strokeLinecap="round">
+        <path d="M 10.4,-59.1 A 60,60 0 1 0 10.4,59.1" />
+        <path d="M 35.3,-48.5 A 60,60 0 0 1 60,0" />
+        <path d="M 53.9,26.3 A 60,60 0 0 1 35.3,48.5" />
+      </g>
+    </svg>
+  )
 }
 
 type PubProfile = { username: string; handle: string | null; avatarUrl: string | null }
