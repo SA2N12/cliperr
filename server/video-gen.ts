@@ -307,7 +307,7 @@ export async function generateVideoFromIdea(
         '-i', concatPath,
         '-stream_loop', '-1', '-i', opts.musicTrack,
         '-filter_complex',
-        `[1:a]volume=0.38,afade=t=out:st=${fadeSt.toFixed(2)}:d=2[m];[0:a][m]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.97[a]`,
+        `[1:a]volume=0.30,afade=t=out:st=${fadeSt.toFixed(2)}:d=2[m];[0:a][m]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.97[a]`,
         '-map', '0:v', '-map', '[a]',
         '-c:v', 'copy', '-c:a', 'aac', '-b:a', '128k',
         '-t', String(total),
