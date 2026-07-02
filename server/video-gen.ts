@@ -99,7 +99,7 @@ async function tts(openaiKey: string, voice: string, text: string, dest: string)
   await writeFile(dest, Buffer.from(await res.arrayBuffer()))
 }
 
-/** Image IA verticale (DALL·E 3, 1024×1792) → fichier png. */
+/** Image IA verticale (DALL·E 3, 1024×1792) → fichier png. Gère réponse b64 OU url. */
 async function genImage(openaiKey: string, prompt: string, dest: string): Promise<void> {
   const res = await fetch(`${OPENAI}/images/generations`, {
     method: 'POST',
@@ -108,15 +108,23 @@ async function genImage(openaiKey: string, prompt: string, dest: string): Promis
       model: 'dall-e-3',
       prompt: `${prompt}. Vertical 9:16 cinematic composition, high detail, no text, no watermark.`,
       size: '1024x1792',
-      response_format: 'b64_json',
       n: 1
     })
   })
   if (!res.ok) throw new Error(`OpenAI image ${res.status} : ${(await res.text()).slice(0, 200)}`)
-  const j = (await res.json()) as { data?: { b64_json?: string }[] }
-  const b64 = j.data?.[0]?.b64_json
-  if (!b64) throw new Error('OpenAI image : réponse vide')
-  await writeFile(dest, Buffer.from(b64, 'base64'))
+  const j = (await res.json()) as { data?: { b64_json?: string; url?: string }[] }
+  const item = j.data?.[0]
+  if (item?.b64_json) {
+    await writeFile(dest, Buffer.from(item.b64_json, 'base64'))
+    return
+  }
+  if (item?.url) {
+    const r = await fetch(item.url)
+    if (!r.ok) throw new Error(`Téléchargement image ${r.status}`)
+    await writeFile(dest, Buffer.from(await r.arrayBuffer()))
+    return
+  }
+  throw new Error('OpenAI image : réponse vide')
 }
 
 /** Durée d'un média en secondes (ffprobe). */
