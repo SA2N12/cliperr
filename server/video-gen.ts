@@ -105,9 +105,10 @@ async function genImage(openaiKey: string, prompt: string, dest: string): Promis
     method: 'POST',
     headers: { Authorization: `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: 'dall-e-3',
+      model: 'gpt-image-1',
       prompt: `${prompt}. Vertical 9:16 cinematic composition, high detail, no text, no watermark.`,
-      size: '1024x1792',
+      size: '1024x1536',
+      quality: 'medium',
       n: 1
     })
   })
