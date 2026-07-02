@@ -36,6 +36,7 @@ function toClipDTO(r: ClipRow): ClipDTO {
     reviewStatus: r.reviewStatus as ClipDTO['reviewStatus'],
     publishStatus: r.publishStatus as ClipDTO['publishStatus'],
     publishedAccount: r.publishedAccount,
+    profile: r.profile,
     createdAt: r.createdAt
   }
 }
@@ -78,6 +79,7 @@ export function createClip(input: {
   description?: string | null
   hashtags?: string | null
   filePath?: string | null
+  profile?: string | null
 }): ClipDTO {
   const row = db()
     .insert(clips)
@@ -91,6 +93,7 @@ export function createClip(input: {
       description: input.description ?? null,
       hashtags: input.hashtags ?? null,
       filePath: input.filePath ?? null,
+      profile: input.profile ?? null,
       createdAt: Date.now()
     })
     .returning()

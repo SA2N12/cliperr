@@ -822,8 +822,13 @@ function Clips({ clips, sources, onRefresh, toast, ttProfile }: { clips: ClipDTO
   const [open, setOpen] = useState<number | null>(null)
   const [tab, setTab] = useState<'creator' | 'ai'>('creator')
   const [autoApprove, setAutoApprove] = useState(false)
+  const [active, setActive] = useState('')
   useEffect(() => {
     api.getFlag('auto_approve').then((r) => setAutoApprove(r.value === '1')).catch(() => undefined)
+    const loadActive = (): void => { api.publishState().then((r) => setActive(r.active)).catch(() => undefined) }
+    loadActive()
+    const t = window.setInterval(loadActive, 12000)
+    return () => window.clearInterval(t)
   }, [])
   async function toggleAuto(v: boolean): Promise<void> {
     setAutoApprove(v)
@@ -838,8 +843,10 @@ function Clips({ clips, sources, onRefresh, toast, ttProfile }: { clips: ClipDTO
   // Sépare les clips IA (vidéos générées depuis une idée) des clips « créateur ».
   const aiIds = new Set(sources.filter((s) => (s.url ?? '').startsWith('idea:')).map((s) => s.id))
   const isAI = (c: ClipDTO): boolean => aiIds.has(c.sourceId) || c.reason === 'Vidéo générée depuis une idée'
-  const creatorClips = clips.filter((c) => !isAI(c))
-  const aiClips = clips.filter(isAI).slice().sort((a, b) => b.createdAt - a.createdAt)
+  // Filtre par profil actif (les clips sans profil = anciens, visibles partout).
+  const forProfile = (c: ClipDTO): boolean => !active || c.profile === active || c.profile == null
+  const creatorClips = clips.filter((c) => !isAI(c) && forProfile(c))
+  const aiClips = clips.filter((c) => isAI(c) && forProfile(c)).sort((a, b) => b.createdAt - a.createdAt)
 
   const groups = new Map<number, ClipDTO[]>()
   for (const c of creatorClips) {

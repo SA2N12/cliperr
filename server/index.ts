@@ -181,7 +181,8 @@ async function runForSource(sourceId: number, clipCount: number): Promise<void> 
             reason: c.reason,
             title: c.title,
             description: c.description,
-            hashtags: c.hashtags
+            hashtags: c.hashtags,
+            profile: activeProfile()
           })
           if (autoApprove) repo.setClipReview(clip.id, 'approved')
         },
@@ -320,7 +321,8 @@ async function runVideoGen(ideaId: number): Promise<void> {
       title: idea.title,
       description: idea.hook,
       hashtags: idea.hashtags.join(' '),
-      reason: 'Vidéo générée depuis une idée'
+      reason: 'Vidéo générée depuis une idée',
+      profile: activeProfile()
     })
     if (repo.getSetting('auto_approve') === '1') repo.setClipReview(clip.id, 'approved')
     emitIdeaVideo({ ideaId, status: 'done', message: 'Vidéo prête ✅' })

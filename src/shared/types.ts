@@ -40,6 +40,8 @@ export interface ClipDTO {
   publishStatus: 'unpublished' | 'scheduled' | 'published' | 'failed'
   /** Compte/profil sur lequel le clip a été publié (upload-post, TikTok…). */
   publishedAccount: string | null
+  /** Profil actif au moment de la création du clip (pour filtrer par profil). */
+  profile: string | null
   createdAt: number
 }
 
