@@ -820,6 +820,7 @@ function ClipCard({ c, onReview, onPublish }: { c: ClipDTO; onReview: (id: numbe
 function Clips({ clips, sources, onRefresh, toast, ttProfile }: { clips: ClipDTO[]; sources: SourceDTO[]; onRefresh: () => Promise<void>; toast: (m: string) => void; ttProfile: { nickname: string | null } | null }): JSX.Element {
   const [modal, setModal] = useState<ClipDTO | null>(null)
   const [open, setOpen] = useState<number | null>(null)
+  const [tab, setTab] = useState<'creator' | 'ai'>('creator')
   const [autoApprove, setAutoApprove] = useState(false)
   useEffect(() => {
     api.getFlag('auto_approve').then((r) => setAutoApprove(r.value === '1')).catch(() => undefined)
@@ -833,8 +834,15 @@ function Clips({ clips, sources, onRefresh, toast, ttProfile }: { clips: ClipDTO
     await api.reviewClip(id, status)
     await onRefresh()
   }
+
+  // Sépare les clips IA (vidéos générées depuis une idée) des clips « créateur ».
+  const aiIds = new Set(sources.filter((s) => (s.url ?? '').startsWith('idea:')).map((s) => s.id))
+  const isAI = (c: ClipDTO): boolean => aiIds.has(c.sourceId) || c.reason === 'Vidéo générée depuis une idée'
+  const creatorClips = clips.filter((c) => !isAI(c))
+  const aiClips = clips.filter(isAI).slice().sort((a, b) => b.createdAt - a.createdAt)
+
   const groups = new Map<number, ClipDTO[]>()
-  for (const c of clips) {
+  for (const c of creatorClips) {
     const arr = groups.get(c.sourceId) ?? []
     arr.push(c)
     groups.set(c.sourceId, arr)
@@ -845,8 +853,10 @@ function Clips({ clips, sources, onRefresh, toast, ttProfile }: { clips: ClipDTO
     return s?.title || s?.url?.split(/[\\/]/).pop() || `Source #${id}`
   }
   const gridStyle = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 16 } as const
+  const modalNode = modal && <PublishModal clip={modal} ttNickname={ttProfile?.nickname ?? null} onClose={() => setModal(null)} onDone={onRefresh} toast={toast} />
 
-  if (open !== null) {
+  // Vue détaillée d'un dossier (onglet créateur)
+  if (tab === 'creator' && open !== null) {
     const list = (groups.get(open) ?? []).slice().sort((a, b) => a.startSec - b.startSec)
     return (
       <>
@@ -862,18 +872,19 @@ function Clips({ clips, sources, onRefresh, toast, ttProfile }: { clips: ClipDTO
         <div style={gridStyle}>
           {list.map((c) => <ClipCard key={c.id} c={c} onReview={review} onPublish={(x) => setModal(x)} />)}
         </div>
-        {modal && <PublishModal clip={modal} ttNickname={ttProfile?.nickname ?? null} onClose={() => setModal(null)} onDone={onRefresh} toast={toast} />}
+        {modalNode}
       </>
     )
   }
 
+  const changeTab = (t: 'creator' | 'ai'): void => { setTab(t); setOpen(null) }
   const folders = [...groups.entries()].sort((a, b) => b[0] - a[0])
   return (
     <>
       <div className="page-head">
         <div>
           <h1>Clips</h1>
-          <p>Tes clips rangés par vidéo source. Clique un dossier pour voir ses clips.</p>
+          <p>Tes clips à valider et publier, séparés par type.</p>
         </div>
         <div className="card" style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
           <Switch checked={autoApprove} onChange={toggleAuto} label="Auto-approuver" />
@@ -882,27 +893,42 @@ function Clips({ clips, sources, onRefresh, toast, ttProfile }: { clips: ClipDTO
           </span>
         </div>
       </div>
-      {folders.length === 0 ? (
-        <div className="card muted">Aucun clip généré pour l’instant.</div>
-      ) : (
-        <div className="folder-grid">
-          {folders.map(([sid, list]) => {
-            const pub = list.filter((c) => c.publishStatus === 'published').length
-            return (
-              <div key={sid} className="card folder" onClick={() => setOpen(sid)}>
-                <div className="fic"><Icon name="folder" /></div>
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{srcTitle(sid)}</div>
-                  <div className="muted small">
-                    {list.length} clip{list.length > 1 ? 's' : ''}
-                    {pub > 0 ? ` · ${pub} publié${pub > 1 ? 's' : ''}` : ''}
+
+      <div className="tabs" style={{ marginBottom: 16 }}>
+        <button className={`tab ${tab === 'creator' ? 'on' : ''}`} onClick={() => changeTab('creator')}><Icon name="clips" size={16} /> Clips créateur de contenu</button>
+        <button className={`tab ${tab === 'ai' ? 'on' : ''}`} onClick={() => changeTab('ai')}><Icon name="bulb" size={16} /> Clips IA</button>
+      </div>
+
+      {tab === 'creator' ? (
+        folders.length === 0 ? (
+          <div className="card muted">Aucun clip découpé pour l’instant. Va sur « Générer ».</div>
+        ) : (
+          <div className="folder-grid">
+            {folders.map(([sid, list]) => {
+              const pub = list.filter((c) => c.publishStatus === 'published').length
+              return (
+                <div key={sid} className="card folder" onClick={() => setOpen(sid)}>
+                  <div className="fic"><Icon name="folder" /></div>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{srcTitle(sid)}</div>
+                    <div className="muted small">
+                      {list.length} clip{list.length > 1 ? 's' : ''}
+                      {pub > 0 ? ` · ${pub} publié${pub > 1 ? 's' : ''}` : ''}
+                    </div>
                   </div>
                 </div>
-              </div>
-            )
-          })}
+              )
+            })}
+          </div>
+        )
+      ) : aiClips.length === 0 ? (
+        <div className="card muted">Aucune vidéo IA. Va sur « Mes idées » et clique « 🎬 Vidéo » sur une idée.</div>
+      ) : (
+        <div style={gridStyle}>
+          {aiClips.map((c) => <ClipCard key={c.id} c={c} onReview={review} onPublish={(x) => setModal(x)} />)}
         </div>
       )}
+      {modalNode}
     </>
   )
 }
