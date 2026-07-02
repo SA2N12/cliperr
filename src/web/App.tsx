@@ -69,7 +69,7 @@ function Login({ onOk }: { onOk: () => void }): JSX.Element {
     <div className="login-wrap">
       <div className="card login-card">
         <div className="brand" style={{ justifyContent: 'center' }}>
-          <span className="logo">T</span> TikTokClip
+          <span className="logo">C</span> Cliperr
         </div>
         <p className="muted small" style={{ marginTop: 0 }}>Connecte-toi pour accéder au dashboard.</p>
         <input
