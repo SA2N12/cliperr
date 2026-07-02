@@ -170,7 +170,8 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
           <Icon name="search" size={15} /> Rechercher <span className="kbd">Ctrl K</span>
         </div>
         {navGroups.map((group, gi) => (
-          <div key={gi} style={{ marginBottom: gi < navGroups.length - 1 ? 14 : 0 }}>
+          <div key={gi}>
+            {gi > 0 && <div style={{ height: 1, background: 'var(--border)', margin: '8px 10px' }} />}
             {group.map((n) => (
               <button key={n.id} className={`nav-item ${page === n.id ? 'active' : ''}`} onClick={() => setPage(n.id)}>
                 <Icon name={n.icon} /> {n.label}
