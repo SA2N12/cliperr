@@ -312,7 +312,10 @@ async function runVideoGen(ideaId: number): Promise<void> {
     if (tracks.length) {
       emitIdeaVideo({ ideaId, status: 'running', message: 'Choix de la musique (IA)…' })
       const chosen = await chooseMusicTrack(anthropicKey, model, idea, tracks)
-      if (chosen) musicTrack = join(musicDir, chosen)
+      if (chosen) {
+        musicTrack = join(musicDir, chosen)
+        emitIdeaVideo({ ideaId, status: 'running', message: `Musique : ${chosen.replace(/^\d+-/, '').replace(/\.[^.]+$/, '')}` })
+      }
     }
     const { filePath, durationSec, usage } = await generateVideoFromIdea(ctx, {
       anthropicKey,
