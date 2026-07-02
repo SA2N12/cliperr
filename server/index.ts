@@ -9,7 +9,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { appPaths, config, assertConfig, type AppPaths } from './config'
 import { handleLogin, handleLogout, isAuthed, requireAuth } from './auth'
 import { sseHandler, emitProgress, emitLog, emitIdeaVideo } from './sse'
-import { generateVideoFromIdea } from './video-gen'
+import { generateVideoFromIdea, chooseMusicTrack } from './video-gen'
 import {
   getApiKey,
   setApiKey,
@@ -308,7 +308,12 @@ async function runVideoGen(ideaId: number): Promise<void> {
     emitIdeaVideo({ ideaId, status: 'running', message: 'Démarrage…' })
     const ctx = await getContext()
     const tracks = musicTracks()
-    const musicTrack = tracks.length ? join(musicDir, tracks[Math.floor(Math.random() * tracks.length)]) : undefined
+    let musicTrack: string | undefined
+    if (tracks.length) {
+      emitIdeaVideo({ ideaId, status: 'running', message: 'Choix de la musique (IA)…' })
+      const chosen = await chooseMusicTrack(anthropicKey, model, idea, tracks)
+      if (chosen) musicTrack = join(musicDir, chosen)
+    }
     const { filePath, durationSec, usage } = await generateVideoFromIdea(ctx, {
       anthropicKey,
       anthropicModel: model,

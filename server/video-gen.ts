@@ -90,6 +90,53 @@ Pour chaque scène : une phrase de VOIX OFF en français (courte, orale, accroch
   return { scenes: parsed.data.scenes.slice(0, 8), usage }
 }
 
+/** Choisit, via Claude, la musique la plus adaptée à la vidéo parmi les pistes dispo (d'après leurs noms). */
+export async function chooseMusicTrack(
+  key: string,
+  model: string,
+  idea: ViralIdea,
+  tracks: string[]
+): Promise<string | null> {
+  if (!tracks.length) return null
+  if (tracks.length === 1) return tracks[0]
+  const fallback = tracks[Math.floor(Math.random() * tracks.length)]
+  try {
+    const client = new Anthropic({ apiKey: key })
+    const tool = {
+      name: 'pick_music',
+      description: 'Choisit la musique de fond la plus adaptée à la vidéo.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          track: { type: 'string', enum: tracks, description: 'Nom EXACT du fichier de musique le plus adapté' }
+        },
+        required: ['track']
+      }
+    } satisfies Anthropic.Tool
+    const prompt = `Choisis la musique de fond la plus adaptée à cette vidéo TikTok, en jugeant d'après les NOMS de fichiers (ils indiquent souvent le style/l'ambiance : epic, chill, hype, sad, funny…).
+Titre : ${idea.title}
+Hook : ${idea.hook}
+Ambiance : ${idea.script.join(' ')}
+Musiques disponibles : ${tracks.join(', ')}
+Réponds via l'outil pick_music en choisissant un nom EXACT de la liste.`
+    const msg = await client.messages.create({
+      model,
+      max_tokens: 200,
+      tools: [tool],
+      tool_choice: { type: 'tool', name: 'pick_music' },
+      messages: [{ role: 'user', content: prompt }]
+    })
+    const block = msg.content.find((b) => b.type === 'tool_use')
+    if (block && block.type === 'tool_use') {
+      const t = (block.input as { track?: string }).track
+      if (typeof t === 'string' && tracks.includes(t)) return t
+    }
+  } catch {
+    /* en cas d'échec IA, on retombe sur un choix aléatoire */
+  }
+  return fallback
+}
+
 /** Voix off OpenAI (tts-1) → fichier mp3. */
 async function tts(openaiKey: string, voice: string, text: string, dest: string): Promise<void> {
   const res = await fetch(`${OPENAI}/audio/speech`, {
