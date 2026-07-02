@@ -118,11 +118,22 @@ export async function downloadViaApi(
   const vitems = d.videos?.items ?? []
   const aitems = d.audios?.items ?? []
 
+  // Certaines vidéos (contenus officiels/protégés, DRM, restrictions YouTube)
+  // renvoient des métadonnées mais AUCUN flux téléchargeable : on l'explique.
+  if (!vitems.length) {
+    throw new Error(
+      'Cette vidéo n’est pas téléchargeable via l’API (contenu protégé ou restreint par YouTube). ' +
+        'Télécharge-la toi-même, puis ajoute-la via l’onglet « Importer un fichier ».'
+    )
+  }
+
   // Meilleure vidéo MP4 ≤1080 (H.264, compatible recadrage/sous-titres ffmpeg).
   const mp4s = vitems
     .filter((v) => v.extension === 'mp4' && v.height <= 1080 && !!v.url)
     .sort((a, b) => b.height - a.height)
-  if (!mp4s.length) throw new Error('Aucun format MP4 disponible via l’API')
+  if (!mp4s.length) {
+    throw new Error('Aucun format MP4 exploitable pour cette vidéo — importe le fichier manuellement.')
+  }
   const video = mp4s[0]
   // Si la vidéo n'a pas d'audio intégré (cas des HD), on prend une piste m4a (AAC).
   const audio = video.hasAudio ? null : aitems.find((a) => a.extension === 'm4a') ?? aitems[0] ?? null
