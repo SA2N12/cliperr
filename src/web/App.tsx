@@ -41,10 +41,56 @@ function Icon({ name, size = 18 }: { name: string; size?: number }): JSX.Element
   )
 }
 
+type PubProfile = { username: string; handle: string | null; avatarUrl: string | null }
+
+function Avatar({ url, name, size = 22 }: { url: string | null; name?: string; size?: number }): JSX.Element {
+  const [err, setErr] = useState(false)
+  return url && !err ? (
+    <img src={url} alt="" width={size} height={size} referrerPolicy="no-referrer" onError={() => setErr(true)} style={{ borderRadius: '50%', objectFit: 'cover', flexShrink: 0, background: '#000' }} />
+  ) : (
+    <span style={{ width: size, height: size, borderRadius: '50%', background: 'var(--accent)', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.5, fontWeight: 700, flexShrink: 0 }}>
+      {(name?.[0] ?? 'C').toUpperCase()}
+    </span>
+  )
+}
+
+function ProfilePicker({ profiles, active, onChange }: { profiles: PubProfile[]; active: string; onChange: (u: string) => void }): JSX.Element {
+  const [open, setOpen] = useState(false)
+  const cur = profiles.find((p) => p.username === active) ?? profiles[0]
+  const label = (p: PubProfile): string => (p.handle ? `@${p.handle}` : p.username)
+  return (
+    <div style={{ position: 'relative' }}>
+      <button className="btn" onClick={() => setOpen((o) => !o)} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <Avatar url={cur?.avatarUrl ?? null} name={cur?.username} />
+        {cur ? label(cur) : '—'}
+        <span style={{ opacity: 0.5, fontSize: 11 }}>▾</span>
+      </button>
+      {open && (
+        <>
+          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 30 }} />
+          <div className="card" style={{ position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 31, minWidth: 220, padding: 6, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {profiles.map((p) => (
+              <button
+                key={p.username}
+                className="nav-item"
+                onClick={() => { onChange(p.username); setOpen(false) }}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, background: p.username === active ? '#ede9fe' : undefined }}
+              >
+                <Avatar url={p.avatarUrl} name={p.username} />
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label(p)}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 // Barre globale (haut de chaque page) : bannière « quota atteint » + sélecteur
-// du profil TikTok de publication (le profil actif sur lequel tout se poste).
+// du profil TikTok de publication (avatar + @handle) sur lequel tout se poste.
 function TopBar({ toast }: { toast: (m: string) => void }): JSX.Element | null {
-  const [state, setState] = useState<{ mode: string; profiles: string[]; active: string; quotaReached: boolean; quotaProfile: string | null } | null>(null)
+  const [state, setState] = useState<{ mode: string; profiles: PubProfile[]; active: string; quotaReached: boolean; quotaProfile: string | null } | null>(null)
   const load = useCallback((): void => {
     api.publishState().then(setState).catch(() => undefined)
   }, [])
@@ -57,26 +103,25 @@ function TopBar({ toast }: { toast: (m: string) => void }): JSX.Element | null {
   const changeProfile = async (v: string): Promise<void> => {
     setState((s) => (s ? { ...s, active: v } : s))
     await api.setFlag('active_profile', v)
-    toast(`Profil de publication : ${v}`)
+    toast('Profil de publication changé')
     load()
   }
 
   if (!state || state.mode !== 'uploadpost' || state.profiles.length === 0) return null
+  const quotaProf = state.profiles.find((p) => p.username === state.quotaProfile)
   return (
     <div style={{ marginBottom: 16 }}>
       {state.quotaReached && (
         <div className="card" style={{ marginBottom: 12, background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontSize: 18 }}>⚠️</span>
           <div className="small">
-            <b>Quota journalier atteint pour « {state.quotaProfile} ».</b> TikTok limite le nombre de publications par jour et par compte. La publication reprendra automatiquement dès que possible — ou choisis un autre profil à droite.
+            <b>Quota journalier atteint pour {quotaProf?.handle ? `@${quotaProf.handle}` : state.quotaProfile}.</b> TikTok limite le nombre de publications par jour et par compte. La publication reprendra automatiquement dès que possible — ou choisis un autre profil à droite.
           </div>
         </div>
       )}
       <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8 }}>
-        <label className="muted small" style={{ whiteSpace: 'nowrap' }}>Profil de publication</label>
-        <select value={state.active} onChange={(e) => changeProfile(e.target.value)} style={{ minWidth: 180 }}>
-          {state.profiles.map((p) => <option key={p} value={p}>{p}</option>)}
-        </select>
+        <span className="muted small" style={{ whiteSpace: 'nowrap' }}>Publier sur</span>
+        <ProfilePicker profiles={state.profiles} active={state.active} onChange={changeProfile} />
       </div>
     </div>
   )

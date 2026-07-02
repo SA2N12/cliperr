@@ -67,9 +67,13 @@ export const api = {
 
   // Publication : profil actif + état du quota
   publishState: () =>
-    req<{ mode: string; profiles: string[]; active: string; quotaReached: boolean; quotaProfile: string | null }>(
-      '/api/publish/state'
-    ),
+    req<{
+      mode: string
+      profiles: { username: string; handle: string | null; avatarUrl: string | null }[]
+      active: string
+      quotaReached: boolean
+      quotaProfile: string | null
+    }>('/api/publish/state'),
 
   // Idées virales + tendances
   generateIdeas: (niche: string, count: number, trends: string[]) =>

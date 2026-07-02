@@ -32,7 +32,7 @@ import { transcribeSource, transcribeWithGroq, type Word } from '../src/main/pip
 import { detectFaceCenterX } from '../src/main/pipeline/face'
 import { isLocalFile } from '../src/main/pipeline/ingest'
 import { downloadViaApi, isYouTubeUrl, type SourceMetaApi } from './ytdl-api'
-import { listUploadPostProfiles } from '../src/main/publish/uploadpost'
+import { listUploadPostProfiles, type UploadPostProfile } from '../src/main/publish/uploadpost'
 import { generateViralIdeas, fetchTikTokTrends } from './ideas'
 import type { PipelineContext } from '../src/main/pipeline/context'
 import type { Usage } from '../src/main/pipeline/highlights'
@@ -396,11 +396,32 @@ app.post('/api/ideas', wrap(async (req, res) => {
   const saved = ideas.map((idea) => repo.createIdea(niche, idea))
   res.json({ ideas: saved })
 }))
-// État de publication : profils dispo, profil actif, quota journalier atteint
-app.get('/api/publish/state', wrap((_req, res) => {
+// Cache des profils upload-post (avatar + @handle) pour ne pas spammer l'API (429).
+let profilesCache: { at: number; data: UploadPostProfile[] } | null = null
+async function cachedUploadPostProfiles(): Promise<UploadPostProfile[]> {
+  const key = getEncrypted('uploadpost_key')
+  if (!key) return []
+  if (profilesCache && Date.now() - profilesCache.at < 5 * 60 * 1000) return profilesCache.data
+  try {
+    const data = await listUploadPostProfiles(key)
+    profilesCache = { at: Date.now(), data }
+    return data
+  } catch {
+    return profilesCache?.data ?? [] // en cas d'erreur (429), on réutilise le dernier cache
+  }
+}
+
+// État de publication : profils (avatar + @handle), profil actif, quota atteint
+app.get('/api/publish/state', wrap(async (_req, res) => {
   const mode = repo.getSetting('publish_mode') || 'export'
-  const profiles = uploadPostProfiles()
+  const usernames = uploadPostProfiles()
   const active = activeProfile()
+  const all = await cachedUploadPostProfiles()
+  const byName = new Map(all.map((p) => [p.username, p]))
+  const profiles = usernames.map((u) => {
+    const p = byName.get(u)
+    return { username: u, handle: p?.tiktokHandle ?? null, avatarUrl: p?.avatarUrl ?? null }
+  })
   const quotaTs = Number(repo.getSetting(`quota_reached_${active}`)) || 0
   // On considère le quota « atteint » tant que le drapeau a moins de 24 h
   // (fenêtre glissante TikTok) — sinon on l'ignore (garde-fou anti-bannière figée).

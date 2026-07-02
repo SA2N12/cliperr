@@ -116,6 +116,7 @@ async function pollUploadStatus(apiKey: string, requestId: string): Promise<{ ur
 export interface UploadPostProfile {
   username: string
   tiktokHandle: string | null
+  avatarUrl: string | null
   tiktokConnected: boolean
   reauthRequired: boolean
   blocked: boolean
@@ -127,7 +128,9 @@ interface RawProfilesResult {
   profiles?: Array<{
     username?: string
     blocked?: boolean
-    social_accounts?: { tiktok?: { handle?: string; display_name?: string; reauth_required?: boolean } }
+    social_accounts?: {
+      tiktok?: { handle?: string; display_name?: string; reauth_required?: boolean; social_images?: string }
+    }
   }>
 }
 
@@ -153,6 +156,7 @@ export async function listUploadPostProfiles(apiKey: string): Promise<UploadPost
       return {
         username: String(p.username ?? ''),
         tiktokHandle: tk?.handle ?? tk?.display_name ?? null,
+        avatarUrl: tk?.social_images ?? null,
         tiktokConnected: !!tk,
         reauthRequired: !!tk?.reauth_required,
         blocked: !!p.blocked
