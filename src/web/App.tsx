@@ -41,6 +41,15 @@ function Icon({ name, size = 18 }: { name: string; size?: number }): JSX.Element
   )
 }
 
+function Logo({ size = 26 }: { size?: number }): JSX.Element {
+  return (
+    <svg width={size} height={size} viewBox="0 0 100 100" style={{ display: 'block', flexShrink: 0 }}>
+      <rect x="6" y="6" width="88" height="88" rx="22" fill="#0b0b0d" />
+      <circle cx="50" cy="50" r="20" fill="none" stroke="#fff" strokeWidth="7" strokeLinecap="round" strokeDasharray="80.28 9.07 6.28 30.02" transform="rotate(60 50 50)" />
+    </svg>
+  )
+}
+
 type PubProfile = { username: string; handle: string | null; avatarUrl: string | null }
 
 function Avatar({ url, name, size = 22 }: { url: string | null; name?: string; size?: number }): JSX.Element {
@@ -157,7 +166,7 @@ function Login({ onOk }: { onOk: () => void }): JSX.Element {
     <div className="login-wrap">
       <div className="card login-card">
         <div className="brand" style={{ justifyContent: 'center' }}>
-          <span className="logo">C</span> Cliperr
+<Logo size={28} /> Cliperr
         </div>
         <p className="muted small" style={{ marginTop: 0 }}>Connecte-toi pour accéder au dashboard.</p>
         <input
@@ -249,7 +258,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
     <div className="app">
       <aside className="sidebar">
         <div className="row" style={{ padding: '6px 8px 8px' }}>
-          <div className="brand" style={{ padding: 0 }}><span className="logo">C</span> Cliperr</div>
+          <div className="brand" style={{ padding: 0, display: 'flex', alignItems: 'center', gap: 8 }}><Logo size={24} /> Cliperr</div>
           <span className="pill-badge"><span className="dot" /> live</span>
         </div>
         <div className="side-search">
