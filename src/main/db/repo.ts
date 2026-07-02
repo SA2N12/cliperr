@@ -1,10 +1,11 @@
 import { eq, desc } from 'drizzle-orm'
 import { db } from './client'
-import { sources, clips, settings } from './schema'
-import type { SourceDTO, ClipDTO, JobStatus } from '../../shared/types'
+import { sources, clips, settings, ideas } from './schema'
+import type { SourceDTO, ClipDTO, JobStatus, ViralIdea, SavedIdea } from '../../shared/types'
 
 type SourceRow = typeof sources.$inferSelect
 type ClipRow = typeof clips.$inferSelect
+type IdeaRow = typeof ideas.$inferSelect
 
 function toSourceDTO(r: SourceRow): SourceDTO {
   return {
@@ -144,4 +145,27 @@ export function setSetting(key: string, value: string): void {
 
 export function deleteSetting(key: string): void {
   db().delete(settings).where(eq(settings.key, key)).run()
+}
+
+// ── Idées virales enregistrées ──
+function toSavedIdea(r: IdeaRow): SavedIdea {
+  const idea = JSON.parse(r.data) as ViralIdea
+  return { id: r.id, niche: r.niche, createdAt: r.createdAt, ...idea }
+}
+
+export function createIdea(niche: string, idea: ViralIdea): SavedIdea {
+  const row = db()
+    .insert(ideas)
+    .values({ niche, title: idea.title, data: JSON.stringify(idea), createdAt: Date.now() })
+    .returning()
+    .get()
+  return toSavedIdea(row)
+}
+
+export function listIdeas(): SavedIdea[] {
+  return db().select().from(ideas).orderBy(desc(ideas.createdAt)).all().map(toSavedIdea)
+}
+
+export function deleteIdea(id: number): void {
+  db().delete(ideas).where(eq(ideas.id, id)).run()
 }

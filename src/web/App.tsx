@@ -7,10 +7,11 @@ import {
   type ClipDTO,
   type ProgressEvent,
   type PublishOverrides,
-  type ViralIdea
+  type ViralIdea,
+  type SavedIdea
 } from './api'
 
-type Page = 'dashboard' | 'generate' | 'ideas' | 'history' | 'clips' | 'queue' | 'published' | 'settings'
+type Page = 'dashboard' | 'generate' | 'ideas' | 'myideas' | 'history' | 'clips' | 'queue' | 'published' | 'settings'
 
 const ICONS: Record<string, string> = {
   dashboard: 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z',
@@ -22,6 +23,7 @@ const ICONS: Record<string, string> = {
   play: 'M5 3l14 9-14 9z',
   pause: 'M8 5v14M16 5v14',
   bulb: 'M9 18h6M10 21h4M12 3a6 6 0 00-4 10.5c.7.7 1 1.3 1 2.5h6c0-1.2.3-1.8 1-2.5A6 6 0 0012 3z',
+  bookmark: 'M6 3h12a1 1 0 011 1v17l-7-4-7 4V4a1 1 0 011-1z',
   search: 'M11 19a8 8 0 100-16 8 8 0 000 16zM21 21l-4.3-4.3',
   refresh: 'M21 12a9 9 0 11-3-6.7L21 8M21 3v5h-5',
   spark: 'M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4L12 3z',
@@ -143,6 +145,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
     { id: 'dashboard', label: 'Tableau de bord', icon: 'dashboard' },
     { id: 'generate', label: 'Générer', icon: 'spark' },
     { id: 'ideas', label: 'Idées virales', icon: 'bulb' },
+    { id: 'myideas', label: 'Mes idées', icon: 'bookmark' },
     { id: 'history', label: 'Historique', icon: 'list' },
     { id: 'clips', label: 'Clips', icon: 'clips' },
     { id: 'queue', label: 'File d’attente', icon: 'clock' },
@@ -186,6 +189,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
         {page === 'dashboard' && <Dashboard sources={sources} clips={clips} log={log} go={setPage} onRefresh={refresh} />}
         {page === 'generate' && <Generate sources={sources} progress={progress} onRefresh={refresh} toast={showToast} goHistory={() => setPage('history')} />}
         {page === 'ideas' && <Ideas toast={showToast} go={setPage} />}
+        {page === 'myideas' && <MyIdeas toast={showToast} go={setPage} />}
         {page === 'history' && <History sources={sources} clips={clips} progress={progress} onRefresh={refresh} toast={showToast} goClips={() => setPage('clips')} />}
         {page === 'clips' && <Clips clips={clips} sources={sources} onRefresh={refresh} toast={showToast} ttProfile={ttProfile} />}
         {page === 'queue' && <Queue clips={clips} go={setPage} />}
@@ -1196,6 +1200,7 @@ function Ideas({ toast, go }: { toast: (m: string) => void; go: (p: Page) => voi
       const r = await api.generateIdeas(niche.trim(), count, selected)
       setIdeas(r.ideas)
       if (!r.ideas.length) toast('Aucune idée générée — réessaie')
+      else toast(`${r.ideas.length} idées générées (enregistrées dans « Mes idées »)`)
     } catch (e) {
       toast(`Erreur : ${String((e as Error).message)}`)
     } finally {
@@ -1277,28 +1282,103 @@ function Ideas({ toast, go }: { toast: (m: string) => void; go: (p: Page) => voi
       {ideas.length > 0 ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {ideas.map((idea, i) => (
-            <div key={i} className="card">
-              <div className="row" style={{ alignItems: 'flex-start' }}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 16 }}>{idea.title}</div>
-                  <div className="small" style={{ marginTop: 4 }}><b>Hook :</b> {idea.hook}</div>
-                </div>
-                <button className="btn small" onClick={() => copy(ideaToText(idea))}>Copier</button>
-              </div>
-              <div className="muted small" style={{ marginTop: 6 }}><b>Pourquoi ça marche :</b> {idea.angle}</div>
-              <div style={{ marginTop: 8 }}>
-                <div className="muted small" style={{ fontWeight: 600 }}>Script</div>
-                <ol style={{ margin: '4px 0 0', paddingLeft: 18 }}>
-                  {idea.script.map((s, j) => <li key={j} className="small" style={{ marginBottom: 2 }}>{s}</li>)}
-                </ol>
-              </div>
-              <div className="muted small" style={{ marginTop: 8 }}><b>Format :</b> {idea.format}</div>
-              {idea.hashtags.length > 0 && <div className="small" style={{ marginTop: 8, color: 'var(--accent)' }}>{idea.hashtags.join(' ')}</div>}
-            </div>
+            <IdeaCard key={i} idea={idea} onCopy={() => copy(ideaToText(idea))} />
           ))}
         </div>
       ) : (
         !loading && <div className="card muted">Entre une niche et clique « Générer » pour obtenir des idées de vidéos virales avec script.</div>
+      )}
+    </>
+  )
+}
+
+function IdeaCard({ idea, onCopy, meta, onDelete }: { idea: ViralIdea; onCopy: () => void; meta?: string; onDelete?: () => void }): JSX.Element {
+  return (
+    <div className="card">
+      <div className="row" style={{ alignItems: 'flex-start' }}>
+        <div style={{ minWidth: 0 }}>
+          {meta && <div className="muted small" style={{ marginBottom: 2 }}>{meta}</div>}
+          <div style={{ fontWeight: 700, fontSize: 16 }}>{idea.title}</div>
+          <div className="small" style={{ marginTop: 4 }}><b>Hook :</b> {idea.hook}</div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+          <button className="btn small" onClick={onCopy}>Copier</button>
+          {onDelete && <button className="btn small" onClick={onDelete} title="Supprimer">🗑</button>}
+        </div>
+      </div>
+      <div className="muted small" style={{ marginTop: 6 }}><b>Pourquoi ça marche :</b> {idea.angle}</div>
+      <div style={{ marginTop: 8 }}>
+        <div className="muted small" style={{ fontWeight: 600 }}>Script</div>
+        <ol style={{ margin: '4px 0 0', paddingLeft: 18 }}>
+          {idea.script.map((s, j) => <li key={j} className="small" style={{ marginBottom: 2 }}>{s}</li>)}
+        </ol>
+      </div>
+      <div className="muted small" style={{ marginTop: 8 }}><b>Format :</b> {idea.format}</div>
+      {idea.hashtags.length > 0 && <div className="small" style={{ marginTop: 8, color: 'var(--accent)' }}>{idea.hashtags.join(' ')}</div>}
+    </div>
+  )
+}
+
+function MyIdeas({ toast, go }: { toast: (m: string) => void; go: (p: Page) => void }): JSX.Element {
+  const [ideas, setIdeas] = useState<SavedIdea[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const load = useCallback(async (): Promise<void> => {
+    setLoading(true)
+    try {
+      const r = await api.savedIdeas()
+      setIdeas(r.ideas)
+    } catch {
+      /* ignore */
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  const copy = (text: string): void => {
+    navigator.clipboard?.writeText(text)
+    toast('Copié ✓')
+  }
+  const del = async (id: number): Promise<void> => {
+    await api.deleteIdea(id)
+    setIdeas((xs) => xs.filter((x) => x.id !== id))
+    toast('Idée supprimée')
+  }
+  const fmtDate = (ts: number): string => new Date(ts).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })
+
+  return (
+    <>
+      <div className="page-head">
+        <div>
+          <h1>Mes idées ({ideas.length})</h1>
+          <p>Toutes les idées générées, enregistrées automatiquement.</p>
+        </div>
+        <button className="btn" onClick={load} disabled={loading}><Icon name="refresh" size={15} /> Actualiser</button>
+      </div>
+      {loading ? (
+        <div className="card muted">Chargement…</div>
+      ) : ideas.length === 0 ? (
+        <div className="card" style={{ textAlign: 'center', padding: 36 }}>
+          <div className="dz-icon" style={{ margin: '0 auto 12px' }}><Icon name="bulb" size={24} /></div>
+          <div style={{ fontWeight: 600 }}>Aucune idée enregistrée</div>
+          <p className="muted small">Génère des idées dans « Idées virales » — elles seront stockées ici.</p>
+          <button className="btn primary" style={{ marginTop: 6 }} onClick={() => go('ideas')}>Générer des idées</button>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {ideas.map((idea) => (
+            <IdeaCard
+              key={idea.id}
+              idea={idea}
+              meta={`${idea.niche} · ${fmtDate(idea.createdAt)}`}
+              onCopy={() => copy(ideaToText(idea))}
+              onDelete={() => del(idea.id)}
+            />
+          ))}
+        </div>
       )}
     </>
   )

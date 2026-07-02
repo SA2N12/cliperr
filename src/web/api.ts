@@ -1,6 +1,6 @@
-import type { SourceDTO, ClipDTO, ProgressEvent } from '../shared/types'
+import type { SourceDTO, ClipDTO, ProgressEvent, ViralIdea, SavedIdea } from '../shared/types'
 
-export type { SourceDTO, ClipDTO, ProgressEvent }
+export type { SourceDTO, ClipDTO, ProgressEvent, ViralIdea, SavedIdea }
 
 export interface PublishOverrides {
   caption?: string
@@ -13,14 +13,6 @@ export interface PublishOverrides {
   uploadPostUser?: string
 }
 
-export interface ViralIdea {
-  title: string
-  hook: string
-  angle: string
-  script: string[]
-  format: string
-  hashtags: string[]
-}
 
 async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const res = await fetch(path, {
@@ -75,7 +67,9 @@ export const api = {
 
   // Idées virales + tendances
   generateIdeas: (niche: string, count: number, trends: string[]) =>
-    post<{ ideas: ViralIdea[] }>('/api/ideas', { niche, count, trends }),
+    post<{ ideas: SavedIdea[] }>('/api/ideas', { niche, count, trends }),
+  savedIdeas: () => req<{ ideas: SavedIdea[] }>('/api/ideas/saved'),
+  deleteIdea: (id: number) => req(`/api/ideas/${id}`, { method: 'DELETE' }),
   trends: () => req<{ configured: boolean; hashtags: string[]; error?: string }>('/api/trends'),
 
   // Réglages

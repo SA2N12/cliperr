@@ -1,6 +1,9 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { z } from 'zod'
 import type { Usage } from '../src/main/pipeline/highlights'
+import type { ViralIdea } from '../src/shared/types'
+
+export type { ViralIdea }
 
 // Génération d'idées de vidéos TikTok virales (Claude) + récupération de
 // tendances réelles via une API RapidAPI TikTok. Les tendances récupérées
@@ -15,15 +18,6 @@ const IdeaSchema = z.object({
   hashtags: z.array(z.string())
 })
 const IdeasSchema = z.object({ ideas: z.array(IdeaSchema) })
-
-export interface ViralIdea {
-  title: string
-  hook: string
-  angle: string
-  script: string[]
-  format: string
-  hashtags: string[]
-}
 
 export interface GenerateIdeasOptions {
   apiKey: string

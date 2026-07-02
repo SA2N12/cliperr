@@ -43,6 +43,21 @@ export interface ClipDTO {
   createdAt: number
 }
 
+export interface ViralIdea {
+  title: string
+  hook: string
+  angle: string
+  script: string[]
+  format: string
+  hashtags: string[]
+}
+
+export interface SavedIdea extends ViralIdea {
+  id: number
+  niche: string
+  createdAt: number
+}
+
 export interface JobDTO {
   id: number
   sourceId: number | null

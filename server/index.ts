@@ -386,7 +386,14 @@ app.post('/api/ideas', wrap(async (req, res) => {
   const model = MODEL_MAP[repo.getSetting(FLAG_MODEL) ?? 'haiku'] ?? MODEL_MAP.haiku
   const { ideas, usage } = await generateViralIdeas({ apiKey, model, niche, count, trends })
   if (usage) addSpend(model, usage)
-  res.json({ ideas })
+  // On enregistre chaque idée générée (page « Mes idées »).
+  const saved = ideas.map((idea) => repo.createIdea(niche, idea))
+  res.json({ ideas: saved })
+}))
+app.get('/api/ideas/saved', wrap((_req, res) => res.json({ ideas: repo.listIdeas() })))
+app.delete('/api/ideas/:id', wrap((req, res) => {
+  repo.deleteIdea(Number(req.params.id))
+  res.json({ ok: true })
 }))
 app.get('/api/trends', wrap(async (_req, res) => {
   const key = getEncrypted('rapidapi_key')

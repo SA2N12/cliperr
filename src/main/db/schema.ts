@@ -45,6 +45,14 @@ export const settings = sqliteTable('settings', {
   value: text('value').notNull()
 })
 
+export const ideas = sqliteTable('ideas', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  niche: text('niche').notNull(),
+  title: text('title'),
+  data: text('data').notNull(),
+  createdAt: integer('created_at').notNull()
+})
+
 export const schedules = sqliteTable('schedules', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   cron: text('cron').notNull(),
@@ -96,6 +104,13 @@ CREATE TABLE IF NOT EXISTS jobs (
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS ideas (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  niche TEXT NOT NULL,
+  title TEXT,
+  data TEXT NOT NULL,
+  created_at INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS schedules (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
