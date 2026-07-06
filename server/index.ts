@@ -49,7 +49,8 @@ import {
   getTikTokProfile,
   publishClipById,
   uploadPostProfiles,
-  activeProfile
+  activeProfile,
+  activeScope
 } from './tiktok-service'
 import type { PublishOverrides } from '../src/main/publish/index'
 
@@ -605,7 +606,7 @@ app.get('/api/publish/state', wrap(async (_req, res) => {
   // On considère le quota « atteint » tant que le drapeau a moins de 24 h
   // (fenêtre glissante TikTok) — sinon on l'ignore (garde-fou anti-bannière figée).
   const quotaReached = quotaTs > 0 && Date.now() - quotaTs < 24 * 60 * 60 * 1000
-  res.json({ mode, profiles, active, quotaReached, quotaProfile: quotaReached ? active : null })
+  res.json({ mode, profiles, active, scope: activeScope(), quotaReached, quotaProfile: quotaReached ? active : null })
 }))
 
 // Tableau de bord des perfs : analytics TikTok par compte (via upload-post)

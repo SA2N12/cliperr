@@ -119,9 +119,20 @@ export function uploadPostProfiles(): string[] {
   return single ? [single] : []
 }
 
-/** Profil TikTok actif (choisi globalement en haut à droite). Repli sur le 1er profil configuré. */
+/** Valeur spéciale « Tous les comptes » du sélecteur en haut à droite. */
+export const ALL_SCOPE = '__all__'
+
+/** Portée d'affichage choisie en haut à droite : un profil précis ou « __all__ ». */
+export function activeScope(): string {
+  const s = (repo.getSetting('active_profile') || '').trim()
+  return s || (uploadPostProfiles()[0] || '')
+}
+
+/** Profil TikTok concret pour publier. « Tous » → 1er profil configuré par défaut. */
 export function activeProfile(): string {
-  return (repo.getSetting('active_profile') || uploadPostProfiles()[0] || '').trim()
+  const s = (repo.getSetting('active_profile') || '').trim()
+  if (s && s !== ALL_SCOPE) return s
+  return (uploadPostProfiles()[0] || '').trim()
 }
 
 /** Marque le quota journalier « atteint » pour un profil (déclenche la bannière globale). */

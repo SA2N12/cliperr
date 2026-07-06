@@ -33,8 +33,12 @@ const ICONS: Record<string, string> = {
   clock: 'M12 7v5l3 2M12 3a9 9 0 100 18 9 9 0 000-18z',
   folder: 'M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z',
   list: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
-  bolt: 'M13 2L4 14h6l-1 8 9-12h-6l1-8z'
+  bolt: 'M13 2L4 14h6l-1 8 9-12h-6l1-8z',
+  globe: 'M12 3a9 9 0 100 18 9 9 0 000-18zM3 12h18M12 3c2.6 2.7 2.6 15.3 0 18M12 3c-2.6 2.7-2.6 15.3 0 18'
 }
+
+// Valeur spéciale du sélecteur en haut à droite : « Tous les comptes » (vue globale).
+const ALL_SCOPE = '__all__'
 function Icon({ name, size = 18 }: { name: string; size?: number }): JSX.Element {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -142,21 +146,42 @@ function Avatar({ url, name, size = 22 }: { url: string | null; name?: string; s
   )
 }
 
+function GlobeBadge({ size = 22 }: { size?: number }): JSX.Element {
+  return (
+    <span style={{ width: size, height: size, borderRadius: '50%', background: 'var(--accent)', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+      <Icon name="globe" size={Math.round(size * 0.62)} />
+    </span>
+  )
+}
+
 function ProfilePicker({ profiles, active, onChange }: { profiles: PubProfile[]; active: string; onChange: (u: string) => void }): JSX.Element {
   const [open, setOpen] = useState(false)
-  const cur = profiles.find((p) => p.username === active) ?? profiles[0]
+  const isAll = active === ALL_SCOPE
+  const cur = profiles.find((p) => p.username === active)
   const label = (p: PubProfile): string => (p.handle ? `@${p.handle}` : p.username)
   return (
     <div style={{ position: 'relative' }}>
       <button className="btn" onClick={() => setOpen((o) => !o)} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <Avatar url={cur?.avatarUrl ?? null} name={cur?.username} />
-        {cur ? label(cur) : '—'}
+        {isAll ? <GlobeBadge /> : <Avatar url={cur?.avatarUrl ?? null} name={cur?.username} />}
+        {isAll ? 'Tous les comptes' : cur ? label(cur) : '—'}
         <span style={{ opacity: 0.5, fontSize: 11 }}>▾</span>
       </button>
       {open && (
         <>
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 30 }} />
-          <div className="card" style={{ position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 31, minWidth: 220, padding: 6, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <div className="card" style={{ position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 31, minWidth: 240, padding: 6, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <button
+              className="nav-item"
+              onClick={() => { onChange(ALL_SCOPE); setOpen(false) }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, background: isAll ? '#ede9fe' : undefined }}
+            >
+              <GlobeBadge />
+              <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.2 }}>
+                <span style={{ fontWeight: 600 }}>Tous les comptes</span>
+                <span className="muted small">Vue d’ensemble</span>
+              </span>
+            </button>
+            <div style={{ height: 1, background: 'var(--border)', margin: '4px 6px' }} />
             {profiles.map((p) => (
               <button
                 key={p.username}
@@ -175,26 +200,11 @@ function ProfilePicker({ profiles, active, onChange }: { profiles: PubProfile[];
   )
 }
 
+type PublishStateT = { mode: string; profiles: PubProfile[]; active: string; scope: string; quotaReached: boolean; quotaProfile: string | null }
+
 // Barre globale (haut de chaque page) : bannière « quota atteint » + sélecteur
-// du profil TikTok de publication (avatar + @handle) sur lequel tout se poste.
-function TopBar({ toast }: { toast: (m: string) => void }): JSX.Element | null {
-  const [state, setState] = useState<{ mode: string; profiles: PubProfile[]; active: string; quotaReached: boolean; quotaProfile: string | null } | null>(null)
-  const load = useCallback((): void => {
-    api.publishState().then(setState).catch(() => undefined)
-  }, [])
-  useEffect(() => {
-    load()
-    const t = window.setInterval(load, 20000)
-    return () => window.clearInterval(t)
-  }, [load])
-
-  const changeProfile = async (v: string): Promise<void> => {
-    setState((s) => (s ? { ...s, active: v } : s))
-    await api.setFlag('active_profile', v)
-    toast('Profil de publication changé')
-    load()
-  }
-
+// de portée (un profil précis, ou « Tous les comptes » pour la vue d'ensemble).
+function TopBar({ state, onChange }: { state: PublishStateT | null; onChange: (v: string) => void }): JSX.Element | null {
   if (!state || state.mode !== 'uploadpost' || state.profiles.length === 0) return null
   const quotaProf = state.profiles.find((p) => p.username === state.quotaProfile)
   return (
@@ -208,8 +218,8 @@ function TopBar({ toast }: { toast: (m: string) => void }): JSX.Element | null {
         </div>
       )}
       <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8 }}>
-        <span className="muted small" style={{ whiteSpace: 'nowrap' }}>Publier sur</span>
-        <ProfilePicker profiles={state.profiles} active={state.active} onChange={changeProfile} />
+        <span className="muted small" style={{ whiteSpace: 'nowrap' }}>Profil actif</span>
+        <ProfilePicker profiles={state.profiles} active={state.scope} onChange={onChange} />
       </div>
     </div>
   )
@@ -275,6 +285,14 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
   const [toast, setToast] = useState('')
   const [progress, setProgress] = useState<Record<number, ProgressEvent>>({})
   const [ideaVideo, setIdeaVideo] = useState<Record<number, { status: 'running' | 'done' | 'error'; message: string }>>({})
+  const [pub, setPub] = useState<PublishStateT | null>(null)
+
+  const loadPub = useCallback((): void => { api.publishState().then(setPub).catch(() => undefined) }, [])
+  useEffect(() => {
+    loadPub()
+    const t = window.setInterval(loadPub, 20000)
+    return () => window.clearInterval(t)
+  }, [loadPub])
 
   const pushLog = useCallback((m: string) => setLog((l) => [`${new Date().toLocaleTimeString()}  ${m}`, ...l].slice(0, 200)), [])
   const refresh = useCallback(async () => {
@@ -319,6 +337,14 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
     setToast(m)
     window.setTimeout(() => setToast(''), 3500)
   }
+
+  const changeScope = async (v: string): Promise<void> => {
+    setPub((s) => (s ? { ...s, scope: v, active: v === ALL_SCOPE ? (s.profiles[0]?.username ?? s.active) : v } : s))
+    await api.setFlag('active_profile', v)
+    showToast(v === ALL_SCOPE ? 'Vue : tous les comptes' : 'Profil actif changé')
+    loadPub()
+  }
+  const scope = pub?.scope ?? ALL_SCOPE
 
   const navGroups: { id: Page; label: string; icon: string }[][] = [
     [
@@ -378,17 +404,17 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
       </aside>
 
       <main className="main">
-        <TopBar toast={showToast} />
-        {page === 'dashboard' && <Dashboard sources={sources} clips={clips} log={log} go={setPage} onRefresh={refresh} />}
+        <TopBar state={pub} onChange={changeScope} />
+        {page === 'dashboard' && <Dashboard sources={sources} clips={clips} log={log} go={setPage} onRefresh={refresh} scope={scope} />}
         {page === 'autopilot' && <Autopilot toast={showToast} />}
         {page === 'generate' && <Generate sources={sources} progress={progress} onRefresh={refresh} toast={showToast} goHistory={() => setPage('history')} />}
         {page === 'ideas' && <Ideas toast={showToast} go={setPage} />}
         {page === 'myideas' && <MyIdeas toast={showToast} go={setPage} />}
         {page === 'history' && <History sources={sources} clips={clips} progress={progress} onRefresh={refresh} toast={showToast} goClips={() => setPage('clips')} />}
-        {page === 'clips' && <Clips clips={clips} sources={sources} onRefresh={refresh} toast={showToast} ttProfile={ttProfile} />}
+        {page === 'clips' && <Clips clips={clips} sources={sources} onRefresh={refresh} toast={showToast} ttProfile={ttProfile} scope={scope} />}
         {page === 'queue' && <Queue clips={clips} go={setPage} />}
-        {page === 'published' && <Published clips={clips} go={setPage} />}
-        {page === 'analytics' && <Analytics />}
+        {page === 'published' && <Published clips={clips} go={setPage} scope={scope} />}
+        {page === 'analytics' && <Analytics scope={scope} />}
         {page === 'settings' && <Settings toast={showToast} onTtProfile={setTtProfile} />}
       </main>
       <GenerationsWidget sources={sources} progress={progress} ideaVideo={ideaVideo} />
@@ -489,13 +515,15 @@ function Gauge({ pct }: { pct: number }): JSX.Element {
   )
 }
 
-function Dashboard({ sources, clips, log, go, onRefresh }: { sources: SourceDTO[]; clips: ClipDTO[]; log: string[]; go: (p: Page) => void; onRefresh: () => Promise<void> }): JSX.Element {
+function Dashboard({ sources, clips: allClips, log, go, onRefresh, scope }: { sources: SourceDTO[]; clips: ClipDTO[]; log: string[]; go: (p: Page) => void; onRefresh: () => Promise<void>; scope: string }): JSX.Element {
   const [spend, setSpend] = useState<{ usd: number; inTokens: number; outTokens: number } | null>(null)
   const [mode, setMode] = useState<'jour' | 'semaine' | 'mois'>('mois')
   useEffect(() => {
     api.spend().then(setSpend).catch(() => undefined)
   }, [])
 
+  // Portée : « Tous » → tous les clips ; sinon uniquement ceux du profil choisi.
+  const clips = scope === ALL_SCOPE ? allClips : allClips.filter((c) => c.profile === scope)
   const generated = clips.length
   const approved = clips.filter((c) => c.reviewStatus === 'approved').length
   const published = clips.filter((c) => c.publishStatus === 'published').length
@@ -902,18 +930,13 @@ function ClipCard({ c, onReview, onPublish }: { c: ClipDTO; onReview: (id: numbe
   )
 }
 
-function Clips({ clips, sources, onRefresh, toast, ttProfile }: { clips: ClipDTO[]; sources: SourceDTO[]; onRefresh: () => Promise<void>; toast: (m: string) => void; ttProfile: { nickname: string | null } | null }): JSX.Element {
+function Clips({ clips, sources, onRefresh, toast, ttProfile, scope }: { clips: ClipDTO[]; sources: SourceDTO[]; onRefresh: () => Promise<void>; toast: (m: string) => void; ttProfile: { nickname: string | null } | null; scope: string }): JSX.Element {
   const [modal, setModal] = useState<ClipDTO | null>(null)
   const [open, setOpen] = useState<number | null>(null)
   const [tab, setTab] = useState<'creator' | 'ai'>('creator')
   const [autoApprove, setAutoApprove] = useState(false)
-  const [active, setActive] = useState('')
   useEffect(() => {
     api.getFlag('auto_approve').then((r) => setAutoApprove(r.value === '1')).catch(() => undefined)
-    const loadActive = (): void => { api.publishState().then((r) => setActive(r.active)).catch(() => undefined) }
-    loadActive()
-    const t = window.setInterval(loadActive, 12000)
-    return () => window.clearInterval(t)
   }, [])
   async function toggleAuto(v: boolean): Promise<void> {
     setAutoApprove(v)
@@ -928,8 +951,8 @@ function Clips({ clips, sources, onRefresh, toast, ttProfile }: { clips: ClipDTO
   // Sépare les clips IA (vidéos générées depuis une idée) des clips « créateur ».
   const aiIds = new Set(sources.filter((s) => (s.url ?? '').startsWith('idea:')).map((s) => s.id))
   const isAI = (c: ClipDTO): boolean => aiIds.has(c.sourceId) || c.reason === 'Vidéo générée depuis une idée'
-  // Filtre par profil actif (les clips sans profil = anciens, visibles partout).
-  const forProfile = (c: ClipDTO): boolean => !active || c.profile === active || c.profile == null
+  // Portée : « Tous les comptes » → tout ; sinon uniquement les clips du profil choisi.
+  const forProfile = (c: ClipDTO): boolean => scope === ALL_SCOPE || c.profile === scope
   const creatorClips = clips.filter((c) => !isAI(c) && forProfile(c))
   const aiClips = clips.filter((c) => isAI(c) && forProfile(c)).sort((a, b) => b.createdAt - a.createdAt)
 
@@ -1257,9 +1280,11 @@ function Queue({ clips, go }: { clips: ClipDTO[]; go: (p: Page) => void }): JSX.
 
 const UNKNOWN_ACCOUNT = '__unknown__'
 
-function Published({ clips, go }: { clips: ClipDTO[]; go: (p: Page) => void }): JSX.Element {
+function Published({ clips, go, scope }: { clips: ClipDTO[]; go: (p: Page) => void; scope: string }): JSX.Element {
   const [open, setOpen] = useState<string | null>(null)
-  const pub = clips.filter((c) => c.publishStatus === 'published')
+  const pub = clips.filter(
+    (c) => c.publishStatus === 'published' && (scope === ALL_SCOPE || c.publishedAccount === scope || c.profile === scope)
+  )
 
   const groups = new Map<string, ClipDTO[]>()
   for (const c of pub) {
@@ -1715,7 +1740,7 @@ function Autopilot({ toast }: { toast: (m: string) => void }): JSX.Element {
 
 type PostStat = { clipId: number; title: string | null; filePath: string | null; postUrl: string | null; createdAt: number; views: number; likes: number; comments: number; shares: number }
 
-function Analytics(): JSX.Element {
+function Analytics({ scope }: { scope: string }): JSX.Element {
   const [data, setData] = useState<AnalyticsProfile[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState<AnalyticsProfile | null>(null)
@@ -1780,7 +1805,7 @@ function Analytics(): JSX.Element {
     )
   }
 
-  const profiles = (data ?? []).slice().sort((a, b) => b.views - a.views)
+  const profiles = (data ?? []).filter((p) => scope === ALL_SCOPE || p.profile === scope).slice().sort((a, b) => b.views - a.views)
   const totals = profiles.reduce((t, p) => ({ views: t.views + p.views, likes: t.likes + p.likes, followers: t.followers + p.followers, videos: t.videos + p.videoCount }), { views: 0, likes: 0, followers: 0, videos: 0 })
 
   return (

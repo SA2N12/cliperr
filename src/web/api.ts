@@ -71,6 +71,7 @@ export const api = {
       mode: string
       profiles: { username: string; handle: string | null; avatarUrl: string | null }[]
       active: string
+      scope: string
       quotaReached: boolean
       quotaProfile: string | null
     }>('/api/publish/state'),
