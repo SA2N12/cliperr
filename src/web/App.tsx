@@ -377,7 +377,6 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
       <aside className="sidebar">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px 8px' }}>
           <div className="brand" style={{ padding: 0, display: 'flex', alignItems: 'center', gap: 8 }}><Logo size={30} /> Cliperr</div>
-          <span className="pill-badge"><span className="dot" /> live</span>
         </div>
         <div className="side-search">
           <Icon name="search" size={15} /> Rechercher <span className="kbd">Ctrl K</span>
