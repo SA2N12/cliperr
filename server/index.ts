@@ -344,7 +344,10 @@ async function runVideoGen(
       reason: 'Vidéo générée depuis une idée',
       profile: targetProfile
     })
-    if (repo.getSetting('auto_approve') === '1' || opts.autoPublish) repo.setClipReview(clip.id, 'approved')
+    // NB : en autopilot on publie par ID juste après (pas besoin d'approuver
+    // avant — ça éviterait aussi qu'un échec laisse un clip « approuvé non publié »
+    // récupérable par le scheduler manuel et posté sur le mauvais compte).
+    if (repo.getSetting('auto_approve') === '1') repo.setClipReview(clip.id, 'approved')
     emitIdeaVideo({ ideaId, status: 'done', message: 'Vidéo prête ✅' })
     if (opts.autoPublish) {
       emitIdeaVideo({ ideaId, status: 'running', message: `Publication sur « ${targetProfile} »…` })
