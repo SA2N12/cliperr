@@ -74,6 +74,21 @@ export const api = {
       quotaReached: boolean
       quotaProfile: string | null
     }>('/api/publish/state'),
+  analytics: () =>
+    req<{
+      profiles: {
+        profile: string
+        handle: string | null
+        avatarUrl: string | null
+        followers: number
+        views: number
+        likes: number
+        comments: number
+        shares: number
+        videoCount: number
+        timeseries: { date: string; value: number }[]
+      }[]
+    }>('/api/analytics'),
 
   // Idées virales + tendances
   generateIdeas: (niche: string, count: number, trends: string[]) =>

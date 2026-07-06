@@ -489,6 +489,80 @@ app.get('/api/publish/state', wrap(async (_req, res) => {
   res.json({ mode, profiles, active, quotaReached, quotaProfile: quotaReached ? active : null })
 }))
 
+// Tableau de bord des perfs : analytics TikTok par compte (via upload-post)
+interface ProfileAnalytics {
+  profile: string
+  handle: string | null
+  avatarUrl: string | null
+  followers: number
+  views: number
+  likes: number
+  comments: number
+  shares: number
+  videoCount: number
+  timeseries: { date: string; value: number }[]
+}
+let analyticsCache: { at: number; data: ProfileAnalytics[] } | null = null
+async function fetchTikTokAnalytics(key: string, profile: string): Promise<Partial<ProfileAnalytics>> {
+  try {
+    const r = await fetch(`https://api.upload-post.com/api/analytics/${encodeURIComponent(profile)}?platforms=tiktok`, {
+      headers: { Authorization: `Apikey ${key}` }
+    })
+    if (!r.ok) return {}
+    const j = (await r.json()) as {
+      tiktok?: {
+        followers?: number
+        impressions?: number
+        likes?: number
+        comments?: number
+        shares?: number
+        video_count?: number
+        reach_timeseries?: { date: string; value: number }[]
+      }
+    }
+    const t = j.tiktok
+    if (!t) return {}
+    return {
+      followers: t.followers || 0,
+      views: t.impressions || 0,
+      likes: t.likes || 0,
+      comments: t.comments || 0,
+      shares: t.shares || 0,
+      videoCount: t.video_count || 0,
+      timeseries: (t.reach_timeseries || []).map((p) => ({ date: p.date, value: p.value || 0 }))
+    }
+  } catch {
+    return {}
+  }
+}
+app.get('/api/analytics', wrap(async (_req, res) => {
+  const key = getEncrypted('uploadpost_key')
+  if (!key) return res.json({ profiles: [] })
+  if (analyticsCache && Date.now() - analyticsCache.at < 10 * 60 * 1000) return res.json({ profiles: analyticsCache.data })
+  const profs = uploadPostProfiles()
+  const all = await cachedUploadPostProfiles()
+  const byName = new Map(all.map((p) => [p.username, p]))
+  const data: ProfileAnalytics[] = []
+  for (const p of profs) {
+    const a = await fetchTikTokAnalytics(key, p)
+    const meta = byName.get(p)
+    data.push({
+      profile: p,
+      handle: meta?.tiktokHandle ?? null,
+      avatarUrl: meta?.avatarUrl ?? null,
+      followers: a.followers ?? 0,
+      views: a.views ?? 0,
+      likes: a.likes ?? 0,
+      comments: a.comments ?? 0,
+      shares: a.shares ?? 0,
+      videoCount: a.videoCount ?? 0,
+      timeseries: a.timeseries ?? []
+    })
+  }
+  analyticsCache = { at: Date.now(), data }
+  res.json({ profiles: data })
+}))
+
 app.get('/api/ideas/saved', wrap((_req, res) => res.json({ ideas: repo.listIdeas() })))
 app.delete('/api/ideas/:id', wrap((req, res) => {
   repo.deleteIdea(Number(req.params.id))

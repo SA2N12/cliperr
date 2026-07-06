@@ -11,7 +11,7 @@ import {
   type SavedIdea
 } from './api'
 
-type Page = 'dashboard' | 'generate' | 'ideas' | 'myideas' | 'history' | 'clips' | 'queue' | 'published' | 'settings'
+type Page = 'dashboard' | 'generate' | 'ideas' | 'myideas' | 'history' | 'clips' | 'queue' | 'published' | 'analytics' | 'settings'
 
 const ICONS: Record<string, string> = {
   dashboard: 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z',
@@ -24,6 +24,7 @@ const ICONS: Record<string, string> = {
   pause: 'M8 5v14M16 5v14',
   bulb: 'M9 18h6M10 21h4M12 3a6 6 0 00-4 10.5c.7.7 1 1.3 1 2.5h6c0-1.2.3-1.8 1-2.5A6 6 0 0012 3z',
   bookmark: 'M6 3h12a1 1 0 011 1v17l-7-4-7 4V4a1 1 0 011-1z',
+  chart: 'M4 20V10M10 20V4M16 20v-6M22 20H2',
   search: 'M11 19a8 8 0 100-16 8 8 0 000 16zM21 21l-4.3-4.3',
   refresh: 'M21 12a9 9 0 11-3-6.7L21 8M21 3v5h-5',
   spark: 'M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4L12 3z',
@@ -328,7 +329,8 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
       { id: 'generate', label: 'Générer', icon: 'spark' },
       { id: 'queue', label: 'File d’attente', icon: 'clock' },
       { id: 'clips', label: 'Clips', icon: 'clips' },
-      { id: 'published', label: 'Publiés', icon: 'send' }
+      { id: 'published', label: 'Publiés', icon: 'send' },
+      { id: 'analytics', label: 'Performances', icon: 'chart' }
     ],
     [
       { id: 'history', label: 'Historique', icon: 'list' },
@@ -383,6 +385,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
         {page === 'clips' && <Clips clips={clips} sources={sources} onRefresh={refresh} toast={showToast} ttProfile={ttProfile} />}
         {page === 'queue' && <Queue clips={clips} go={setPage} />}
         {page === 'published' && <Published clips={clips} go={setPage} />}
+        {page === 'analytics' && <Analytics />}
         {page === 'settings' && <Settings toast={showToast} onTtProfile={setTtProfile} />}
       </main>
       <GenerationsWidget sources={sources} progress={progress} ideaVideo={ideaVideo} />
@@ -1585,6 +1588,87 @@ function MyIdeas({ toast, go }: { toast: (m: string) => void; go: (p: Page) => v
             />
           ))}
         </div>
+      )}
+    </>
+  )
+}
+
+type AnalyticsProfile = { profile: string; handle: string | null; avatarUrl: string | null; followers: number; views: number; likes: number; comments: number; shares: number; videoCount: number; timeseries: { date: string; value: number }[] }
+
+function fmtNum(n: number): string {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M'
+  if (n >= 1000) return (n / 1000).toFixed(n >= 10000 ? 0 : 1) + 'k'
+  return String(n)
+}
+function Sparkline({ data }: { data: number[] }): JSX.Element | null {
+  if (data.length < 2) return null
+  const w = 120, h = 34, max = Math.max(1, ...data)
+  const pts = data.map((v, i) => `${((i / (data.length - 1)) * w).toFixed(1)},${(h - (v / max) * (h - 3) - 1.5).toFixed(1)}`).join(' ')
+  return (
+    <svg width={w} height={h} style={{ flexShrink: 0 }} aria-hidden>
+      <polyline points={pts} fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function Analytics(): JSX.Element {
+  const [data, setData] = useState<AnalyticsProfile[] | null>(null)
+  const [loading, setLoading] = useState(true)
+  const load = useCallback(async (): Promise<void> => {
+    setLoading(true)
+    try { setData((await api.analytics()).profiles) } catch { setData([]) } finally { setLoading(false) }
+  }, [])
+  useEffect(() => { void load() }, [load])
+
+  const profiles = (data ?? []).slice().sort((a, b) => b.views - a.views)
+  const totals = profiles.reduce((t, p) => ({ views: t.views + p.views, likes: t.likes + p.likes, followers: t.followers + p.followers, videos: t.videos + p.videoCount }), { views: 0, likes: 0, followers: 0, videos: 0 })
+
+  return (
+    <>
+      <div className="page-head">
+        <div><h1>Performances</h1><p>Vues, likes et abonnés par compte TikTok (30 derniers jours, via upload-post).</p></div>
+        <button className="btn" onClick={load} disabled={loading}><Icon name="refresh" size={15} /> Actualiser</button>
+      </div>
+      {loading && !data ? (
+        <div className="card muted">Chargement des performances…</div>
+      ) : profiles.length === 0 ? (
+        <div className="card muted">Aucune donnée. Configure la clé upload-post (Réglages) et publie des vidéos.</div>
+      ) : (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 12, marginBottom: 16 }}>
+            {[['Vues (total)', fmtNum(totals.views)], ['Likes', fmtNum(totals.likes)], ['Abonnés', fmtNum(totals.followers)], ['Vidéos', String(totals.videos)]].map(([l, v]) => (
+              <div key={l} className="card" style={{ padding: '12px 14px' }}>
+                <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--accent-strong)' }}>{v}</div>
+                <div className="muted small">{l}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {profiles.map((p, i) => (
+              <div key={p.profile} className="card">
+                <div className="row" style={{ alignItems: 'center', gap: 12 }}>
+                  <Avatar url={p.avatarUrl} name={p.profile} size={40} />
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontWeight: 700 }}>
+                      {p.handle ? '@' + p.handle : p.profile}
+                      {i === 0 && p.views > 0 && <span className="chip" style={{ marginLeft: 8 }}>🏆 top</span>}
+                    </div>
+                    <div className="muted small">{p.videoCount} vidéo{p.videoCount > 1 ? 's' : ''} · {fmtNum(p.followers)} abonné{p.followers > 1 ? 's' : ''}</div>
+                  </div>
+                  <Sparkline data={p.timeseries.map((t) => t.value)} />
+                </div>
+                <div style={{ display: 'flex', gap: 22, marginTop: 12, flexWrap: 'wrap' }}>
+                  {[['Vues', fmtNum(p.views), true], ['Likes', fmtNum(p.likes), false], ['Comment.', fmtNum(p.comments), false], ['Partages', fmtNum(p.shares), false]].map(([l, v, big]) => (
+                    <div key={l as string}>
+                      <div style={{ fontWeight: 700, fontSize: big ? 22 : 16, color: big ? 'var(--accent-strong)' : undefined }}>{v}</div>
+                      <div className="muted small">{l}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </>
   )
