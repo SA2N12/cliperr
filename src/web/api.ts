@@ -94,6 +94,18 @@ export const api = {
       `/api/analytics/posts?profile=${encodeURIComponent(profile)}`
     ),
 
+  // Pilote automatique (contenu quotidien par compte)
+  autopilotState: () =>
+    req<{
+      enabled: boolean
+      perDay: number
+      busy: boolean
+      profiles: { username: string; handle: string | null; avatarUrl: string | null; niche: string; doneToday: number }[]
+    }>('/api/autopilot'),
+  saveAutopilot: (cfg: { enabled?: boolean; perDay?: number; niches?: Record<string, string> }) =>
+    post<{ ok: boolean }>('/api/autopilot', cfg),
+  runAutopilotNow: () => post<{ ok: boolean }>('/api/autopilot/run-now'),
+
   // Idées virales + tendances
   generateIdeas: (niche: string, count: number, trends: string[]) =>
     post<{ ideas: SavedIdea[] }>('/api/ideas', { niche, count, trends }),

@@ -11,7 +11,7 @@ import {
   type SavedIdea
 } from './api'
 
-type Page = 'dashboard' | 'generate' | 'ideas' | 'myideas' | 'history' | 'clips' | 'queue' | 'published' | 'analytics' | 'settings'
+type Page = 'dashboard' | 'autopilot' | 'generate' | 'ideas' | 'myideas' | 'history' | 'clips' | 'queue' | 'published' | 'analytics' | 'settings'
 
 const ICONS: Record<string, string> = {
   dashboard: 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z',
@@ -32,7 +32,8 @@ const ICONS: Record<string, string> = {
   send: 'M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z',
   clock: 'M12 7v5l3 2M12 3a9 9 0 100 18 9 9 0 000-18z',
   folder: 'M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z',
-  list: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01'
+  list: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
+  bolt: 'M13 2L4 14h6l-1 8 9-12h-6l1-8z'
 }
 function Icon({ name, size = 18 }: { name: string; size?: number }): JSX.Element {
   return (
@@ -322,6 +323,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
   const navGroups: { id: Page; label: string; icon: string }[][] = [
     [
       { id: 'dashboard', label: 'Tableau de bord', icon: 'dashboard' },
+      { id: 'autopilot', label: 'Pilote auto', icon: 'bolt' },
       { id: 'ideas', label: 'Idées virales', icon: 'bulb' },
       { id: 'myideas', label: 'Mes idées', icon: 'bookmark' }
     ],
@@ -378,6 +380,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
       <main className="main">
         <TopBar toast={showToast} />
         {page === 'dashboard' && <Dashboard sources={sources} clips={clips} log={log} go={setPage} onRefresh={refresh} />}
+        {page === 'autopilot' && <Autopilot toast={showToast} />}
         {page === 'generate' && <Generate sources={sources} progress={progress} onRefresh={refresh} toast={showToast} goHistory={() => setPage('history')} />}
         {page === 'ideas' && <Ideas toast={showToast} go={setPage} />}
         {page === 'myideas' && <MyIdeas toast={showToast} go={setPage} />}
@@ -1608,6 +1611,105 @@ function Sparkline({ data }: { data: number[] }): JSX.Element | null {
     <svg width={w} height={h} style={{ flexShrink: 0 }} aria-hidden>
       <polyline points={pts} fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
     </svg>
+  )
+}
+
+// ── Pilote automatique : contenu quotidien autonome par compte ──
+type AutopilotProfile = { username: string; handle: string | null; avatarUrl: string | null; niche: string; doneToday: number }
+type AutopilotState = { enabled: boolean; perDay: number; busy: boolean; profiles: AutopilotProfile[] }
+
+function Autopilot({ toast }: { toast: (m: string) => void }): JSX.Element {
+  const [state, setState] = useState<AutopilotState | null>(null)
+  const [niches, setNiches] = useState<Record<string, string>>({})
+  const [enabled, setEnabled] = useState(false)
+  const [perDay, setPerDay] = useState(1)
+  const [saving, setSaving] = useState(false)
+
+  const load = useCallback(async (): Promise<void> => {
+    try {
+      const s = await api.autopilotState()
+      setState(s)
+      setEnabled(s.enabled)
+      setPerDay(s.perDay)
+      const n: Record<string, string> = {}
+      s.profiles.forEach((p) => { n[p.username] = p.niche })
+      setNiches(n)
+    } catch { /* ignore */ }
+  }, [])
+  useEffect(() => { void load() }, [load])
+
+  const save = async (over?: { enabled?: boolean }): Promise<void> => {
+    setSaving(true)
+    try {
+      await api.saveAutopilot({ enabled: over?.enabled ?? enabled, perDay, niches })
+      toast('Pilote auto enregistré')
+      await load()
+    } catch (e) {
+      toast('Erreur : ' + (e as Error).message)
+    } finally {
+      setSaving(false)
+    }
+  }
+  const toggle = async (): Promise<void> => { const v = !enabled; setEnabled(v); await save({ enabled: v }) }
+  const runNow = async (): Promise<void> => {
+    try { await api.runAutopilotNow(); toast('Cycle lancé — suis la progression en bas à droite'); window.setTimeout(() => void load(), 1500) }
+    catch (e) { toast('Erreur : ' + (e as Error).message) }
+  }
+
+  const profiles = state?.profiles ?? []
+
+  return (
+    <>
+      <div className="page-head">
+        <div><h1>Pilote automatique</h1><p>Chaque jour, du contenu adapté à chaque compte selon sa niche — généré et publié sans intervention.</p></div>
+        <button className="btn" onClick={() => void load()}><Icon name="refresh" size={15} /> Actualiser</button>
+      </div>
+
+      <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16, borderColor: enabled ? 'var(--accent)' : undefined }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 700, fontSize: 16 }}>{enabled ? '🟢 Pilote actif' : '⚪ Pilote en pause'}</div>
+          <div className="muted small">{enabled ? `Génère et publie ${perDay} vidéo${perDay > 1 ? 's' : ''}/jour sur chaque compte, tout seul.` : 'Active-le pour lancer la production quotidienne 100% autonome.'}</div>
+        </div>
+        <button className={`btn ${enabled ? '' : 'primary'}`} disabled={saving} onClick={toggle}>{enabled ? 'Désactiver' : 'Activer'}</button>
+      </div>
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div style={{ fontWeight: 600, marginBottom: 8 }}>Vidéos par jour et par compte</div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {[1, 2, 3].map((n) => (
+            <button key={n} className={`btn ${perDay === n ? 'primary' : ''}`} onClick={() => setPerDay(n)}>{n}/jour</button>
+          ))}
+        </div>
+        <div className="muted small" style={{ marginTop: 8 }}>Conseil : 1/jour est le plus sûr (les rafales déclenchent l’anti-spam TikTok).</div>
+      </div>
+
+      <div className="card">
+        <div style={{ fontWeight: 600, marginBottom: 4 }}>Niche par compte</div>
+        <div className="muted small" style={{ marginBottom: 12 }}>Le contenu de chaque compte tourne autour de sa niche. Pré-rempli avec des niches « faceless » efficaces — modifie librement.</div>
+        {profiles.length === 0 ? (
+          <div className="muted">Aucun compte upload-post connecté. Ajoute-les dans Réglages.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {profiles.map((p) => (
+              <div key={p.username} className="row" style={{ gap: 12, alignItems: 'center' }}>
+                <Avatar url={p.avatarUrl} name={p.username} size={38} />
+                <div style={{ width: 120, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.handle ? '@' + p.handle : p.username}</div>
+                  <div className="muted small">{p.doneToday} publiée{p.doneToday > 1 ? 's' : ''} auj.</div>
+                </div>
+                <input className="input-full" style={{ flex: 1 }} value={niches[p.username] ?? ''} placeholder="ex. mystères non résolus…" onChange={(e) => setNiches((m) => ({ ...m, [p.username]: e.target.value }))} />
+              </div>
+            ))}
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
+          <button className="btn primary" disabled={saving} onClick={() => void save()}>{saving ? 'Enregistrement…' : 'Enregistrer'}</button>
+          <button className="btn" disabled={!!state?.busy} onClick={() => void runNow()} title="Génère et publie 1 vidéo maintenant (test)">
+            <Icon name="bolt" size={15} /> {state?.busy ? 'Génération en cours…' : 'Tester maintenant'}
+          </button>
+        </div>
+      </div>
+    </>
   )
 }
 

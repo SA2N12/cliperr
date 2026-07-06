@@ -296,13 +296,17 @@ function reloadScheduler(): void {
 
 // ── Génération de vidéo « faceless » depuis une idée (une à la fois) ──
 let videoChain: Promise<void> = Promise.resolve()
-async function runVideoGen(ideaId: number): Promise<void> {
+async function runVideoGen(
+  ideaId: number,
+  opts: { profile?: string; autoPublish?: boolean } = {}
+): Promise<number | null> {
   const idea = repo.getIdea(ideaId)
-  if (!idea) return
+  if (!idea) return null
+  const targetProfile = (opts.profile || activeProfile()).trim()
   const anthropicKey = getApiKey()
   const openaiKey = getEncrypted('openai_key')
-  if (!anthropicKey) return emitIdeaVideo({ ideaId, status: 'error', message: 'Clé Claude manquante (Réglages).' })
-  if (!openaiKey) return emitIdeaVideo({ ideaId, status: 'error', message: 'Clé OpenAI manquante (Réglages).' })
+  if (!anthropicKey) { emitIdeaVideo({ ideaId, status: 'error', message: 'Clé Claude manquante (Réglages).' }); return null }
+  if (!openaiKey) { emitIdeaVideo({ ideaId, status: 'error', message: 'Clé OpenAI manquante (Réglages).' }); return null }
   const model = MODEL_MAP[repo.getSetting(FLAG_MODEL) ?? 'haiku'] ?? MODEL_MAP.haiku
   try {
     emitIdeaVideo({ ideaId, status: 'running', message: 'Démarrage…' })
@@ -338,13 +342,124 @@ async function runVideoGen(ideaId: number): Promise<void> {
       description: idea.hook,
       hashtags: idea.hashtags.join(' '),
       reason: 'Vidéo générée depuis une idée',
-      profile: activeProfile()
+      profile: targetProfile
     })
-    if (repo.getSetting('auto_approve') === '1') repo.setClipReview(clip.id, 'approved')
+    if (repo.getSetting('auto_approve') === '1' || opts.autoPublish) repo.setClipReview(clip.id, 'approved')
     emitIdeaVideo({ ideaId, status: 'done', message: 'Vidéo prête ✅' })
+    if (opts.autoPublish) {
+      emitIdeaVideo({ ideaId, status: 'running', message: `Publication sur « ${targetProfile} »…` })
+      await publishClipById(clip.id, paths, emitLog, { uploadPostUser: targetProfile })
+      emitIdeaVideo({ ideaId, status: 'done', message: `Publié sur « ${targetProfile} » ✅` })
+    }
+    return clip.id
   } catch (e) {
     emitIdeaVideo({ ideaId, status: 'error', message: e instanceof Error ? e.message : String(e) })
+    return null
   }
+}
+
+// ── Pilote automatique : chaque jour, du contenu adapté par compte (niche) ──
+// Config (settings) :
+//   autopilot_enabled = '1' | '0'
+//   autopilot_per_day = nombre de vidéos/jour/compte (défaut 1)
+//   autopilot_niches  = JSON { [username]: niche }
+// Idempotence : autopilot_count_<user>_<YYYY-MM-DD> = nb déjà produit aujourd'hui.
+const DEFAULT_NICHES = [
+  'Histoires effrayantes et mystères non résolus',
+  'Faits fascinants sur l’espace et l’univers',
+  'Développement personnel et motivation',
+  'Anecdotes historiques méconnues',
+  'Psychologie et astuces mentales du quotidien'
+]
+function dayKey(): string {
+  return new Date().toISOString().slice(0, 10)
+}
+function autopilotNiches(): Record<string, string> {
+  try {
+    const raw = repo.getSetting('autopilot_niches')
+    if (raw) {
+      const o = JSON.parse(raw) as unknown
+      if (o && typeof o === 'object') return o as Record<string, string>
+    }
+  } catch {
+    /* JSON invalide → vide */
+  }
+  return {}
+}
+/** Niche configurée pour un compte, avec repli sur une niche par défaut (assignée par ordre). */
+function nicheForProfile(user: string): string {
+  const map = autopilotNiches()
+  const explicit = (map[user] || '').trim()
+  if (explicit) return explicit
+  const idx = uploadPostProfiles().indexOf(user)
+  return DEFAULT_NICHES[((idx < 0 ? 0 : idx) % DEFAULT_NICHES.length)]
+}
+
+let autopilotBusy = false
+let autopilotTask: ScheduledTask | null = null
+
+/** Un cycle : trouve le prochain compte sous quota et lui produit + publie 1 vidéo. */
+async function runAutopilotTick(force = false): Promise<void> {
+  if (!force && repo.getSetting('autopilot_enabled') !== '1') return
+  if (autopilotBusy) return
+  if (repo.getSetting('queue_paused') === '1') return
+  const perDay = Math.max(1, Number(repo.getSetting('autopilot_per_day')) || 1)
+  const today = dayKey()
+  const profiles = uploadPostProfiles()
+  if (!profiles.length) return
+
+  for (const user of profiles) {
+    // Compte saturé récemment (quota TikTok atteint) → on saute pour aujourd'hui.
+    const quotaTs = Number(repo.getSetting(`quota_reached_${user}`)) || 0
+    if (quotaTs && Date.now() - quotaTs < 6 * 60 * 60 * 1000) continue
+    const countKey = `autopilot_count_${user}_${today}`
+    const done = Number(repo.getSetting(countKey)) || 0
+    if (done >= perDay) continue
+
+    const niche = nicheForProfile(user)
+    autopilotBusy = true
+    try {
+      emitLog(`Pilote auto : génération pour « ${user} » (niche : ${niche})…`)
+      const anthropicKey = getApiKey()
+      if (!anthropicKey) { emitLog('Pilote auto : clé Claude manquante.'); return }
+      const model = MODEL_MAP[repo.getSetting(FLAG_MODEL) ?? 'haiku'] ?? MODEL_MAP.haiku
+      const { ideas, usage } = await generateViralIdeas({ apiKey: anthropicKey, model, niche, count: 1, trends: [] })
+      if (usage) addSpend(model, usage)
+      if (!ideas.length) { emitLog(`Pilote auto : aucune idée générée pour « ${user} ».`); return }
+      const saved = repo.createIdea(niche, ideas[0])
+      // On passe par videoChain pour ne jamais monter deux vidéos en parallèle.
+      const job = videoChain.then(() => runVideoGen(saved.id, { profile: user, autoPublish: true }))
+      videoChain = job.then(() => undefined, () => undefined)
+      const clipId = await job.catch(() => null)
+      if (clipId) {
+        repo.setSetting(countKey, String(done + 1))
+        emitLog(`Pilote auto : vidéo publiée sur « ${user} » (${done + 1}/${perDay} aujourd'hui).`)
+      } else {
+        emitLog(`Pilote auto : échec pour « ${user} » (voir journaux).`)
+      }
+    } catch (e) {
+      emitLog(`Pilote auto : erreur pour « ${user} » — ${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      autopilotBusy = false
+    }
+    return // une seule vidéo par cycle → charge étalée sur la journée
+  }
+}
+
+function reloadAutopilot(): void {
+  if (autopilotTask) {
+    autopilotTask.stop()
+    autopilotTask = null
+  }
+  if (repo.getSetting('autopilot_enabled') !== '1') return
+  // Toutes les heures : produit au plus 1 vidéo/cycle → les comptes s'étalent
+  // naturellement sur la journée (ex. 5 comptes = 5 vidéos réparties sur 5 h).
+  const expr = repo.getSetting('autopilot_cron') || '7 * * * *'
+  if (!cron.validate(expr)) return
+  autopilotTask = cron.schedule(expr, () => {
+    void runAutopilotTick().catch((e) => emitLog(`Pilote auto : ${e instanceof Error ? e.message : String(e)}`))
+  })
+  emitLog(`Pilote auto activé (cron « ${expr} »).`)
 }
 
 // ── Bootstrap ──
@@ -354,6 +469,7 @@ for (const dir of [paths.downloads, paths.clips, paths.bin, paths.models, paths.
 }
 initDb(paths.data)
 reloadScheduler()
+reloadAutopilot()
 
 const upload = multer({
   storage: multer.diskStorage({
@@ -763,6 +879,45 @@ app.get('/api/scheduler/status', wrap((_req, res) => {
     }
   }
   res.json({ enabled, paused, cron, nextRunAt, intervalSec, lastRunAt })
+}))
+
+// Pilote automatique : contenu quotidien par compte selon sa niche
+app.get('/api/autopilot', wrap(async (_req, res) => {
+  const profiles = uploadPostProfiles()
+  const meta = new Map((await cachedUploadPostProfiles()).map((p) => [p.username, p]))
+  const today = dayKey()
+  const niches = autopilotNiches()
+  res.json({
+    enabled: repo.getSetting('autopilot_enabled') === '1',
+    perDay: Math.max(1, Number(repo.getSetting('autopilot_per_day')) || 1),
+    busy: autopilotBusy,
+    profiles: profiles.map((u) => ({
+      username: u,
+      handle: meta.get(u)?.tiktokHandle ?? null,
+      avatarUrl: meta.get(u)?.avatarUrl ?? null,
+      niche: (niches[u] ?? '').trim() || nicheForProfile(u),
+      doneToday: Number(repo.getSetting(`autopilot_count_${u}_${today}`)) || 0
+    }))
+  })
+}))
+app.post('/api/autopilot', wrap((req, res) => {
+  const b = (req.body ?? {}) as { enabled?: unknown; perDay?: unknown; niches?: unknown }
+  if (typeof b.enabled === 'boolean') repo.setSetting('autopilot_enabled', b.enabled ? '1' : '0')
+  if (b.perDay != null) repo.setSetting('autopilot_per_day', String(Math.max(1, Math.min(5, Math.round(Number(b.perDay)) || 1))))
+  if (b.niches && typeof b.niches === 'object') {
+    const clean: Record<string, string> = {}
+    for (const [k, v] of Object.entries(b.niches as Record<string, unknown>)) {
+      if (typeof v === 'string' && v.trim()) clean[k] = v.trim()
+    }
+    repo.setSetting('autopilot_niches', JSON.stringify(clean))
+  }
+  reloadAutopilot()
+  res.json({ ok: true })
+}))
+// Lance immédiatement un cycle (test) : produit + publie 1 vidéo pour le 1er compte sous quota.
+app.post('/api/autopilot/run-now', wrap((_req, res) => {
+  void runAutopilotTick(true).catch((e) => emitLog(`Pilote auto : ${e instanceof Error ? e.message : String(e)}`))
+  res.json({ ok: true })
 }))
 
 // TikTok
