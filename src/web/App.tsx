@@ -375,7 +375,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
   return (
     <div className="app">
       <aside className="sidebar">
-        <div className="row" style={{ padding: '6px 8px 8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px 8px' }}>
           <div className="brand" style={{ padding: 0, display: 'flex', alignItems: 'center', gap: 8 }}><Logo size={30} /> Cliperr</div>
           <span className="pill-badge"><span className="dot" /> live</span>
         </div>
