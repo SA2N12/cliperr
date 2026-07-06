@@ -355,6 +355,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
   const navGroups: { id: Page; label: string; icon: string }[][] = [
     [
       { id: 'dashboard', label: 'Tableau de bord', icon: 'dashboard' },
+      { id: 'analytics', label: 'Performances', icon: 'chart' },
       ...(isAll ? [{ id: 'autopilot' as Page, label: 'Pilote auto', icon: 'bolt' }] : []),
       { id: 'ideas', label: 'Idées virales', icon: 'bulb' },
       { id: 'myideas', label: 'Mes idées', icon: 'bookmark' }
@@ -363,8 +364,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
       { id: 'generate', label: 'Générer', icon: 'spark' },
       { id: 'queue', label: 'File d’attente', icon: 'clock' },
       { id: 'clips', label: 'Clips', icon: 'clips' },
-      { id: 'published', label: 'Publiés', icon: 'send' },
-      { id: 'analytics', label: 'Performances', icon: 'chart' }
+      { id: 'published', label: 'Publiés', icon: 'send' }
     ],
     [
       { id: 'history', label: 'Historique', icon: 'list' },
