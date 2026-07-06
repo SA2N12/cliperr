@@ -906,6 +906,7 @@ app.get('/api/autopilot', wrap(async (_req, res) => {
 }))
 app.post('/api/autopilot', wrap((req, res) => {
   const b = (req.body ?? {}) as { enabled?: unknown; perDay?: unknown; niches?: unknown }
+  const wasEnabled = repo.getSetting('autopilot_enabled') === '1'
   if (typeof b.enabled === 'boolean') repo.setSetting('autopilot_enabled', b.enabled ? '1' : '0')
   if (b.perDay != null) repo.setSetting('autopilot_per_day', String(Math.max(1, Math.min(5, Math.round(Number(b.perDay)) || 1))))
   if (b.niches && typeof b.niches === 'object') {
@@ -916,6 +917,13 @@ app.post('/api/autopilot', wrap((req, res) => {
     repo.setSetting('autopilot_niches', JSON.stringify(clean))
   }
   reloadAutopilot()
+  // Passage OFF → ON : on lance tout de suite un premier cycle (1 vidéo),
+  // puis le rythme horaire prend le relais.
+  const nowEnabled = repo.getSetting('autopilot_enabled') === '1'
+  if (!wasEnabled && nowEnabled) {
+    emitLog('Pilote auto activé : premier cycle immédiat…')
+    void runAutopilotTick().catch((e) => emitLog(`Pilote auto : ${e instanceof Error ? e.message : String(e)}`))
+  }
   res.json({ ok: true })
 }))
 // Lance immédiatement un cycle (test) : produit + publie 1 vidéo pour le 1er compte sous quota.
