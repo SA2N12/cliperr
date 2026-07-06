@@ -345,11 +345,17 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
     loadPub()
   }
   const scope = pub?.scope ?? ALL_SCOPE
+  const isAll = scope === ALL_SCOPE
+
+  // Le pilote auto pilote TOUS les comptes → visible uniquement en vue « Tous les comptes ».
+  useEffect(() => {
+    if (page === 'autopilot' && !isAll) setPage('dashboard')
+  }, [page, isAll])
 
   const navGroups: { id: Page; label: string; icon: string }[][] = [
     [
       { id: 'dashboard', label: 'Tableau de bord', icon: 'dashboard' },
-      { id: 'autopilot', label: 'Pilote auto', icon: 'bolt' },
+      ...(isAll ? [{ id: 'autopilot' as Page, label: 'Pilote auto', icon: 'bolt' }] : []),
       { id: 'ideas', label: 'Idées virales', icon: 'bulb' },
       { id: 'myideas', label: 'Mes idées', icon: 'bookmark' }
     ],
@@ -406,7 +412,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
       <main className="main">
         <TopBar state={pub} onChange={changeScope} />
         {page === 'dashboard' && <Dashboard sources={sources} clips={clips} log={log} go={setPage} onRefresh={refresh} scope={scope} />}
-        {page === 'autopilot' && <Autopilot toast={showToast} />}
+        {page === 'autopilot' && isAll && <Autopilot toast={showToast} />}
         {page === 'generate' && <Generate sources={sources} progress={progress} onRefresh={refresh} toast={showToast} goHistory={() => setPage('history')} />}
         {page === 'ideas' && <Ideas toast={showToast} go={setPage} />}
         {page === 'myideas' && <MyIdeas toast={showToast} go={setPage} />}
