@@ -1611,14 +1611,72 @@ function Sparkline({ data }: { data: number[] }): JSX.Element | null {
   )
 }
 
+type PostStat = { clipId: number; title: string | null; filePath: string | null; postUrl: string | null; createdAt: number; views: number; likes: number; comments: number; shares: number }
+
 function Analytics(): JSX.Element {
   const [data, setData] = useState<AnalyticsProfile[] | null>(null)
   const [loading, setLoading] = useState(true)
+  const [open, setOpen] = useState<AnalyticsProfile | null>(null)
+  const [posts, setPosts] = useState<PostStat[] | null>(null)
+  const [pLoading, setPLoading] = useState(false)
   const load = useCallback(async (): Promise<void> => {
     setLoading(true)
     try { setData((await api.analytics()).profiles) } catch { setData([]) } finally { setLoading(false) }
   }, [])
   useEffect(() => { void load() }, [load])
+
+  const openProfile = async (p: AnalyticsProfile): Promise<void> => {
+    setOpen(p); setPosts(null); setPLoading(true)
+    try { setPosts((await api.analyticsPosts(p.profile)).posts) } catch { setPosts([]) } finally { setPLoading(false) }
+  }
+  const eng = (p: { views: number; likes: number; comments: number; shares: number }): string =>
+    p.views > 0 ? (((p.likes + p.comments + p.shares) / p.views) * 100).toFixed(1) + '%' : '—'
+
+  if (open) {
+    const list = (posts ?? []).slice().sort((a, b) => b.views - a.views)
+    return (
+      <>
+        <div className="page-head">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button className="btn icon-btn" onClick={() => setOpen(null)} title="Retour">←</button>
+            <Avatar url={open.avatarUrl} name={open.profile} size={36} />
+            <div>
+              <h1 style={{ fontSize: 22 }}>{open.handle ? '@' + open.handle : open.profile}</h1>
+              <p>Détail par vidéo (publiées via Cliperr)</p>
+            </div>
+          </div>
+          <button className="btn" onClick={() => openProfile(open)} disabled={pLoading}><Icon name="refresh" size={15} /> Actualiser</button>
+        </div>
+        {pLoading && !posts ? (
+          <div className="card muted">Chargement des vidéos…</div>
+        ) : list.length === 0 ? (
+          <div className="card muted">Aucune vidéo trackée pour ce compte. Les vidéos publiées via Cliperr <b>à partir de maintenant</b> apparaîtront ici avec leurs stats détaillées.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {list.map((v) => (
+              <div key={v.clipId} className="card">
+                <div className="row" style={{ gap: 12, alignItems: 'center' }}>
+                  {v.filePath && <video src={clipUrl(v.filePath)} muted preload="metadata" style={{ width: 46, borderRadius: 8, background: '#000', aspectRatio: '9 / 16', flexShrink: 0 }} />}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.title || `Vidéo #${v.clipId}`}</div>
+                    {v.postUrl && <a href={v.postUrl} target="_blank" rel="noreferrer" className="small" style={{ color: 'var(--accent)' }}>Voir sur TikTok ↗</a>}
+                  </div>
+                  <div style={{ display: 'flex', gap: 16, flexShrink: 0 }}>
+                    {[['Vues', v.views], ['Likes', v.likes], ['Comm.', v.comments], ['Part.', v.shares]].map(([l, n]) => (
+                      <div key={l as string} style={{ textAlign: 'center' }}>
+                        <div style={{ fontWeight: 700 }}>{fmtNum(n as number)}</div>
+                        <div className="muted small">{l}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </>
+    )
+  }
 
   const profiles = (data ?? []).slice().sort((a, b) => b.views - a.views)
   const totals = profiles.reduce((t, p) => ({ views: t.views + p.views, likes: t.likes + p.likes, followers: t.followers + p.followers, videos: t.videos + p.videoCount }), { views: 0, likes: 0, followers: 0, videos: 0 })
@@ -1626,7 +1684,7 @@ function Analytics(): JSX.Element {
   return (
     <>
       <div className="page-head">
-        <div><h1>Performances</h1><p>Vues, likes et abonnés par compte TikTok (30 derniers jours, via upload-post).</p></div>
+        <div><h1>Performances</h1><p>Par compte TikTok (30 j). Clique un compte pour le détail par vidéo.</p></div>
         <button className="btn" onClick={load} disabled={loading}><Icon name="refresh" size={15} /> Actualiser</button>
       </div>
       {loading && !data ? (
@@ -1645,7 +1703,7 @@ function Analytics(): JSX.Element {
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {profiles.map((p, i) => (
-              <div key={p.profile} className="card">
+              <div key={p.profile} className="card folder" style={{ display: 'block' }} onClick={() => openProfile(p)}>
                 <div className="row" style={{ alignItems: 'center', gap: 12 }}>
                   <Avatar url={p.avatarUrl} name={p.profile} size={40} />
                   <div style={{ minWidth: 0, flex: 1 }}>
@@ -1657,13 +1715,17 @@ function Analytics(): JSX.Element {
                   </div>
                   <Sparkline data={p.timeseries.map((t) => t.value)} />
                 </div>
-                <div style={{ display: 'flex', gap: 22, marginTop: 12, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 22, marginTop: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
                   {[['Vues', fmtNum(p.views), true], ['Likes', fmtNum(p.likes), false], ['Comment.', fmtNum(p.comments), false], ['Partages', fmtNum(p.shares), false]].map(([l, v, big]) => (
                     <div key={l as string}>
                       <div style={{ fontWeight: 700, fontSize: big ? 22 : 16, color: big ? 'var(--accent-strong)' : undefined }}>{v}</div>
                       <div className="muted small">{l}</div>
                     </div>
                   ))}
+                  <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
+                    <div className="muted small">≈ {p.videoCount ? fmtNum(Math.round(p.views / p.videoCount)) : 0} vues/vidéo · {eng(p)} engagement</div>
+                    <div className="small" style={{ color: 'var(--accent)', fontWeight: 600 }}>Voir les vidéos →</div>
+                  </div>
                 </div>
               </div>
             ))}

@@ -216,7 +216,7 @@ export async function publishClipById(
       deps.uploadPostUser = target
       try {
         const out = await publishClip(clip, deps, overrides)
-        repo.updateClip(id, { publishStatus: 'published', publishedAccount: target })
+        repo.updateClip(id, { publishStatus: 'published', publishedAccount: target, postUrl: out.postUrl ?? null, postId: out.postId ?? null })
         clearQuota(target) // publication réussie → quota de nouveau OK, bannière masquée
         log?.(`Clip #${id} publié sur « ${target} » — ${out.detail}`)
         return

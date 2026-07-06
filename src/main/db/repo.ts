@@ -37,6 +37,8 @@ function toClipDTO(r: ClipRow): ClipDTO {
     publishStatus: r.publishStatus as ClipDTO['publishStatus'],
     publishedAccount: r.publishedAccount,
     profile: r.profile,
+    postUrl: r.postUrl,
+    postId: r.postId,
     createdAt: r.createdAt
   }
 }

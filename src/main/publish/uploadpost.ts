@@ -25,8 +25,14 @@ interface UploadPostResult {
   results?: { tiktok?: { success?: boolean; url?: string; error?: string } }
 }
 
-/** Poste un clip sur TikTok via upload-post. Renvoie l'URL du post si dispo. */
-export async function uploadPostTikTok(p: UploadPostParams): Promise<{ url: string | null }> {
+/** Extrait l'ID de la vidéo TikTok d'une URL (…/video/<id>). */
+function postIdFromUrl(url: string | null | undefined): string | null {
+  const m = (url ?? '').match(/\/video\/(\d+)/)
+  return m ? m[1] : null
+}
+
+/** Poste un clip sur TikTok via upload-post. Renvoie l'URL + l'ID du post si dispo. */
+export async function uploadPostTikTok(p: UploadPostParams): Promise<{ url: string | null; postId: string | null }> {
   if (!p.apiKey) throw new Error('Clé API upload-post manquante')
   if (!p.user) throw new Error('Identifiant de profil upload-post (« user ») manquant')
 
@@ -69,7 +75,7 @@ export async function uploadPostTikTok(p: UploadPostParams): Promise<{ url: stri
     if (!res.ok || tt.success === false) {
       throw new Error(`upload-post : ${tt.error || json.error || `HTTP ${res.status}`}`)
     }
-    return { url: tt.url ?? null }
+    return { url: tt.url ?? null, postId: postIdFromUrl(tt.url) }
   }
   // Cas asynchrone : traité en tâche de fond → on suit le statut jusqu'au résultat réel.
   if (res.ok && json.success && json.request_id) {
@@ -80,7 +86,7 @@ export async function uploadPostTikTok(p: UploadPostParams): Promise<{ url: stri
 
 interface StatusResult {
   status?: string
-  results?: Array<{ platform?: string; success?: boolean; post_url?: string; error_message?: string }>
+  results?: Array<{ platform?: string; success?: boolean; post_url?: string; platform_post_id?: string; error_message?: string }>
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
@@ -90,7 +96,7 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
  * réelle. Lève une erreur (avec le message TikTok, ex. spam_risk) si l'upload
  * échoue → permet la bascule de compte en amont. Renvoie l'URL du post sinon.
  */
-async function pollUploadStatus(apiKey: string, requestId: string): Promise<{ url: string | null }> {
+async function pollUploadStatus(apiKey: string, requestId: string): Promise<{ url: string | null; postId: string | null }> {
   const url = `https://api.upload-post.com/api/uploadposts/status?request_id=${encodeURIComponent(requestId)}`
   for (let i = 0; i < 40; i++) {
     let j: StatusResult | null = null
@@ -104,13 +110,13 @@ async function pollUploadStatus(apiKey: string, requestId: string): Promise<{ ur
     // « processing », results[].success vaut false par défaut → sinon faux échec.
     if (j && (j.status === 'completed' || j.status === 'failed')) {
       const tk = (j.results ?? []).find((x) => x.platform === 'tiktok') ?? j.results?.[0]
-      if (tk?.success === true) return { url: tk.post_url ?? null }
+      if (tk?.success === true) return { url: tk.post_url ?? null, postId: tk.platform_post_id ?? postIdFromUrl(tk.post_url) }
       throw new Error(`upload-post : ${tk?.error_message || 'échec de la publication'}`)
     }
     await sleep(3000)
   }
   // Toujours en cours après le délai max : considéré soumis (pas de faux échec).
-  return { url: null }
+  return { url: null, postId: null }
 }
 
 export interface UploadPostProfile {

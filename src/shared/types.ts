@@ -42,6 +42,9 @@ export interface ClipDTO {
   publishedAccount: string | null
   /** Profil actif au moment de la création du clip (pour filtrer par profil). */
   profile: string | null
+  /** URL + ID du post publié (pour les analytics par vidéo). */
+  postUrl: string | null
+  postId: string | null
   createdAt: number
 }
 

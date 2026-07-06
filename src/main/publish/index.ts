@@ -19,6 +19,9 @@ export interface PublishOutcome {
   detail: string
   /** Légende à finaliser (mode brouillon) — l'UI la copie/affiche. */
   caption?: string
+  /** URL + ID du post publié (upload-post) pour les analytics par vidéo. */
+  postUrl?: string | null
+  postId?: string | null
 }
 
 /** Choix confirmés par l'utilisateur sur l'écran de prévisualisation. */
@@ -57,7 +60,7 @@ export async function publishClip(
       disableDuet: overrides.disableDuet,
       disableStitch: overrides.disableStitch
     })
-    return { ok: true, detail: res.url ? `Publié via upload-post → ${res.url}` : 'Publié via upload-post' }
+    return { ok: true, detail: res.url ? `Publié via upload-post → ${res.url}` : 'Publié via upload-post', postUrl: res.url, postId: res.postId }
   }
 
   if (deps.mode === 'tiktok' || deps.mode === 'tiktok_draft') {

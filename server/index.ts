@@ -563,6 +563,53 @@ app.get('/api/analytics', wrap(async (_req, res) => {
   res.json({ profiles: data })
 }))
 
+// Analytics par vidéo (pour les vidéos publiées via Cliperr, dont on connaît l'ID)
+async function fetchPostAnalytics(key: string, user: string, postId: string): Promise<{ views: number; likes: number; comments: number; shares: number } | null> {
+  try {
+    const r = await fetch(
+      `https://api.upload-post.com/api/uploadposts/post-analytics?user=${encodeURIComponent(user)}&platform_post_id=${encodeURIComponent(postId)}&platform=tiktok`,
+      { headers: { Authorization: `Apikey ${key}` } }
+    )
+    if (!r.ok) return null
+    const j = (await r.json()) as { platforms?: { tiktok?: { post_metrics?: { views?: number; likes?: number; comments?: number; shares?: number } } } }
+    const m = j.platforms?.tiktok?.post_metrics
+    if (!m) return null
+    return { views: m.views || 0, likes: m.likes || 0, comments: m.comments || 0, shares: m.shares || 0 }
+  } catch {
+    return null
+  }
+}
+const postsCache = new Map<string, { at: number; posts: unknown[] }>()
+app.get('/api/analytics/posts', wrap(async (req, res) => {
+  const profile = String(req.query.profile ?? '')
+  const key = getEncrypted('uploadpost_key')
+  if (!profile || !key) return res.json({ posts: [] })
+  const cached = postsCache.get(profile)
+  if (cached && Date.now() - cached.at < 10 * 60 * 1000) return res.json({ posts: cached.posts })
+  const clips = repo
+    .listClips()
+    .filter((c) => c.publishedAccount === profile && c.postId)
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, 20)
+  const posts = []
+  for (const c of clips) {
+    const m = await fetchPostAnalytics(key, profile, c.postId as string)
+    posts.push({
+      clipId: c.id,
+      title: c.title,
+      filePath: c.filePath,
+      postUrl: c.postUrl,
+      createdAt: c.createdAt,
+      views: m?.views ?? 0,
+      likes: m?.likes ?? 0,
+      comments: m?.comments ?? 0,
+      shares: m?.shares ?? 0
+    })
+  }
+  postsCache.set(profile, { at: Date.now(), posts })
+  res.json({ posts })
+}))
+
 app.get('/api/ideas/saved', wrap((_req, res) => res.json({ ideas: repo.listIdeas() })))
 app.delete('/api/ideas/:id', wrap((req, res) => {
   repo.deleteIdea(Number(req.params.id))

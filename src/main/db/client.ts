@@ -22,6 +22,12 @@ export function initDb(dataDir: string): BetterSQLite3Database<typeof schema> {
   if (!clipCols.some((c) => c.name === 'profile')) {
     _sqlite.exec('ALTER TABLE clips ADD COLUMN profile TEXT')
   }
+  if (!clipCols.some((c) => c.name === 'post_url')) {
+    _sqlite.exec('ALTER TABLE clips ADD COLUMN post_url TEXT')
+  }
+  if (!clipCols.some((c) => c.name === 'post_id')) {
+    _sqlite.exec('ALTER TABLE clips ADD COLUMN post_id TEXT')
+  }
   // Au démarrage, aucune source n'est réellement en cours : on débloque celles
   // restées en "running" suite à une fermeture/redémarrage de l'app.
   _sqlite.exec("UPDATE sources SET status = 'pending' WHERE status IN ('running', 'queued')")

@@ -89,6 +89,10 @@ export const api = {
         timeseries: { date: string; value: number }[]
       }[]
     }>('/api/analytics'),
+  analyticsPosts: (profile: string) =>
+    req<{ posts: { clipId: number; title: string | null; filePath: string | null; postUrl: string | null; createdAt: number; views: number; likes: number; comments: number; shares: number }[] }>(
+      `/api/analytics/posts?profile=${encodeURIComponent(profile)}`
+    ),
 
   // Idées virales + tendances
   generateIdeas: (niche: string, count: number, trends: string[]) =>

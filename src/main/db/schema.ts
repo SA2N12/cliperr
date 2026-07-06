@@ -27,6 +27,8 @@ export const clips = sqliteTable('clips', {
   publishStatus: text('publish_status').notNull().default('unpublished'),
   publishedAccount: text('published_account'),
   profile: text('profile'),
+  postUrl: text('post_url'),
+  postId: text('post_id'),
   createdAt: integer('created_at').notNull()
 })
 
@@ -91,6 +93,8 @@ CREATE TABLE IF NOT EXISTS clips (
   publish_status TEXT NOT NULL DEFAULT 'unpublished',
   published_account TEXT,
   profile TEXT,
+  post_url TEXT,
+  post_id TEXT,
   created_at INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS jobs (
