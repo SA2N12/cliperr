@@ -1,19 +1,20 @@
 :root {
-  --accent: #7c3aed;
-  --accent-strong: #6d28d9;
-  --accent-soft: #f3f0ff;
-  --accent-soft-2: #ede9fe;
-  --bg: #f7f8fa;
+  /* Thème monochrome (noir / blanc / gris) */
+  --accent: #18181b;
+  --accent-strong: #09090b;
+  --accent-soft: #f4f4f5;
+  --accent-soft-2: #e4e4e7;
+  --bg: #f4f4f5;
   --panel: #ffffff;
-  --panel-2: #fafafc;
-  --border: #ececf1;
-  --text: #1f2430;
-  --muted: #8b93a7;
-  --muted-2: #aab0c0;
+  --panel-2: #fafafa;
+  --border: #e7e7ea;
+  --text: #18181b;
+  --muted: #71717a;
+  --muted-2: #a1a1aa;
   --good: #16a34a;
   --bad: #dc2626;
-  --radius: 14px;
-  --shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06);
+  --radius: 16px;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 16px rgba(0, 0, 0, 0.04);
 }
 
 * {
@@ -43,15 +44,22 @@ button {
 /* Layout */
 .app {
   display: grid;
-  grid-template-columns: 248px 1fr;
+  grid-template-columns: 250px 1fr;
   height: 100vh;
+  background: var(--bg);
+  padding: 12px;
+  gap: 12px;
 }
 .sidebar {
   background: var(--panel);
-  border-right: 1px solid var(--border);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  box-shadow: var(--shadow);
+  height: 100%;
+  overflow: auto;
   display: flex;
   flex-direction: column;
-  padding: 18px 14px;
+  padding: 16px 12px;
   gap: 6px;
 }
 .brand {
@@ -66,7 +74,7 @@ button {
   width: 30px;
   height: 30px;
   border-radius: 8px;
-  background: linear-gradient(135deg, var(--accent), #a78bfa);
+  background: linear-gradient(135deg, #27272a, #09090b);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -127,7 +135,7 @@ button {
 }
 .main {
   overflow: auto;
-  padding: 28px 32px;
+  padding: 14px 20px 28px;
 }
 .page-head {
   display: flex;

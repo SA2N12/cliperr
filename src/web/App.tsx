@@ -173,7 +173,7 @@ function ProfilePicker({ profiles, active, onChange }: { profiles: PubProfile[];
             <button
               className="nav-item"
               onClick={() => { onChange(ALL_SCOPE); setOpen(false) }}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, background: isAll ? '#ede9fe' : undefined }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, background: isAll ? 'var(--accent-soft-2)' : undefined }}
             >
               <GlobeBadge />
               <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.2 }}>
@@ -187,7 +187,7 @@ function ProfilePicker({ profiles, active, onChange }: { profiles: PubProfile[];
                 key={p.username}
                 className="nav-item"
                 onClick={() => { onChange(p.username); setOpen(false) }}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, background: p.username === active ? '#ede9fe' : undefined }}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, background: p.username === active ? 'var(--accent-soft-2)' : undefined }}
               >
                 <Avatar url={p.avatarUrl} name={p.username} />
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label(p)}</span>
@@ -1467,7 +1467,7 @@ function Ideas({ toast, go }: { toast: (m: string) => void; go: (p: Page) => voi
                   key={t}
                   className="chip"
                   onClick={() => toggle(t)}
-                  style={{ cursor: 'pointer', border: selected.includes(t) ? '1px solid var(--accent)' : '1px solid transparent', background: selected.includes(t) ? '#ede9fe' : undefined }}
+                  style={{ cursor: 'pointer', border: selected.includes(t) ? '1px solid var(--accent)' : '1px solid transparent', background: selected.includes(t) ? 'var(--accent-soft-2)' : undefined }}
                 >
                   #{t}
                 </button>
