@@ -370,7 +370,7 @@ async function runVideoGen(
 // Idempotence : autopilot_count_<user>_<YYYY-MM-DD> = nb déjà produit aujourd'hui.
 const DEFAULT_NICHES = [
   'Histoires effrayantes et mystères non résolus',
-  'Tendances et buzz du moment (sujets viraux, actus qui font le buzz, challenges et memes TikTok)',
+  'Sport : moments légendaires, records et anecdotes qui marquent (foot, NBA, JO, boxe, F1…)',
   'Développement personnel et motivation',
   'Anecdotes historiques méconnues',
   'Psychologie et astuces mentales du quotidien'
