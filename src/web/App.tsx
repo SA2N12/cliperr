@@ -1311,6 +1311,12 @@ function Queue({ clips, go, scope, ideaVideo }: { clips: ClipDTO[]; go: (p: Page
             </div>
             <span className="pill-badge"><span className="dot" /> {plan.perDay}/jour/compte</span>
           </div>
+          {status?.paused && (
+            <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 10, background: '#fef3c7', color: '#b45309', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+              <div className="small"><b>⏸ En pause</b> — aucune vidéo n’est produite ni publiée tant que c’est en pause.</div>
+              <button className="btn small" onClick={togglePause}>Reprendre</button>
+            </div>
+          )}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
             {slots.map((s, i) => {
               const generating = i === nextIdx && !!activeGen
