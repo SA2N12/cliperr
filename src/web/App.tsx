@@ -356,11 +356,11 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
     [
       { id: 'dashboard', label: 'Tableau de bord', icon: 'dashboard' },
       ...(isAll ? [{ id: 'autopilot' as Page, label: 'Pilote auto', icon: 'bolt' }] : []),
-      { id: 'ideas', label: 'Idées virales', icon: 'bulb' }
+      { id: 'queue', label: 'File d’attente', icon: 'clock' }
     ],
     [
+      { id: 'ideas', label: 'Idées virales', icon: 'bulb' },
       { id: 'generate', label: 'Générer', icon: 'spark' },
-      { id: 'queue', label: 'File d’attente', icon: 'clock' },
       { id: 'clips', label: 'Clips', icon: 'clips' },
       { id: 'published', label: 'Publiés', icon: 'send' }
     ],
