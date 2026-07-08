@@ -1728,12 +1728,13 @@ function Sparkline({ data }: { data: number[] }): JSX.Element | null {
 }
 
 // ── Pilote automatique : contenu quotidien autonome par compte ──
-type AutopilotProfile = { username: string; handle: string | null; avatarUrl: string | null; niche: string; doneToday: number }
+type AutopilotProfile = { username: string; handle: string | null; avatarUrl: string | null; niche: string; cta: string; doneToday: number }
 type AutopilotState = { enabled: boolean; perDay: number; busy: boolean; profiles: AutopilotProfile[] }
 
 function Autopilot({ toast }: { toast: (m: string) => void }): JSX.Element {
   const [state, setState] = useState<AutopilotState | null>(null)
   const [niches, setNiches] = useState<Record<string, string>>({})
+  const [ctas, setCtas] = useState<Record<string, string>>({})
   const [enabled, setEnabled] = useState(false)
   const [perDay, setPerDay] = useState(1)
   const [saving, setSaving] = useState(false)
@@ -1745,8 +1746,10 @@ function Autopilot({ toast }: { toast: (m: string) => void }): JSX.Element {
       setEnabled(s.enabled)
       setPerDay(s.perDay)
       const n: Record<string, string> = {}
-      s.profiles.forEach((p) => { n[p.username] = p.niche })
+      const c: Record<string, string> = {}
+      s.profiles.forEach((p) => { n[p.username] = p.niche; c[p.username] = p.cta })
       setNiches(n)
+      setCtas(c)
     } catch { /* ignore */ }
   }, [])
   useEffect(() => { void load() }, [load])
@@ -1754,7 +1757,7 @@ function Autopilot({ toast }: { toast: (m: string) => void }): JSX.Element {
   const save = async (over?: { enabled?: boolean }): Promise<void> => {
     setSaving(true)
     try {
-      await api.saveAutopilot({ enabled: over?.enabled ?? enabled, perDay, niches })
+      await api.saveAutopilot({ enabled: over?.enabled ?? enabled, perDay, niches, ctas })
       toast('Pilote auto enregistré')
       await load()
     } catch (e) {
@@ -1797,20 +1800,25 @@ function Autopilot({ toast }: { toast: (m: string) => void }): JSX.Element {
       </div>
 
       <div className="card">
-        <div style={{ fontWeight: 600, marginBottom: 4 }}>Niche par compte</div>
-        <div className="muted small" style={{ marginBottom: 12 }}>Le contenu de chaque compte tourne autour de sa niche. Pré-rempli avec des niches « faceless » efficaces — modifie librement.</div>
+        <div style={{ fontWeight: 600, marginBottom: 4 }}>Niche &amp; CTA par compte</div>
+        <div className="muted small" style={{ marginBottom: 12 }}>
+          Le contenu de chaque compte tourne autour de sa niche. Le <b>CTA</b> (appel à l’action, ex. « lien en bio ») est ajouté automatiquement à la fin de <b>chaque légende</b> publiée sur ce compte — c’est lui qui transforme les vues en clics.
+        </div>
         {profiles.length === 0 ? (
           <div className="muted">Aucun compte upload-post connecté. Ajoute-les dans Réglages.</div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {profiles.map((p) => (
-              <div key={p.username} className="row" style={{ gap: 12, alignItems: 'center' }}>
+              <div key={p.username} className="row" style={{ gap: 12, alignItems: 'flex-start' }}>
                 <Avatar url={p.avatarUrl} name={p.username} size={38} />
-                <div style={{ width: 120, minWidth: 0 }}>
+                <div style={{ width: 120, minWidth: 0, paddingTop: 4 }}>
                   <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.handle ? '@' + p.handle : p.username}</div>
                   <div className="muted small">{p.doneToday} publiée{p.doneToday > 1 ? 's' : ''} auj.</div>
                 </div>
-                <input className="input-full" style={{ flex: 1 }} value={niches[p.username] ?? ''} placeholder="ex. mystères non résolus…" onChange={(e) => setNiches((m) => ({ ...m, [p.username]: e.target.value }))} />
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <input className="input-full" value={niches[p.username] ?? ''} placeholder="Niche — ex. mystères non résolus…" onChange={(e) => setNiches((m) => ({ ...m, [p.username]: e.target.value }))} />
+                  <input className="input-full" value={ctas[p.username] ?? ''} placeholder="CTA ajouté aux légendes — ex. 🔗 Mon guide gratuit est dans la bio" onChange={(e) => setCtas((m) => ({ ...m, [p.username]: e.target.value }))} />
+                </div>
               </div>
             ))}
           </div>

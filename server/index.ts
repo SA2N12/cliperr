@@ -50,7 +50,8 @@ import {
   publishClipById,
   uploadPostProfiles,
   activeProfile,
-  activeScope
+  activeScope,
+  profileCtas
 } from './tiktok-service'
 import type { PublishOverrides } from '../src/main/publish/index'
 
@@ -952,6 +953,7 @@ app.get('/api/autopilot', wrap(async (_req, res) => {
   const meta = new Map((await cachedUploadPostProfiles()).map((p) => [p.username, p]))
   const today = dayKey()
   const niches = autopilotNiches()
+  const ctas = profileCtas()
   res.json({
     enabled: repo.getSetting('autopilot_enabled') === '1',
     perDay: Math.max(1, Number(repo.getSetting('autopilot_per_day')) || 1),
@@ -961,12 +963,13 @@ app.get('/api/autopilot', wrap(async (_req, res) => {
       handle: meta.get(u)?.tiktokHandle ?? null,
       avatarUrl: meta.get(u)?.avatarUrl ?? null,
       niche: (niches[u] ?? '').trim() || nicheForProfile(u),
+      cta: (ctas[u] ?? '').trim(),
       doneToday: Number(repo.getSetting(`autopilot_count_${u}_${today}`)) || 0
     }))
   })
 }))
 app.post('/api/autopilot', wrap((req, res) => {
-  const b = (req.body ?? {}) as { enabled?: unknown; perDay?: unknown; niches?: unknown }
+  const b = (req.body ?? {}) as { enabled?: unknown; perDay?: unknown; niches?: unknown; ctas?: unknown }
   const wasEnabled = repo.getSetting('autopilot_enabled') === '1'
   if (typeof b.enabled === 'boolean') repo.setSetting('autopilot_enabled', b.enabled ? '1' : '0')
   if (b.perDay != null) repo.setSetting('autopilot_per_day', String(Math.max(1, Math.min(5, Math.round(Number(b.perDay)) || 1))))
@@ -976,6 +979,13 @@ app.post('/api/autopilot', wrap((req, res) => {
       if (typeof v === 'string' && v.trim()) clean[k] = v.trim()
     }
     repo.setSetting('autopilot_niches', JSON.stringify(clean))
+  }
+  if (b.ctas && typeof b.ctas === 'object') {
+    const clean: Record<string, string> = {}
+    for (const [k, v] of Object.entries(b.ctas as Record<string, unknown>)) {
+      if (typeof v === 'string' && v.trim()) clean[k] = v.trim().slice(0, 220)
+    }
+    repo.setSetting('profile_ctas', JSON.stringify(clean))
   }
   reloadAutopilot()
   // Passage OFF → ON : on lance tout de suite un premier cycle (1 vidéo),

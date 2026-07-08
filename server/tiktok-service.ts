@@ -135,6 +135,23 @@ export function activeProfile(): string {
   return (uploadPostProfiles()[0] || '').trim()
 }
 
+/** CTA (« appel à l'action » + lien en bio) configuré par profil — ajouté aux légendes. */
+export function profileCtas(): Record<string, string> {
+  try {
+    const raw = repo.getSetting('profile_ctas')
+    if (raw) {
+      const o = JSON.parse(raw) as unknown
+      if (o && typeof o === 'object') return o as Record<string, string>
+    }
+  } catch {
+    /* JSON invalide → vide */
+  }
+  return {}
+}
+export function ctaForProfile(user: string): string {
+  return (profileCtas()[user] ?? '').trim()
+}
+
 /** Marque le quota journalier « atteint » pour un profil (déclenche la bannière globale). */
 function setQuotaReached(profile: string): void {
   if (profile) repo.setSetting(`quota_reached_${profile}`, String(Date.now()))
@@ -225,8 +242,23 @@ export async function publishClipById(
       const target = overrides?.uploadPostUser?.trim() || activeProfile()
       if (!target) throw new Error('Aucun profil TikTok sélectionné')
       deps.uploadPostUser = target
+      // CTA du compte (« lien en bio »…) ajouté automatiquement à la légende.
+      let effective = overrides
+      const cta = ctaForProfile(target)
+      if (cta) {
+        const manual = overrides?.caption?.trim()
+        if (manual) {
+          // Légende saisie à la main : on ajoute le CTA à la fin (sans doublon).
+          if (!manual.includes(cta)) effective = { ...overrides, caption: `${manual}\n\n${cta}` }
+        } else {
+          // Légende auto : description → CTA → hashtags (CTA visible avant les tags).
+          const body = clip.description || clip.title || ''
+          const caption = [body, cta, clip.hashtags || ''].map((s) => s.trim()).filter(Boolean).join('\n\n')
+          effective = { ...overrides, caption }
+        }
+      }
       try {
-        const out = await publishClip(clip, deps, overrides)
+        const out = await publishClip(clip, deps, effective)
         repo.updateClip(id, { publishStatus: 'published', publishedAccount: target, postUrl: out.postUrl ?? null, postId: out.postId ?? null })
         clearQuota(target) // publication réussie → quota de nouveau OK, bannière masquée
         log?.(`Clip #${id} publié sur « ${target} » — ${out.detail}`)
