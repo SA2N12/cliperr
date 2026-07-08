@@ -414,7 +414,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
         {page === 'ideas' && <Ideas toast={showToast} go={setPage} />}
         {page === 'history' && <History sources={sources} clips={clips} progress={progress} onRefresh={refresh} toast={showToast} goClips={() => setPage('clips')} />}
         {page === 'clips' && <Clips clips={clips} sources={sources} onRefresh={refresh} toast={showToast} ttProfile={ttProfile} scope={scope} />}
-        {page === 'queue' && <Queue clips={clips} go={setPage} />}
+        {page === 'queue' && <Queue clips={clips} go={setPage} scope={scope} />}
         {page === 'published' && <Published clips={clips} go={setPage} scope={scope} />}
         {page === 'settings' && <Settings toast={showToast} onTtProfile={setTtProfile} />}
       </main>
@@ -1221,11 +1221,16 @@ const CRON_LABELS: Record<string, string> = {
   '0 */3 * * *': 'toutes les 3 h'
 }
 
-function Queue({ clips, go }: { clips: ClipDTO[]; go: (p: Page) => void }): JSX.Element {
+type AutopilotSlot = { user: string; handle: string | null; avatarUrl: string | null; niche: string; ordinal: number; etaHm: number; eta: string; done: boolean }
+type AutopilotPlan = { enabled: boolean; perDay: number; window: { start: number; end: number }; nowHm: number; slots: AutopilotSlot[] }
+
+function Queue({ clips, go, scope }: { clips: ClipDTO[]; go: (p: Page) => void; scope: string }): JSX.Element {
   const [status, setStatus] = useState<{ enabled: boolean; paused: boolean; cron: string; nextRunAt: number | null; intervalSec: number | null; lastRunAt: number | null } | null>(null)
+  const [plan, setPlan] = useState<AutopilotPlan | null>(null)
   const [now, setNow] = useState(Date.now())
   const load = useCallback((): void => {
     api.schedulerStatus().then(setStatus).catch(() => undefined)
+    api.autopilotPlan().then(setPlan).catch(() => undefined)
   }, [])
   useEffect(() => {
     load()
@@ -1236,6 +1241,10 @@ function Queue({ clips, go }: { clips: ClipDTO[]; go: (p: Page) => void }): JSX.
       window.clearInterval(tick)
     }
   }, [load])
+
+  const slots = (plan?.slots ?? []).filter((s) => scope === ALL_SCOPE || s.user === scope)
+  const doneCount = slots.filter((s) => s.done).length
+  const nextIdx = slots.findIndex((s) => !s.done)
 
   const togglePause = async (): Promise<void> => {
     const paused = !status?.paused
@@ -1264,6 +1273,37 @@ function Queue({ clips, go }: { clips: ClipDTO[]; go: (p: Page) => void }): JSX.
           </button>
         )}
       </div>
+
+      {plan?.enabled && slots.length > 0 && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div className="row" style={{ marginBottom: 4 }}>
+            <div>
+              <strong>Pilote auto — aujourd’hui</strong>
+              <div className="muted small">{doneCount}/{slots.length} publiée{slots.length > 1 ? 's' : ''} · étalées de {plan.window.start}h à {plan.window.end}h (Paris)</div>
+            </div>
+            <span className="pill-badge"><span className="dot" /> {plan.perDay}/jour/compte</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+            {slots.map((s, i) => (
+              <div key={`${s.user}-${s.ordinal}`} className="row" style={{ gap: 12 }}>
+                <div style={{ width: 46, flexShrink: 0, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: s.done ? 'var(--muted)' : 'var(--accent-strong)' }}>{s.eta}</div>
+                <Avatar url={s.avatarUrl} name={s.user} size={30} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.handle ? '@' + s.handle : s.user}</div>
+                  <div className="muted small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.niche.split(' (')[0]}</div>
+                </div>
+                {s.done ? (
+                  <span className="chip" style={{ background: '#dcfce7', color: 'var(--good)' }}>✓ publiée</span>
+                ) : i === nextIdx ? (
+                  <span className="chip">⏳ prochaine</span>
+                ) : (
+                  <span className="muted small">à venir</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {!status?.enabled ? (
         <div className="card" style={{ textAlign: 'center', padding: 36 }}>

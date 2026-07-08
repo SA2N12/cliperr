@@ -974,6 +974,46 @@ app.post('/api/autopilot/run-now', wrap((_req, res) => {
   void runAutopilotTick(true).catch((e) => emitLog(`Pilote auto : ${e instanceof Error ? e.message : String(e)}`))
   res.json({ ok: true })
 }))
+// Planning du jour : créneaux estimés (heure Paris) par compte, lissés sur la fenêtre.
+app.get('/api/autopilot/plan', wrap(async (_req, res) => {
+  const enabled = repo.getSetting('autopilot_enabled') === '1'
+  const perDay = Math.max(1, Number(repo.getSetting('autopilot_per_day')) || 1)
+  const profiles = uploadPostProfiles()
+  const n = profiles.length
+  const { hm: nowHm } = parisClock()
+  if (!n) return res.json({ enabled, perDay, window: { start: PUB_START_HOUR, end: PUB_END_HOUR }, nowHm, slots: [] })
+  const meta = new Map((await cachedUploadPostProfiles()).map((p) => [p.username, p]))
+  const today = dayKey()
+  const target = perDay * n
+  const windowLen = PUB_END_HOUR - PUB_START_HOUR
+  const fmt = (h: number): string => {
+    let hh = Math.floor(h)
+    let mm = Math.round((h - hh) * 60)
+    if (mm === 60) { hh += 1; mm = 0 }
+    return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`
+  }
+  const slots: { user: string; handle: string | null; avatarUrl: string | null; niche: string; ordinal: number; etaHm: number; eta: string; done: boolean }[] = []
+  profiles.forEach((user, a) => {
+    const done = Number(repo.getSetting(`autopilot_count_${user}_${today}`)) || 0
+    const m = meta.get(user)
+    for (let j = 1; j <= perDay; j++) {
+      const k = a + 1 + (j - 1) * n // rang global dans l'ordre round-robin
+      const etaHm = target > 1 ? PUB_START_HOUR + ((k - 1) * windowLen) / target : PUB_START_HOUR
+      slots.push({
+        user,
+        handle: m?.tiktokHandle ?? null,
+        avatarUrl: m?.avatarUrl ?? null,
+        niche: nicheForProfile(user),
+        ordinal: j,
+        etaHm,
+        eta: fmt(etaHm),
+        done: done >= j
+      })
+    }
+  })
+  slots.sort((x, y) => x.etaHm - y.etaHm)
+  res.json({ enabled, perDay, window: { start: PUB_START_HOUR, end: PUB_END_HOUR }, nowHm, today, slots })
+}))
 
 // TikTok
 app.get('/api/tiktok/status', wrap((_req, res) =>

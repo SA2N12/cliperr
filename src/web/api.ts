@@ -106,6 +106,14 @@ export const api = {
   saveAutopilot: (cfg: { enabled?: boolean; perDay?: number; niches?: Record<string, string> }) =>
     post<{ ok: boolean }>('/api/autopilot', cfg),
   runAutopilotNow: () => post<{ ok: boolean }>('/api/autopilot/run-now'),
+  autopilotPlan: () =>
+    req<{
+      enabled: boolean
+      perDay: number
+      window: { start: number; end: number }
+      nowHm: number
+      slots: { user: string; handle: string | null; avatarUrl: string | null; niche: string; ordinal: number; etaHm: number; eta: string; done: boolean }[]
+    }>('/api/autopilot/plan'),
 
   // Idées virales + tendances
   generateIdeas: (niche: string, count: number, trends: string[]) =>
