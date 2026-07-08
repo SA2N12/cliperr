@@ -1877,6 +1877,7 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
     api.uploadPostStatus().then((r) => setUpHas(r.has)).catch(() => undefined)
     api.openaiStatus().then((r) => setOpenaiHas(r.has)).catch(() => undefined)
     api.musicList().then((r) => setMusic(r.tracks)).catch(() => undefined)
+    api.golinks().then((r) => setLinks(Object.entries(r.links).map(([slug, url]) => ({ slug, url })))).catch(() => undefined)
     api.tiktokStatus().then(setTt).catch(() => undefined)
   }, [loadFlag])
 
@@ -1900,6 +1901,22 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
     if (!sel.length && flags.uploadpost_user) sel = [flags.uploadpost_user]
     setUpSelected(sel)
   }, [flags.uploadpost_users, flags.uploadpost_user])
+
+  // Liens courts publics (bio TikTok) : slug → URL de redirection (affiliés…)
+  const [links, setLinks] = useState<{ slug: string; url: string }[]>([])
+  const saveLinks = async (): Promise<void> => {
+    const map: Record<string, string> = {}
+    for (const l of links) {
+      if (l.slug.trim() && l.url.trim()) map[l.slug.trim().toLowerCase()] = l.url.trim()
+    }
+    try {
+      const r = await api.saveGolinks(map)
+      setLinks(Object.entries(r.links).map(([slug, url]) => ({ slug, url })))
+      toast('Liens courts enregistrés')
+    } catch (e) {
+      toast(`Erreur : ${String((e as Error).message)}`)
+    }
+  }
 
   const fetchProfiles = async (): Promise<void> => {
     setUpLoading(true)
@@ -1989,6 +2006,27 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
             )}
           </div>
         </Field>
+      </div>
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <h3 style={{ marginTop: 0 }}>Liens courts (bio TikTok)</h3>
+        <p className="small" style={{ marginTop: 0 }}>
+          Adresses courtes <b>publiques</b> qui redirigent vers tes liens (affiliés…) : <b>cliperr.juleslecorre.fr/nom</b>.
+          À écrire dans le <b>texte de bio</b> tant que le lien cliquable n’est pas débloqué (~1 000 abonnés). La commission est préservée.
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {links.map((l, i) => (
+            <div key={i} style={{ display: 'flex', gap: 8 }}>
+              <input style={{ width: 150 }} placeholder="nom (ex. mystere)" value={l.slug} onChange={(e) => setLinks((xs) => xs.map((x, j) => (j === i ? { ...x, slug: e.target.value } : x)))} />
+              <input className="input-full" style={{ flex: 1 }} placeholder="https://amzn.to/…" value={l.url} onChange={(e) => setLinks((xs) => xs.map((x, j) => (j === i ? { ...x, url: e.target.value } : x)))} />
+              <button className="btn small" title="Supprimer" onClick={() => setLinks((xs) => xs.filter((_, j) => j !== i))}>🗑</button>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+          <button className="btn" onClick={() => setLinks((xs) => [...xs, { slug: '', url: '' }])}>+ Ajouter</button>
+          <button className="btn primary" onClick={() => void saveLinks()}>Enregistrer</button>
+        </div>
       </div>
 
       <div className="card" style={{ marginBottom: 16 }}>

@@ -132,6 +132,10 @@ export const api = {
   deleteMusic: (name: string) => req(`/api/music/${encodeURIComponent(name)}`, { method: 'DELETE' }),
   trends: () => req<{ configured: boolean; hashtags: string[]; error?: string }>('/api/trends'),
 
+  // Liens courts publics (bio TikTok)
+  golinks: () => req<{ links: Record<string, string> }>('/api/golinks'),
+  saveGolinks: (links: Record<string, string>) => post<{ ok: boolean; links: Record<string, string> }>('/api/golinks', { links }),
+
   // Réglages
   getFlag: (key: string) => req<{ value: string | null }>(`/api/settings/flag/${encodeURIComponent(key)}`),
   setFlag: (key: string, value: string) => post('/api/settings/flag', { key, value }),

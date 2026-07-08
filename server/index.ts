@@ -1108,6 +1108,46 @@ app.post('/api/tiktok/disconnect', wrap((_req, res) => {
   res.json({ ok: true })
 }))
 
+// ── Liens courts publics (« lien en bio ») : cliperr.../mystere → lien affilié ──
+const GO_KEY = 'golinks'
+const GO_SLUG_RE = /^[a-z0-9-]{2,30}$/
+const GO_RESERVED = new Set(['api', 'media', 'assets', 'login'])
+function goLinks(): Record<string, string> {
+  try {
+    const raw = repo.getSetting(GO_KEY)
+    if (raw) {
+      const o = JSON.parse(raw) as unknown
+      if (o && typeof o === 'object') return o as Record<string, string>
+    }
+  } catch {
+    /* JSON invalide → vide */
+  }
+  return {}
+}
+// Route PUBLIQUE (pas d'auth) : les visiteurs TikTok ne sont pas connectés.
+app.get(/^\/[a-z0-9-]{2,30}$/, (req, res, next) => {
+  const url = goLinks()[req.path.slice(1)]
+  if (!url) return next()
+  res.redirect(302, url)
+})
+// Gestion (protégée par l'auth /api)
+app.get('/api/golinks', wrap((_req, res) => res.json({ links: goLinks() })))
+app.post('/api/golinks', wrap((req, res) => {
+  const body = (req.body ?? {}) as { links?: unknown }
+  const clean: Record<string, string> = {}
+  if (body.links && typeof body.links === 'object') {
+    for (const [k, v] of Object.entries(body.links as Record<string, unknown>)) {
+      const slug = String(k).trim().toLowerCase()
+      const url = typeof v === 'string' ? v.trim() : ''
+      if (!GO_SLUG_RE.test(slug) || GO_RESERVED.has(slug)) continue
+      if (!/^https?:\/\//i.test(url)) continue
+      clean[slug] = url
+    }
+  }
+  repo.setSetting(GO_KEY, JSON.stringify(clean))
+  res.json({ ok: true, links: clean })
+}))
+
 // Médias (clips) — statiques protégés
 app.use('/media/clips', express.static(paths.clips))
 
