@@ -11,7 +11,7 @@ import {
   type SavedIdea
 } from './api'
 
-type Page = 'dashboard' | 'autopilot' | 'generate' | 'ideas' | 'myideas' | 'history' | 'clips' | 'queue' | 'published' | 'settings'
+type Page = 'dashboard' | 'autopilot' | 'generate' | 'ideas' | 'history' | 'clips' | 'queue' | 'published' | 'settings'
 
 const ICONS: Record<string, string> = {
   dashboard: 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z',
@@ -356,8 +356,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
     [
       { id: 'dashboard', label: 'Tableau de bord', icon: 'dashboard' },
       ...(isAll ? [{ id: 'autopilot' as Page, label: 'Pilote auto', icon: 'bolt' }] : []),
-      { id: 'ideas', label: 'Idées virales', icon: 'bulb' },
-      { id: 'myideas', label: 'Mes idées', icon: 'bookmark' }
+      { id: 'ideas', label: 'Idées virales', icon: 'bulb' }
     ],
     [
       { id: 'generate', label: 'Générer', icon: 'spark' },
@@ -413,7 +412,6 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
         {page === 'autopilot' && isAll && <Autopilot toast={showToast} />}
         {page === 'generate' && <Generate sources={sources} progress={progress} onRefresh={refresh} toast={showToast} goHistory={() => setPage('history')} />}
         {page === 'ideas' && <Ideas toast={showToast} go={setPage} />}
-        {page === 'myideas' && <MyIdeas toast={showToast} go={setPage} />}
         {page === 'history' && <History sources={sources} clips={clips} progress={progress} onRefresh={refresh} toast={showToast} goClips={() => setPage('clips')} />}
         {page === 'clips' && <Clips clips={clips} sources={sources} onRefresh={refresh} toast={showToast} ttProfile={ttProfile} scope={scope} />}
         {page === 'queue' && <Queue clips={clips} go={setPage} />}
@@ -1428,9 +1426,11 @@ function Ideas({ toast, go }: { toast: (m: string) => void; go: (p: Page) => voi
   const [trends, setTrends] = useState<string[]>([])
   const [trendsConfigured, setTrendsConfigured] = useState<boolean | null>(null)
   const [selected, setSelected] = useState<string[]>([])
-  const [ideas, setIdeas] = useState<ViralIdea[]>([])
   const [loading, setLoading] = useState(false)
   const [trendsLoading, setTrendsLoading] = useState(false)
+  const [saved, setSaved] = useState<SavedIdea[]>([])
+  const [loadingSaved, setLoadingSaved] = useState(true)
+  const [gen, setGen] = useState<Record<number, { status: 'running' | 'done' | 'error'; message: string }>>({})
 
   const loadTrends = useCallback(async (): Promise<void> => {
     setTrendsLoading(true)
@@ -1444,9 +1444,20 @@ function Ideas({ toast, go }: { toast: (m: string) => void; go: (p: Page) => voi
       setTrendsLoading(false)
     }
   }, [])
+  const loadSaved = useCallback(async (): Promise<void> => {
+    setLoadingSaved(true)
+    try { setSaved((await api.savedIdeas()).ideas) } catch { /* ignore */ } finally { setLoadingSaved(false) }
+  }, [])
+  useEffect(() => { void loadTrends(); void loadSaved() }, [loadTrends, loadSaved])
   useEffect(() => {
-    void loadTrends()
-  }, [loadTrends])
+    return subscribe({
+      onIdeaVideo: (e) => {
+        setGen((g) => ({ ...g, [e.ideaId]: { status: e.status, message: e.message } }))
+        if (e.status === 'done') toast('Vidéo prête ✅ — retrouve-la dans Clips')
+        if (e.status === 'error') toast(`Vidéo : ${e.message}`)
+      }
+    })
+  }, [toast])
 
   const toggle = (t: string): void => setSelected((s) => (s.includes(t) ? s.filter((x) => x !== t) : [...s, t]))
 
@@ -1458,9 +1469,9 @@ function Ideas({ toast, go }: { toast: (m: string) => void; go: (p: Page) => voi
     setLoading(true)
     try {
       const r = await api.generateIdeas(niche.trim(), count, selected)
-      setIdeas(r.ideas)
       if (!r.ideas.length) toast('Aucune idée générée — réessaie')
-      else toast(`${r.ideas.length} idées générées (enregistrées dans « Mes idées »)`)
+      else toast(`${r.ideas.length} idées générées ✓`)
+      await loadSaved()
     } catch (e) {
       toast(`Erreur : ${String((e as Error).message)}`)
     } finally {
@@ -1472,14 +1483,29 @@ function Ideas({ toast, go }: { toast: (m: string) => void; go: (p: Page) => voi
     navigator.clipboard?.writeText(text)
     toast('Copié ✓')
   }
+  const genVideo = async (id: number): Promise<void> => {
+    setGen((g) => ({ ...g, [id]: { status: 'running', message: 'Lancement…' } }))
+    try {
+      await api.generateIdeaVideo(id)
+    } catch (e) {
+      setGen((g) => ({ ...g, [id]: { status: 'error', message: String((e as Error).message) } }))
+    }
+  }
+  const del = async (id: number): Promise<void> => {
+    await api.deleteIdea(id)
+    setSaved((xs) => xs.filter((x) => x.id !== id))
+    toast('Idée supprimée')
+  }
+  const fmtDate = (ts: number): string => new Date(ts).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })
 
   return (
     <>
       <div className="page-head">
         <div>
           <h1>Idées virales</h1>
-          <p>Génère des idées et scripts de vidéos par IA, ancrés sur les tendances TikTok du moment.</p>
+          <p>Génère des idées et scripts de vidéos par IA, ancrés sur les tendances TikTok. Toutes tes idées sont enregistrées ci-dessous.</p>
         </div>
+        <button className="btn" onClick={loadSaved} disabled={loadingSaved}><Icon name="refresh" size={15} /> Actualiser</button>
       </div>
 
       <div className="card" style={{ marginBottom: 16 }}>
@@ -1521,7 +1547,7 @@ function Ideas({ toast, go }: { toast: (m: string) => void; go: (p: Page) => voi
         )}
       </div>
 
-      <div className="card" style={{ marginBottom: 16 }}>
+      <div className="card" style={{ marginBottom: 20 }}>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <div style={{ flex: 1, minWidth: 240 }}>
             <label className="muted small" style={{ display: 'block', marginBottom: 6 }}>Niche / thème</label>
@@ -1539,14 +1565,25 @@ function Ideas({ toast, go }: { toast: (m: string) => void; go: (p: Page) => voi
         </div>
       </div>
 
-      {ideas.length > 0 ? (
+      <h3 style={{ margin: '0 2px 12px' }}>Mes idées ({saved.length})</h3>
+      {loadingSaved ? (
+        <div className="card muted">Chargement…</div>
+      ) : saved.length === 0 ? (
+        <div className="card muted">Aucune idée pour l’instant — entre une niche ci-dessus et clique « Générer ».</div>
+      ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {ideas.map((idea, i) => (
-            <IdeaCard key={i} idea={idea} onCopy={() => copy(ideaToText(idea))} />
+          {saved.map((idea) => (
+            <IdeaCard
+              key={idea.id}
+              idea={idea}
+              meta={`${idea.niche} · ${fmtDate(idea.createdAt)}`}
+              onCopy={() => copy(ideaToText(idea))}
+              onDelete={() => del(idea.id)}
+              onGenVideo={() => genVideo(idea.id)}
+              gen={gen[idea.id]}
+            />
           ))}
         </div>
-      ) : (
-        !loading && <div className="card muted">Entre une niche et clique « Générer » pour obtenir des idées de vidéos virales avec script.</div>
       )}
     </>
   )
@@ -1582,92 +1619,6 @@ function IdeaCard({ idea, onCopy, meta, onDelete, onGenVideo, gen }: { idea: Vir
       <div className="muted small" style={{ marginTop: 8 }}><b>Format :</b> {idea.format}</div>
       {idea.hashtags.length > 0 && <div className="small" style={{ marginTop: 8, color: 'var(--accent)' }}>{idea.hashtags.join(' ')}</div>}
     </div>
-  )
-}
-
-function MyIdeas({ toast, go }: { toast: (m: string) => void; go: (p: Page) => void }): JSX.Element {
-  const [ideas, setIdeas] = useState<SavedIdea[]>([])
-  const [loading, setLoading] = useState(true)
-  const [gen, setGen] = useState<Record<number, { status: 'running' | 'done' | 'error'; message: string }>>({})
-
-  const load = useCallback(async (): Promise<void> => {
-    setLoading(true)
-    try {
-      const r = await api.savedIdeas()
-      setIdeas(r.ideas)
-    } catch {
-      /* ignore */
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-  useEffect(() => {
-    void load()
-  }, [load])
-  useEffect(() => {
-    return subscribe({
-      onIdeaVideo: (e) => {
-        setGen((g) => ({ ...g, [e.ideaId]: { status: e.status, message: e.message } }))
-        if (e.status === 'done') toast('Vidéo prête ✅ — retrouve-la dans Clips')
-        if (e.status === 'error') toast(`Vidéo : ${e.message}`)
-      }
-    })
-  }, [toast])
-
-  const genVideo = async (id: number): Promise<void> => {
-    setGen((g) => ({ ...g, [id]: { status: 'running', message: 'Lancement…' } }))
-    try {
-      await api.generateIdeaVideo(id)
-    } catch (e) {
-      setGen((g) => ({ ...g, [id]: { status: 'error', message: String((e as Error).message) } }))
-    }
-  }
-
-  const copy = (text: string): void => {
-    navigator.clipboard?.writeText(text)
-    toast('Copié ✓')
-  }
-  const del = async (id: number): Promise<void> => {
-    await api.deleteIdea(id)
-    setIdeas((xs) => xs.filter((x) => x.id !== id))
-    toast('Idée supprimée')
-  }
-  const fmtDate = (ts: number): string => new Date(ts).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })
-
-  return (
-    <>
-      <div className="page-head">
-        <div>
-          <h1>Mes idées ({ideas.length})</h1>
-          <p>Toutes les idées générées, enregistrées automatiquement.</p>
-        </div>
-        <button className="btn" onClick={load} disabled={loading}><Icon name="refresh" size={15} /> Actualiser</button>
-      </div>
-      {loading ? (
-        <div className="card muted">Chargement…</div>
-      ) : ideas.length === 0 ? (
-        <div className="card" style={{ textAlign: 'center', padding: 36 }}>
-          <div className="dz-icon" style={{ margin: '0 auto 12px' }}><Icon name="bulb" size={24} /></div>
-          <div style={{ fontWeight: 600 }}>Aucune idée enregistrée</div>
-          <p className="muted small">Génère des idées dans « Idées virales » — elles seront stockées ici.</p>
-          <button className="btn primary" style={{ marginTop: 6 }} onClick={() => go('ideas')}>Générer des idées</button>
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {ideas.map((idea) => (
-            <IdeaCard
-              key={idea.id}
-              idea={idea}
-              meta={`${idea.niche} · ${fmtDate(idea.createdAt)}`}
-              onCopy={() => copy(ideaToText(idea))}
-              onDelete={() => del(idea.id)}
-              onGenVideo={() => genVideo(idea.id)}
-              gen={gen[idea.id]}
-            />
-          ))}
-        </div>
-      )}
-    </>
   )
 }
 
