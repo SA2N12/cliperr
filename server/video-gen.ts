@@ -50,12 +50,13 @@ async function buildStoryboard(
             properties: {
               narration: {
                 type: 'string',
-                description: 'Une phrase de voix off en français, courte, orale et percutante (une seule phrase)'
+                description:
+                  'Une phrase de voix off en français : courte (≤ 18 mots), orale, percutante, tutoiement. La 1re est un hook choc qui crée une tension immédiate ; la dernière est une punchline + appel à l\'action.'
               },
               imagePrompt: {
                 type: 'string',
                 description:
-                  'Description visuelle en anglais, concrète et esthétique, pour une image verticale ; AUCUN texte, logo ni watermark'
+                  'Description visuelle en anglais, très cinématographique et dramatique (éclairage travaillé, ambiance, angle fort), pour une image verticale ; AUCUN texte, logo ni watermark'
               }
             },
             required: ['narration', 'imagePrompt']
@@ -66,16 +67,24 @@ async function buildStoryboard(
     }
   } satisfies Anthropic.Tool
 
-  const prompt = `Transforme cette idée de vidéo TikTok en un storyboard de 4 à 6 scènes pour une vidéo verticale « faceless ».
+  const prompt = `Tu es un scénariste TikTok expert en RÉTENTION et en viralité. Transforme cette idée en storyboard de 5 à 7 scènes pour une vidéo verticale « faceless » de 25 à 40 secondes.
 Titre : ${idea.title}
 Hook : ${idea.hook}
-Script : ${idea.script.join(' ')}
+Script de départ : ${idea.script.join(' ')}
 
-Pour chaque scène : une phrase de VOIX OFF en français (courte, orale, accrocheuse — la 1re scène reprend/adapte le hook), et un IMAGE PROMPT en anglais décrivant un visuel vertical concret et cinématographique (pas de texte à l'image). Commence fort, garde un rythme rapide. Réponds uniquement via l'outil storyboard.`
+Règles de rétention (déterminantes pour la performance et les revenus TikTok) :
+- SCÈNE 1 = HOOK CHOC dès la 1re seconde : tension/curiosité irrésistible (question intrigante, affirmation surprenante, « Personne ne sait que… »). Jamais de démarrage mou ni de « Aujourd'hui on va parler de… ».
+- Ouvre une BOUCLE au début (promesse implicite) et ne la referme qu'à la toute fin → donne envie de rester jusqu'au bout.
+- Rythme rapide : 1 idée = 1 scène = 1 phrase courte, orale, percutante. Zéro remplissage.
+- Monte en intensité ; garde l'info la plus forte (le payoff) pour l'avant-dernière scène.
+- DERNIÈRE scène = punchline mémorable + appel à l'action naturel (ex. « Abonne-toi, la suite est folle », « Dis-moi en commentaire si tu le savais »).
+- Ton : tutoiement, énergique, immersif, comme si tu parlais à un pote.
+
+Pour chaque scène : la phrase de VOIX OFF (français, courte, orale) + un IMAGE PROMPT en anglais décrivant un visuel vertical ULTRA-cinématographique, dramatique et très détaillé (éclairage volumétrique, ambiance, angle fort, couleurs riches), sans aucun texte. Réponds uniquement via l'outil storyboard.`
 
   const msg = await client.messages.create({
     model,
-    max_tokens: 2000,
+    max_tokens: 3000,
     tools: [tool],
     tool_choice: { type: 'tool', name: 'storyboard' },
     messages: [{ role: 'user', content: prompt }]
@@ -137,12 +146,12 @@ Réponds via l'outil pick_music en choisissant un nom EXACT de la liste.`
   return fallback
 }
 
-/** Voix off OpenAI (tts-1) → fichier mp3. */
+/** Voix off OpenAI (tts-1-hd, haute qualité) → fichier mp3. Débit légèrement soutenu (énergie TikTok). */
 async function tts(openaiKey: string, voice: string, text: string, dest: string): Promise<void> {
   const res = await fetch(`${OPENAI}/audio/speech`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: 'tts-1', voice, input: text, response_format: 'mp3' })
+    body: JSON.stringify({ model: 'tts-1-hd', voice, input: text, response_format: 'mp3', speed: 1.08 })
   })
   if (!res.ok) throw new Error(`OpenAI TTS ${res.status} : ${(await res.text()).slice(0, 200)}`)
   await writeFile(dest, Buffer.from(await res.arrayBuffer()))
@@ -155,7 +164,7 @@ async function genImage(openaiKey: string, prompt: string, dest: string): Promis
     headers: { Authorization: `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: 'gpt-image-1',
-      prompt: `${prompt}. Vertical 9:16 cinematic composition, high detail, no text, no watermark.`,
+      prompt: `${prompt}. Vertical 9:16, ultra-cinematic, dramatic volumetric lighting, rich saturated colors, shallow depth of field, highly detailed, photorealistic film still, epic mood, no text, no watermark, no logo.`,
       size: '1024x1536',
       quality: 'medium',
       n: 1
@@ -211,7 +220,7 @@ WrapStyle: 0
 ScaledBorderAndShadow: yes
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BackColour, Bold, Italic, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV
-Style: Def,Liberation Sans,60,&H00FFFFFF,&H00000000,&H00000000,1,0,1,5,2,2,100,100,300
+Style: Def,Liberation Sans,76,&H00FFFFFF,&H00000000,&H96000000,1,0,1,6,3,2,90,90,430
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 Dialogue: 0,0:00:00.00,${assTime(durationSec)},Def,,0,0,0,,${assEscape(text)}`
@@ -300,16 +309,17 @@ export async function generateVideoFromIdea(
     if (opts.musicTrack) {
       log?.('Ajout de la musique de fond…')
       const fadeSt = Math.max(0, total - 2)
-      // Musique bouclée sous la voix (bien audible mais dominée par la voix),
-      // limiteur pour éviter la saturation.
+      // Ducking (sidechaincompress) : la musique est bien présente (0.55) mais
+      // s'abaisse automatiquement dès que la voix parle → voix toujours nette,
+      // musique pleine dans les silences. Limiteur pour éviter la saturation.
       await run(ctx.bin.ffmpeg, [
         '-y', '-loglevel', 'error',
         '-i', concatPath,
         '-stream_loop', '-1', '-i', opts.musicTrack,
         '-filter_complex',
-        `[1:a]volume=0.30,afade=t=out:st=${fadeSt.toFixed(2)}:d=2[m];[0:a][m]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.97[a]`,
+        `[0:a]asplit=2[vk][vm];[1:a]volume=0.55,afade=t=out:st=${fadeSt.toFixed(2)}:d=2[bg];[bg][vk]sidechaincompress=threshold=0.02:ratio=8:attack=15:release=400[bgd];[vm][bgd]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.96[a]`,
         '-map', '0:v', '-map', '[a]',
-        '-c:v', 'copy', '-c:a', 'aac', '-b:a', '128k',
+        '-c:v', 'copy', '-c:a', 'aac', '-b:a', '160k',
         '-t', String(total),
         finalPath
       ])
