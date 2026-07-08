@@ -414,7 +414,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
         {page === 'ideas' && <Ideas toast={showToast} go={setPage} />}
         {page === 'history' && <History sources={sources} clips={clips} progress={progress} onRefresh={refresh} toast={showToast} goClips={() => setPage('clips')} />}
         {page === 'clips' && <Clips clips={clips} sources={sources} onRefresh={refresh} toast={showToast} ttProfile={ttProfile} scope={scope} />}
-        {page === 'queue' && <Queue clips={clips} go={setPage} scope={scope} />}
+        {page === 'queue' && <Queue clips={clips} go={setPage} scope={scope} ideaVideo={ideaVideo} />}
         {page === 'published' && <Published clips={clips} go={setPage} scope={scope} />}
         {page === 'settings' && <Settings toast={showToast} onTtProfile={setTtProfile} />}
       </main>
@@ -1224,8 +1224,28 @@ const CRON_LABELS: Record<string, string> = {
 
 type AutopilotSlot = { user: string; handle: string | null; avatarUrl: string | null; niche: string; ordinal: number; etaHm: number; eta: string; done: boolean }
 type AutopilotPlan = { enabled: boolean; perDay: number; window: { start: number; end: number }; nowHm: number; slots: AutopilotSlot[] }
+type IdeaVideoMap = Record<number, { status: 'running' | 'done' | 'error'; message: string }>
 
-function Queue({ clips, go, scope }: { clips: ClipDTO[]; go: (p: Page) => void; scope: string }): JSX.Element {
+// Avancement d'une génération de vidéo, de la création jusqu'au post (0→100).
+function genPct(msg: string): number {
+  const m = msg.match(/Sc[eè]ne (\d+)\/(\d+)/i)
+  if (m) {
+    const x = Number(m[1])
+    const n = Number(m[2]) || 1
+    const sub = /image/i.test(msg) ? 0.45 : /montage/i.test(msg) ? 0.85 : 0
+    return Math.min(82, 8 + ((x - 1 + sub) / n) * 72)
+  }
+  if (/publi[ée]e?\b|publié sur/i.test(msg)) return 100
+  if (/publication/i.test(msg)) return 96
+  if (/pr[êe]te/i.test(msg)) return 93
+  if (/musique/i.test(msg)) return 90
+  if (/assemblage|concat/i.test(msg)) return 85
+  if (/choix de la musique/i.test(msg)) return 6
+  if (/storyboard|d[ée]marrage|lancement/i.test(msg)) return 3
+  return 5
+}
+
+function Queue({ clips, go, scope, ideaVideo }: { clips: ClipDTO[]; go: (p: Page) => void; scope: string; ideaVideo: IdeaVideoMap }): JSX.Element {
   const [status, setStatus] = useState<{ enabled: boolean; paused: boolean; cron: string; nextRunAt: number | null; intervalSec: number | null; lastRunAt: number | null } | null>(null)
   const [plan, setPlan] = useState<AutopilotPlan | null>(null)
   const [now, setNow] = useState(Date.now())
@@ -1242,6 +1262,13 @@ function Queue({ clips, go, scope }: { clips: ClipDTO[]; go: (p: Page) => void; 
       window.clearInterval(tick)
     }
   }, [load])
+
+  // Génération en cours (pilote) : la dernière entrée « running » des événements SSE.
+  const running = Object.values(ideaVideo).filter((v) => v.status === 'running')
+  const activeGen = running.length ? running[running.length - 1] : null
+  // Recharge le planning quand une génération démarre ou se termine (états à jour).
+  const genKey = activeGen ? activeGen.message : (Object.keys(ideaVideo).length ? 'idle' : 'none')
+  useEffect(() => { if (genKey === 'idle') load() }, [genKey, load])
 
   const slots = (plan?.slots ?? []).filter((s) => scope === ALL_SCOPE || s.user === scope)
   const doneCount = slots.filter((s) => s.done).length
@@ -1285,23 +1312,36 @@ function Queue({ clips, go, scope }: { clips: ClipDTO[]; go: (p: Page) => void; 
             <span className="pill-badge"><span className="dot" /> {plan.perDay}/jour/compte</span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
-            {slots.map((s, i) => (
-              <div key={`${s.user}-${s.ordinal}`} className="row" style={{ gap: 12 }}>
-                <div style={{ width: 58, flexShrink: 0, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: s.done ? 'var(--muted)' : 'var(--accent-strong)' }}>{s.done ? s.eta : `≈ ${s.eta}`}</div>
-                <Avatar url={s.avatarUrl} name={s.user} size={30} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.handle ? '@' + s.handle : s.user}</div>
-                  <div className="muted small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.niche.split(' (')[0]}</div>
+            {slots.map((s, i) => {
+              const generating = i === nextIdx && !!activeGen
+              return (
+                <div key={`${s.user}-${s.ordinal}`}>
+                  <div className="row" style={{ gap: 12 }}>
+                    <div style={{ width: 58, flexShrink: 0, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: s.done ? 'var(--muted)' : 'var(--accent-strong)' }}>{s.done ? s.eta : `≈ ${s.eta}`}</div>
+                    <Avatar url={s.avatarUrl} name={s.user} size={30} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.handle ? '@' + s.handle : s.user}</div>
+                      <div className="muted small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.niche.split(' (')[0]}</div>
+                    </div>
+                    {s.done ? (
+                      <span className="chip" style={{ background: '#dcfce7', color: 'var(--good)' }}>✓ publiée</span>
+                    ) : generating ? (
+                      <span className="chip" style={{ background: 'var(--accent-soft-2)' }}>⚙️ en création</span>
+                    ) : i === nextIdx ? (
+                      <span className="chip">⏳ prochaine</span>
+                    ) : (
+                      <span className="muted small">à venir</span>
+                    )}
+                  </div>
+                  {generating && activeGen && (
+                    <div style={{ marginTop: 8, marginLeft: 70 }}>
+                      <div className="bar"><div style={{ width: `${genPct(activeGen.message)}%`, transition: 'width 0.4s ease' }} /></div>
+                      <div className="muted small" style={{ marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activeGen.message}</div>
+                    </div>
+                  )}
                 </div>
-                {s.done ? (
-                  <span className="chip" style={{ background: '#dcfce7', color: 'var(--good)' }}>✓ publiée</span>
-                ) : i === nextIdx ? (
-                  <span className="chip">⏳ prochaine</span>
-                ) : (
-                  <span className="muted small">à venir</span>
-                )}
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}
