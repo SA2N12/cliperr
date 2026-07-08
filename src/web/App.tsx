@@ -1701,12 +1701,12 @@ function Autopilot({ toast }: { toast: (m: string) => void }): JSX.Element {
 
       <div className="card" style={{ marginBottom: 16 }}>
         <div style={{ fontWeight: 600, marginBottom: 8 }}>Vidéos par jour et par compte</div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          {[1, 2, 3].map((n) => (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {[1, 2, 3, 4, 5].map((n) => (
             <button key={n} className={`btn ${perDay === n ? 'primary' : ''}`} onClick={() => setPerDay(n)}>{n}/jour</button>
           ))}
         </div>
-        <div className="muted small" style={{ marginTop: 8 }}>Conseil : 1/jour est le plus sûr (les rafales déclenchent l’anti-spam TikTok).</div>
+        <div className="muted small" style={{ marginTop: 8 }}>Publication étalée automatiquement de 9h à 23h (pas la nuit). 1/jour reste le plus sûr côté anti-spam TikTok.</div>
       </div>
 
       <div className="card">

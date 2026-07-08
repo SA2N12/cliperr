@@ -375,8 +375,26 @@ const DEFAULT_NICHES = [
   'Anecdotes historiques méconnues',
   'Psychologie et astuces mentales du quotidien'
 ]
+// Fenêtre de publication en heure de Paris : on ne poste qu'entre ces heures,
+// et on LISSE la production sur toute la fenêtre (sinon tout part d'un coup à la
+// remise à zéro des compteurs à minuit → publication uniquement la nuit).
+const PUB_START_HOUR = 9
+const PUB_END_HOUR = 23
+/** Heure locale (Europe/Paris) sous forme entière + fractionnaire (heures.décimales). */
+function parisClock(): { hour: number; hm: number } {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Europe/Paris',
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: false
+  }).formatToParts(new Date())
+  const hour = Number(parts.find((p) => p.type === 'hour')?.value ?? '0') % 24
+  const minute = Number(parts.find((p) => p.type === 'minute')?.value ?? '0')
+  return { hour, hm: hour + minute / 60 }
+}
+/** Date du jour (Europe/Paris, YYYY-MM-DD) → clé des compteurs quotidiens. */
 function dayKey(): string {
-  return new Date().toISOString().slice(0, 10)
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris' }).format(new Date())
 }
 function autopilotNiches(): Record<string, string> {
   try {
@@ -411,6 +429,23 @@ async function runAutopilotTick(force = false): Promise<void> {
   const today = dayKey()
   const profiles = uploadPostProfiles()
   if (!profiles.length) return
+
+  // ── Lissage horaire (ignoré en mode test « force ») ──
+  // On ne poste que dans la fenêtre Paris, et on étale : à un instant t, on
+  // n'a le droit d'avoir produit que « part de la fenêtre écoulée × objectif ».
+  // Résultat : les vidéos sont réparties régulièrement de 9h à 23h, plus la nuit.
+  if (!force) {
+    const { hm } = parisClock()
+    if (hm < PUB_START_HOUR || hm >= PUB_END_HOUR) return
+    const windowLen = PUB_END_HOUR - PUB_START_HOUR
+    const target = perDay * profiles.length
+    const producedToday = profiles.reduce(
+      (s, u) => s + (Number(repo.getSetting(`autopilot_count_${u}_${today}`)) || 0),
+      0
+    )
+    const expected = Math.ceil(((hm - PUB_START_HOUR) / windowLen) * target)
+    if (producedToday >= expected) return // en avance sur le planning → on attend
+  }
 
   // Comptes éligibles (pas saturés, pas encore à leur quota du jour).
   const eligible: { user: string; done: number }[] = []
@@ -464,8 +499,8 @@ function reloadAutopilot(): void {
     autopilotTask = null
   }
   if (repo.getSetting('autopilot_enabled') !== '1') return
-  // Toutes les 15 min : au plus 1 vidéo/cycle, en round-robin sur les comptes.
-  // Ex. 5 comptes → chacun sa 1re vidéo en ~1h15, puis les tours suivants.
+  // Toutes les 15 min : au plus 1 vidéo/cycle, en round-robin sur les comptes,
+  // et lissée sur la fenêtre 9h-23h (Paris) → publication étalée sur la journée.
   const expr = repo.getSetting('autopilot_cron') || '*/15 * * * *'
   if (!cron.validate(expr)) return
   autopilotTask = cron.schedule(expr, () => {
