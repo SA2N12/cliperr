@@ -637,7 +637,6 @@ function Dashboard({ log, go, onRefresh, scope }: { log: string[]; go: (p: Page)
               <div className="row">
                 <div>
                   <strong>Vues dans le temps</strong>
-                  <div className="dotlabel" style={{ marginTop: 4 }}><span className="d" /> Portée · 30 j</div>
                 </div>
               </div>
               <div style={{ marginTop: 14 }}><AreaChart data={buckets} /></div>
