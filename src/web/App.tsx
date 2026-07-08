@@ -11,7 +11,7 @@ import {
   type SavedIdea
 } from './api'
 
-type Page = 'dashboard' | 'autopilot' | 'generate' | 'ideas' | 'myideas' | 'history' | 'clips' | 'queue' | 'published' | 'analytics' | 'settings'
+type Page = 'dashboard' | 'autopilot' | 'generate' | 'ideas' | 'myideas' | 'history' | 'clips' | 'queue' | 'published' | 'settings'
 
 const ICONS: Record<string, string> = {
   dashboard: 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z',
@@ -355,7 +355,6 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
   const navGroups: { id: Page; label: string; icon: string }[][] = [
     [
       { id: 'dashboard', label: 'Tableau de bord', icon: 'dashboard' },
-      { id: 'analytics', label: 'Performances', icon: 'chart' },
       ...(isAll ? [{ id: 'autopilot' as Page, label: 'Pilote auto', icon: 'bolt' }] : []),
       { id: 'ideas', label: 'Idées virales', icon: 'bulb' },
       { id: 'myideas', label: 'Mes idées', icon: 'bookmark' }
@@ -410,7 +409,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
 
       <main className="main">
         <TopBar state={pub} onChange={changeScope} />
-        {page === 'dashboard' && <Dashboard sources={sources} clips={clips} log={log} go={setPage} onRefresh={refresh} scope={scope} />}
+        {page === 'dashboard' && <Dashboard log={log} go={setPage} onRefresh={refresh} scope={scope} />}
         {page === 'autopilot' && isAll && <Autopilot toast={showToast} />}
         {page === 'generate' && <Generate sources={sources} progress={progress} onRefresh={refresh} toast={showToast} goHistory={() => setPage('history')} />}
         {page === 'ideas' && <Ideas toast={showToast} go={setPage} />}
@@ -419,22 +418,10 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
         {page === 'clips' && <Clips clips={clips} sources={sources} onRefresh={refresh} toast={showToast} ttProfile={ttProfile} scope={scope} />}
         {page === 'queue' && <Queue clips={clips} go={setPage} />}
         {page === 'published' && <Published clips={clips} go={setPage} scope={scope} />}
-        {page === 'analytics' && <Analytics scope={scope} />}
         {page === 'settings' && <Settings toast={showToast} onTtProfile={setTtProfile} />}
       </main>
       <GenerationsWidget sources={sources} progress={progress} ideaVideo={ideaVideo} />
       {toast && <div className="toast">{toast}</div>}
-    </div>
-  )
-}
-
-function StatCard({ icon, label, value, sub }: { icon: string; label: string; value: string; sub?: string }): JSX.Element {
-  return (
-    <div className="card stat">
-      <div className="icon"><Icon name={icon} /></div>
-      <div className="label">{label}</div>
-      <div className="value">{value}</div>
-      {sub && <div className="muted small" style={{ marginTop: 10 }}>{sub}</div>}
     </div>
   )
 }
@@ -449,34 +436,6 @@ function TrendBadge({ value, label }: { value: number; label?: string }): JSX.El
 }
 
 type Bucket = { label: string; count: number }
-function buildBuckets(clips: ClipDTO[], mode: 'jour' | 'semaine' | 'mois'): Bucket[] {
-  const now = Date.now()
-  if (mode === 'jour') {
-    const h = 3600000
-    const base = Math.floor(now / h)
-    const arr: Bucket[] = Array.from({ length: 24 }, (_, i) => ({
-      label: `${new Date(now - (23 - i) * h).getHours()}h`,
-      count: 0
-    }))
-    for (const c of clips) {
-      const idx = 23 - (base - Math.floor(c.createdAt / h))
-      if (idx >= 0 && idx < 24) arr[idx].count++
-    }
-    return arr
-  }
-  const days = mode === 'semaine' ? 7 : 30
-  const d1 = 86400000
-  const base = Math.floor(now / d1)
-  const arr: Bucket[] = Array.from({ length: days }, (_, i) => {
-    const d = new Date(now - (days - 1 - i) * d1)
-    return { label: `${d.getDate()}/${String(d.getMonth() + 1).padStart(2, '0')}`, count: 0 }
-  })
-  for (const c of clips) {
-    const idx = days - 1 - (base - Math.floor(c.createdAt / d1))
-    if (idx >= 0 && idx < days) arr[idx].count++
-  }
-  return arr
-}
 
 function AreaChart({ data }: { data: Bucket[] }): JSX.Element {
   const W = 600
@@ -508,168 +467,255 @@ function AreaChart({ data }: { data: Bucket[] }): JSX.Element {
   )
 }
 
-function Gauge({ pct }: { pct: number }): JSX.Element {
-  const r = 32
-  const c = 2 * Math.PI * r
-  const off = c * (1 - Math.min(1, Math.max(0, pct / 100)))
-  return (
-    <svg width={84} height={84} viewBox="0 0 84 84">
-      <circle cx={42} cy={42} r={r} fill="none" stroke="var(--accent-soft-2)" strokeWidth={8} />
-      <circle cx={42} cy={42} r={r} fill="none" stroke="var(--accent)" strokeWidth={8} strokeLinecap="round" strokeDasharray={c} strokeDashoffset={off} transform="rotate(-90 42 42)" />
-    </svg>
-  )
-}
+function Dashboard({ log, go, onRefresh, scope }: { log: string[]; go: (p: Page) => void; onRefresh: () => Promise<void>; scope: string }): JSX.Element {
+  const [data, setData] = useState<AnalyticsProfile[] | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [open, setOpen] = useState<AnalyticsProfile | null>(null)
+  const [posts, setPosts] = useState<PostStat[] | null>(null)
+  const [pLoading, setPLoading] = useState(false)
 
-function Dashboard({ sources, clips: allClips, log, go, onRefresh, scope }: { sources: SourceDTO[]; clips: ClipDTO[]; log: string[]; go: (p: Page) => void; onRefresh: () => Promise<void>; scope: string }): JSX.Element {
-  const [spend, setSpend] = useState<{ usd: number; inTokens: number; outTokens: number } | null>(null)
-  const [mode, setMode] = useState<'jour' | 'semaine' | 'mois'>('mois')
-  useEffect(() => {
-    api.spend().then(setSpend).catch(() => undefined)
+  const loadPerf = useCallback(async (): Promise<void> => {
+    setLoading(true)
+    try { setData((await api.analytics()).profiles) } catch { setData([]) } finally { setLoading(false) }
   }, [])
+  useEffect(() => { void loadPerf() }, [loadPerf])
 
-  // Portée : « Tous » → tous les clips ; sinon uniquement ceux du profil choisi.
-  const clips = scope === ALL_SCOPE ? allClips : allClips.filter((c) => c.profile === scope)
-  const generated = clips.length
-  const approved = clips.filter((c) => c.reviewStatus === 'approved').length
-  const published = clips.filter((c) => c.publishStatus === 'published').length
-  const pending = clips.filter((c) => c.reviewStatus === 'pending').length
-  const data = buildBuckets(clips, mode)
-  const total = data.reduce((a, b) => a + b.count, 0)
-  const peak = data.reduce((m, b) => (b.count > m.count ? b : m), { label: '—', count: 0 })
-  const avg = data.length ? Math.round((total / data.length) * 10) / 10 : 0
-  const day = 86400000
-  const last7 = clips.filter((c) => c.createdAt >= Date.now() - 7 * day).length
-  const prev7 = clips.filter((c) => c.createdAt >= Date.now() - 14 * day && c.createdAt < Date.now() - 7 * day).length
-  const trend = prev7 === 0 ? (last7 > 0 ? 100 : 0) : Math.round(((last7 - prev7) / prev7) * 100)
-  const pubRate = generated ? Math.round((published / generated) * 1000) / 10 : 0
+  const openProfile = async (p: AnalyticsProfile): Promise<void> => {
+    setOpen(p); setPosts(null); setPLoading(true)
+    try { setPosts((await api.analyticsPosts(p.profile)).posts) } catch { setPosts([]) } finally { setPLoading(false) }
+  }
+  const eng = (p: { views: number; likes: number; comments: number; shares: number }): string =>
+    p.views > 0 ? (((p.likes + p.comments + p.shares) / p.views) * 100).toFixed(1) + '%' : '—'
 
-  const funnel = [
-    { label: 'Sources', n: sources.length, icon: 'sources' },
-    { label: 'Clips générés', n: generated, icon: 'clips' },
-    { label: 'Clips validés', n: approved, icon: 'check' },
-    { label: 'Publiés', n: published, icon: 'send' }
-  ]
-  const fmax = Math.max(1, ...funnel.map((f) => f.n))
+  // ── Détail par vidéo d'un compte (drill-down) ──
+  if (open) {
+    const list = (posts ?? []).slice().sort((a, b) => b.views - a.views)
+    return (
+      <>
+        <div className="page-head">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button className="btn icon-btn" onClick={() => setOpen(null)} title="Retour">←</button>
+            <Avatar url={open.avatarUrl} name={open.profile} size={36} />
+            <div>
+              <h1 style={{ fontSize: 22 }}>{open.handle ? '@' + open.handle : open.profile}</h1>
+              <p>Détail par vidéo (publiées via Cliperr)</p>
+            </div>
+          </div>
+          <button className="btn" onClick={() => openProfile(open)} disabled={pLoading}><Icon name="refresh" size={15} /> Actualiser</button>
+        </div>
+        {pLoading && !posts ? (
+          <div className="card muted">Chargement des vidéos…</div>
+        ) : list.length === 0 ? (
+          <div className="card muted">Aucune vidéo trackée pour ce compte. Les vidéos publiées via Cliperr <b>à partir de maintenant</b> apparaîtront ici avec leurs stats détaillées.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {list.map((v) => (
+              <div key={v.clipId} className="card">
+                <div className="row" style={{ gap: 12, alignItems: 'center' }}>
+                  {v.filePath && <video src={clipUrl(v.filePath)} muted preload="metadata" style={{ width: 46, borderRadius: 8, background: '#000', aspectRatio: '9 / 16', flexShrink: 0 }} />}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.title || `Vidéo #${v.clipId}`}</div>
+                    {v.postUrl && <a href={v.postUrl} target="_blank" rel="noreferrer" className="small" style={{ color: 'var(--accent)' }}>Voir sur TikTok ↗</a>}
+                  </div>
+                  <div style={{ display: 'flex', gap: 16, flexShrink: 0 }}>
+                    {[['Vues', v.views], ['Likes', v.likes], ['Comm.', v.comments], ['Part.', v.shares]].map(([l, n]) => (
+                      <div key={l as string} style={{ textAlign: 'center' }}>
+                        <div style={{ fontWeight: 700 }}>{fmtNum(n as number)}</div>
+                        <div className="muted small">{l}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </>
+    )
+  }
+
+  const profiles = (data ?? []).filter((p) => scope === ALL_SCOPE || p.profile === scope).slice().sort((a, b) => b.views - a.views)
+  const totals = profiles.reduce(
+    (t, p) => ({ views: t.views + p.views, likes: t.likes + p.likes, comments: t.comments + p.comments, shares: t.shares + p.shares, followers: t.followers + p.followers, videos: t.videos + p.videoCount }),
+    { views: 0, likes: 0, comments: 0, shares: 0, followers: 0, videos: 0 }
+  )
+
+  // Série temporelle agrégée (somme des portées par jour) → format AreaChart.
+  const byDate = new Map<string, number>()
+  for (const p of profiles) for (const t of p.timeseries) byDate.set(t.date, (byDate.get(t.date) || 0) + (t.value || 0))
+  const series = [...byDate.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+  const buckets: Bucket[] = series.map(([date, v]) => {
+    const d = date.split('-')
+    return { label: d.length === 3 ? `${d[2]}/${d[1]}` : date, count: v }
+  })
+  const totalPeriod = buckets.reduce((a, b) => a + b.count, 0)
+  const avgPerDay = buckets.length ? Math.round(totalPeriod / buckets.length) : 0
+  const peak = buckets.reduce((m, b) => (b.count > m.count ? b : m), { label: '—', count: 0 })
+  const vals = buckets.map((b) => b.count)
+  const last7 = vals.slice(-7).reduce((a, b) => a + b, 0)
+  const prev7 = vals.slice(-14, -7).reduce((a, b) => a + b, 0)
+  const viewsTrend = prev7 === 0 ? (last7 > 0 ? 100 : 0) : Math.round(((last7 - prev7) / prev7) * 100)
+  const avgViewsPerVideo = totals.videos ? Math.round(totals.views / totals.videos) : 0
+  const engGlobal = eng(totals)
+  const maxViews = Math.max(1, ...profiles.map((p) => p.views))
 
   return (
     <>
       <div className="page-head">
         <div>
           <h1>Tableau de bord</h1>
-          <p>Vue d'ensemble de ton pipeline de clipping en temps réel.</p>
+          <p>Performances de tes comptes TikTok (30 derniers jours).</p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
-          <button className="btn" onClick={() => go('generate')}>
-            <Icon name="spark" size={16} /> Générer
-          </button>
-          <button className="btn dark" onClick={() => go('generate')}>+ Nouvelle génération</button>
-          <button className="btn icon-btn" onClick={() => onRefresh()} title="Rafraîchir">
+          <button className="btn" onClick={() => go('generate')}><Icon name="spark" size={16} /> Générer</button>
+          <button className="btn icon-btn" onClick={() => { void onRefresh(); void loadPerf() }} title="Rafraîchir">
             <Icon name="refresh" size={16} />
           </button>
         </div>
       </div>
 
-      <div className="grid-3">
-        <div className="card">
-          <div className="stat-head">
-            <div className="icon"><Icon name="clips" /></div>
-            <TrendBadge value={trend} />
-          </div>
-          <div className="label" style={{ marginTop: 14 }}>Clips générés</div>
-          <div className="value">{generated}</div>
-          <div className="breakdown">
-            <div className="line"><span className="k">Pic</span><span className="v">{peak.count} le {peak.label}</span></div>
-            <div className="line"><span className="k">7 derniers jours</span><span className="v">{last7}</span></div>
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="stat-head">
-            <div className="icon"><Icon name="send" /></div>
-            <TrendBadge value={pubRate} label={`${pubRate}%`} />
-          </div>
-          <div className="label" style={{ marginTop: 14 }}>Clips publiés</div>
-          <div className="value">{published}</div>
-          <div className="breakdown">
-            <div className="line"><span className="k">Validés</span><span className="v">{approved}</span></div>
-            <div className="line"><span className="k">Taux de publication</span><span className="v">{pubRate}%</span></div>
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="stat-head">
-            <div className="icon"><Icon name="check" /></div>
-            <span className="pill-badge"><span className="dot" /> {pending} à traiter</span>
-          </div>
-          <div className="label" style={{ marginTop: 14 }}>Clips à valider</div>
-          <div className="value">{pending}</div>
-          <div className="breakdown">
-            <div className="line"><span className="k">Sources</span><span className="v">{sources.length}</span></div>
-            <div className="line"><span className="k">Dépense API</span><span className="v">{spend ? `$${spend.usd.toFixed(4)}` : '—'}</span></div>
-          </div>
-        </div>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16, marginTop: 16 }}>
-        <div className="card">
-          <div className="row">
-            <div>
-              <strong>Performances</strong>
-              <div className="dotlabel" style={{ marginTop: 4 }}><span className="d" /> Production</div>
+      {loading && !data ? (
+        <div className="card muted">Chargement des performances…</div>
+      ) : profiles.length === 0 ? (
+        <div className="card muted">Aucune donnée de performance. Configure la clé upload-post (Réglages) et publie des vidéos.</div>
+      ) : (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(210px,1fr))', gap: 16 }}>
+            <div className="card">
+              <div className="stat-head">
+                <div className="icon"><Icon name="chart" /></div>
+                <TrendBadge value={viewsTrend} />
+              </div>
+              <div className="label" style={{ marginTop: 14 }}>Vues (30 j)</div>
+              <div className="value">{fmtNum(totals.views)}</div>
+              <div className="breakdown">
+                <div className="line"><span className="k">≈ / vidéo</span><span className="v">{fmtNum(avgViewsPerVideo)}</span></div>
+                <div className="line"><span className="k">7 derniers jours</span><span className="v">{fmtNum(last7)}</span></div>
+              </div>
             </div>
-            <div className="seg">
-              {(['jour', 'semaine', 'mois'] as const).map((m) => (
-                <button key={m} className={mode === m ? 'on' : ''} onClick={() => setMode(m)}>
-                  {m === 'jour' ? 'Jour' : m === 'semaine' ? 'Semaine' : 'Mois'}
-                </button>
-              ))}
+
+            <div className="card">
+              <div className="stat-head">
+                <div className="icon"><Icon name="spark" /></div>
+                <span className="pill-badge"><span className="dot" /> {engGlobal}</span>
+              </div>
+              <div className="label" style={{ marginTop: 14 }}>Likes</div>
+              <div className="value">{fmtNum(totals.likes)}</div>
+              <div className="breakdown">
+                <div className="line"><span className="k">Commentaires</span><span className="v">{fmtNum(totals.comments)}</span></div>
+                <div className="line"><span className="k">Partages</span><span className="v">{fmtNum(totals.shares)}</span></div>
+              </div>
+            </div>
+
+            <div className="card">
+              <div className="stat-head">
+                <div className="icon"><Icon name="globe" /></div>
+              </div>
+              <div className="label" style={{ marginTop: 14 }}>Abonnés</div>
+              <div className="value">{fmtNum(totals.followers)}</div>
+              <div className="breakdown">
+                <div className="line"><span className="k">Comptes</span><span className="v">{profiles.length}</span></div>
+                <div className="line"><span className="k">Top compte</span><span className="v">{profiles[0]?.handle ? '@' + profiles[0].handle : profiles[0]?.profile ?? '—'}</span></div>
+              </div>
+            </div>
+
+            <div className="card">
+              <div className="stat-head">
+                <div className="icon"><Icon name="clips" /></div>
+              </div>
+              <div className="label" style={{ marginTop: 14 }}>Vidéos publiées</div>
+              <div className="value">{totals.videos}</div>
+              <div className="breakdown">
+                <div className="line"><span className="k">Engagement</span><span className="v">{engGlobal}</span></div>
+                <div className="line"><span className="k">Vues / vidéo</span><span className="v">{fmtNum(avgViewsPerVideo)}</span></div>
+              </div>
             </div>
           </div>
-          <div style={{ marginTop: 14 }}><AreaChart data={data} /></div>
-          <div className="metrics-row">
-            <div className="metric"><div className="ml">Total période</div><div className="mv">{total}</div></div>
-            <div className="metric"><div className="ml">Moyenne / {mode === 'jour' ? 'heure' : 'jour'}</div><div className="mv">{avg}</div></div>
-            <div className="metric"><div className="ml">Pic</div><div className="mv">{peak.count} · {peak.label}</div></div>
-          </div>
-        </div>
 
-        <div className="card">
-          <strong>Funnel de conversion</strong>
-          <p className="muted small" style={{ marginTop: 2 }}>Où le pipeline avance</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 12 }}>
-            {funnel.map((f) => (
-              <div key={f.label} className="funnel-row" style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                <div className="ic"><Icon name={f.icon} size={16} /></div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div className="row" style={{ marginBottom: 6 }}>
-                    <span className="small" style={{ fontWeight: 600 }}>{f.label}</span>
-                    <span className="small muted">{f.n}</span>
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16, marginTop: 16 }}>
+            <div className="card">
+              <div className="row">
+                <div>
+                  <strong>Vues dans le temps</strong>
+                  <div className="dotlabel" style={{ marginTop: 4 }}><span className="d" /> Portée · 30 j</div>
+                </div>
+              </div>
+              <div style={{ marginTop: 14 }}><AreaChart data={buckets} /></div>
+              <div className="metrics-row">
+                <div className="metric"><div className="ml">Total période</div><div className="mv">{fmtNum(totalPeriod)}</div></div>
+                <div className="metric"><div className="ml">Moyenne / jour</div><div className="mv">{fmtNum(avgPerDay)}</div></div>
+                <div className="metric"><div className="ml">Pic</div><div className="mv">{fmtNum(peak.count)} · {peak.label}</div></div>
+              </div>
+            </div>
+
+            <div className="card">
+              <strong>Répartition des vues</strong>
+              <p className="muted small" style={{ marginTop: 2 }}>Par compte · clique pour le détail</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 12 }}>
+                {profiles.map((p) => (
+                  <div key={p.profile} className="funnel-row" style={{ display: 'flex', gap: 12, alignItems: 'center', cursor: 'pointer' }} onClick={() => openProfile(p)}>
+                    <Avatar url={p.avatarUrl} name={p.profile} size={30} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div className="row" style={{ marginBottom: 6 }}>
+                        <span className="small" style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.handle ? '@' + p.handle : p.profile}</span>
+                        <span className="small muted">{fmtNum(p.views)}</span>
+                      </div>
+                      <div className="bar"><div style={{ width: `${(p.views / maxViews) * 100}%` }} /></div>
+                    </div>
                   </div>
-                  <div className="bar"><div style={{ width: `${(f.n / fmax) * 100}%` }} /></div>
+                ))}
+              </div>
+              <div className="gauge-wrap">
+                <div>
+                  <div className="ml">Engagement global</div>
+                  <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--accent-strong)' }}>{engGlobal}</div>
+                  <div className="small muted">likes + comm. + partages / vues</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 16 }}>
+            {profiles.map((p, i) => (
+              <div key={p.profile} className="card folder" style={{ display: 'block' }} onClick={() => openProfile(p)}>
+                <div className="row" style={{ alignItems: 'center', gap: 12 }}>
+                  <Avatar url={p.avatarUrl} name={p.profile} size={40} />
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontWeight: 700 }}>
+                      {p.handle ? '@' + p.handle : p.profile}
+                      {i === 0 && p.views > 0 && <span className="chip" style={{ marginLeft: 8 }}>🏆 top</span>}
+                    </div>
+                    <div className="muted small">{p.videoCount} vidéo{p.videoCount > 1 ? 's' : ''} · {fmtNum(p.followers)} abonné{p.followers > 1 ? 's' : ''}</div>
+                  </div>
+                  <Sparkline data={p.timeseries.map((t) => t.value)} />
+                </div>
+                <div style={{ display: 'flex', gap: 22, marginTop: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                  {[['Vues', fmtNum(p.views), true], ['Likes', fmtNum(p.likes), false], ['Comment.', fmtNum(p.comments), false], ['Partages', fmtNum(p.shares), false]].map(([l, v, big]) => (
+                    <div key={l as string}>
+                      <div style={{ fontWeight: 700, fontSize: big ? 22 : 16, color: big ? 'var(--accent-strong)' : undefined }}>{v}</div>
+                      <div className="muted small">{l}</div>
+                    </div>
+                  ))}
+                  <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
+                    <div className="muted small">≈ {p.videoCount ? fmtNum(Math.round(p.views / p.videoCount)) : 0} vues/vidéo · {eng(p)} engagement</div>
+                    <div className="small" style={{ color: 'var(--accent)', fontWeight: 600 }}>Voir les vidéos →</div>
+                  </div>
                 </div>
               </div>
             ))}
           </div>
-          <div className="gauge-wrap">
-            <div>
-              <div className="ml">Conversion globale</div>
-              <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--accent-strong)' }}>{pubRate}%</div>
-              <div className="small muted">{published} sur {generated} générés</div>
-            </div>
-            <Gauge pct={pubRate} />
-          </div>
-        </div>
-      </div>
 
-      <div className="card" style={{ marginTop: 16 }}>
-        <div className="row" style={{ marginBottom: 10 }}>
-          <strong>Activité en direct</strong>
-          <span className="chip">SSE</span>
-        </div>
-        <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: 12, color: 'var(--muted)', maxHeight: 220, overflow: 'auto', fontFamily: 'ui-monospace, Menlo, monospace' }}>
-          {log.join('\n') || 'En attente…'}
-        </pre>
-      </div>
+          <div className="card" style={{ marginTop: 16 }}>
+            <div className="row" style={{ marginBottom: 10 }}>
+              <strong>Activité en direct</strong>
+              <span className="chip">SSE</span>
+            </div>
+            <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: 12, color: 'var(--muted)', maxHeight: 200, overflow: 'auto', fontFamily: 'ui-monospace, Menlo, monospace' }}>
+              {log.join('\n') || 'En attente…'}
+            </pre>
+          </div>
+        </>
+      )}
     </>
   )
 }
@@ -1744,129 +1790,6 @@ function Autopilot({ toast }: { toast: (m: string) => void }): JSX.Element {
 }
 
 type PostStat = { clipId: number; title: string | null; filePath: string | null; postUrl: string | null; createdAt: number; views: number; likes: number; comments: number; shares: number }
-
-function Analytics({ scope }: { scope: string }): JSX.Element {
-  const [data, setData] = useState<AnalyticsProfile[] | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [open, setOpen] = useState<AnalyticsProfile | null>(null)
-  const [posts, setPosts] = useState<PostStat[] | null>(null)
-  const [pLoading, setPLoading] = useState(false)
-  const load = useCallback(async (): Promise<void> => {
-    setLoading(true)
-    try { setData((await api.analytics()).profiles) } catch { setData([]) } finally { setLoading(false) }
-  }, [])
-  useEffect(() => { void load() }, [load])
-
-  const openProfile = async (p: AnalyticsProfile): Promise<void> => {
-    setOpen(p); setPosts(null); setPLoading(true)
-    try { setPosts((await api.analyticsPosts(p.profile)).posts) } catch { setPosts([]) } finally { setPLoading(false) }
-  }
-  const eng = (p: { views: number; likes: number; comments: number; shares: number }): string =>
-    p.views > 0 ? (((p.likes + p.comments + p.shares) / p.views) * 100).toFixed(1) + '%' : '—'
-
-  if (open) {
-    const list = (posts ?? []).slice().sort((a, b) => b.views - a.views)
-    return (
-      <>
-        <div className="page-head">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <button className="btn icon-btn" onClick={() => setOpen(null)} title="Retour">←</button>
-            <Avatar url={open.avatarUrl} name={open.profile} size={36} />
-            <div>
-              <h1 style={{ fontSize: 22 }}>{open.handle ? '@' + open.handle : open.profile}</h1>
-              <p>Détail par vidéo (publiées via Cliperr)</p>
-            </div>
-          </div>
-          <button className="btn" onClick={() => openProfile(open)} disabled={pLoading}><Icon name="refresh" size={15} /> Actualiser</button>
-        </div>
-        {pLoading && !posts ? (
-          <div className="card muted">Chargement des vidéos…</div>
-        ) : list.length === 0 ? (
-          <div className="card muted">Aucune vidéo trackée pour ce compte. Les vidéos publiées via Cliperr <b>à partir de maintenant</b> apparaîtront ici avec leurs stats détaillées.</div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {list.map((v) => (
-              <div key={v.clipId} className="card">
-                <div className="row" style={{ gap: 12, alignItems: 'center' }}>
-                  {v.filePath && <video src={clipUrl(v.filePath)} muted preload="metadata" style={{ width: 46, borderRadius: 8, background: '#000', aspectRatio: '9 / 16', flexShrink: 0 }} />}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.title || `Vidéo #${v.clipId}`}</div>
-                    {v.postUrl && <a href={v.postUrl} target="_blank" rel="noreferrer" className="small" style={{ color: 'var(--accent)' }}>Voir sur TikTok ↗</a>}
-                  </div>
-                  <div style={{ display: 'flex', gap: 16, flexShrink: 0 }}>
-                    {[['Vues', v.views], ['Likes', v.likes], ['Comm.', v.comments], ['Part.', v.shares]].map(([l, n]) => (
-                      <div key={l as string} style={{ textAlign: 'center' }}>
-                        <div style={{ fontWeight: 700 }}>{fmtNum(n as number)}</div>
-                        <div className="muted small">{l}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </>
-    )
-  }
-
-  const profiles = (data ?? []).filter((p) => scope === ALL_SCOPE || p.profile === scope).slice().sort((a, b) => b.views - a.views)
-  const totals = profiles.reduce((t, p) => ({ views: t.views + p.views, likes: t.likes + p.likes, followers: t.followers + p.followers, videos: t.videos + p.videoCount }), { views: 0, likes: 0, followers: 0, videos: 0 })
-
-  return (
-    <>
-      <div className="page-head">
-        <div><h1>Performances</h1><p>Par compte TikTok (30 j). Clique un compte pour le détail par vidéo.</p></div>
-        <button className="btn" onClick={load} disabled={loading}><Icon name="refresh" size={15} /> Actualiser</button>
-      </div>
-      {loading && !data ? (
-        <div className="card muted">Chargement des performances…</div>
-      ) : profiles.length === 0 ? (
-        <div className="card muted">Aucune donnée. Configure la clé upload-post (Réglages) et publie des vidéos.</div>
-      ) : (
-        <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 12, marginBottom: 16 }}>
-            {[['Vues (total)', fmtNum(totals.views)], ['Likes', fmtNum(totals.likes)], ['Abonnés', fmtNum(totals.followers)], ['Vidéos', String(totals.videos)]].map(([l, v]) => (
-              <div key={l} className="card" style={{ padding: '12px 14px' }}>
-                <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--accent-strong)' }}>{v}</div>
-                <div className="muted small">{l}</div>
-              </div>
-            ))}
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {profiles.map((p, i) => (
-              <div key={p.profile} className="card folder" style={{ display: 'block' }} onClick={() => openProfile(p)}>
-                <div className="row" style={{ alignItems: 'center', gap: 12 }}>
-                  <Avatar url={p.avatarUrl} name={p.profile} size={40} />
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontWeight: 700 }}>
-                      {p.handle ? '@' + p.handle : p.profile}
-                      {i === 0 && p.views > 0 && <span className="chip" style={{ marginLeft: 8 }}>🏆 top</span>}
-                    </div>
-                    <div className="muted small">{p.videoCount} vidéo{p.videoCount > 1 ? 's' : ''} · {fmtNum(p.followers)} abonné{p.followers > 1 ? 's' : ''}</div>
-                  </div>
-                  <Sparkline data={p.timeseries.map((t) => t.value)} />
-                </div>
-                <div style={{ display: 'flex', gap: 22, marginTop: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-                  {[['Vues', fmtNum(p.views), true], ['Likes', fmtNum(p.likes), false], ['Comment.', fmtNum(p.comments), false], ['Partages', fmtNum(p.shares), false]].map(([l, v, big]) => (
-                    <div key={l as string}>
-                      <div style={{ fontWeight: 700, fontSize: big ? 22 : 16, color: big ? 'var(--accent-strong)' : undefined }}>{v}</div>
-                      <div className="muted small">{l}</div>
-                    </div>
-                  ))}
-                  <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
-                    <div className="muted small">≈ {p.videoCount ? fmtNum(Math.round(p.views / p.videoCount)) : 0} vues/vidéo · {eng(p)} engagement</div>
-                    <div className="small" style={{ color: 'var(--accent)', fontWeight: 600 }}>Voir les vidéos →</div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-    </>
-  )
-}
 
 function Field({ label, children }: { label: string; children: ReactNode }): JSX.Element {
   return (
