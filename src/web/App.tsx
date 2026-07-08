@@ -352,22 +352,31 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
     if (page === 'autopilot' && !isAll) setPage('dashboard')
   }, [page, isAll])
 
-  const navGroups: { id: Page; label: string; icon: string }[][] = [
-    [
-      { id: 'dashboard', label: 'Tableau de bord', icon: 'dashboard' },
-      ...(isAll ? [{ id: 'autopilot' as Page, label: 'Pilote auto', icon: 'bolt' }] : []),
-      { id: 'ideas', label: 'Idées virales', icon: 'bulb' }
-    ],
-    [
-      { id: 'generate', label: 'Générer', icon: 'spark' },
-      { id: 'queue', label: 'File d’attente', icon: 'clock' },
-      { id: 'clips', label: 'Clips', icon: 'clips' },
-      { id: 'published', label: 'Publiés', icon: 'send' }
-    ],
-    [
-      { id: 'history', label: 'Historique', icon: 'list' },
-      { id: 'settings', label: 'Réglages', icon: 'settings' }
-    ]
+  const navGroups: { title: string; items: { id: Page; label: string; icon: string }[] }[] = [
+    {
+      title: 'Général',
+      items: [
+        { id: 'dashboard', label: 'Tableau de bord', icon: 'dashboard' },
+        ...(isAll ? [{ id: 'autopilot' as Page, label: 'Pilote auto', icon: 'bolt' }] : []),
+        { id: 'ideas', label: 'Idées virales', icon: 'bulb' }
+      ]
+    },
+    {
+      title: 'Production',
+      items: [
+        { id: 'generate', label: 'Générer', icon: 'spark' },
+        { id: 'queue', label: 'File d’attente', icon: 'clock' },
+        { id: 'clips', label: 'Clips', icon: 'clips' },
+        { id: 'published', label: 'Publiés', icon: 'send' }
+      ]
+    },
+    {
+      title: 'Système',
+      items: [
+        { id: 'history', label: 'Historique', icon: 'list' },
+        { id: 'settings', label: 'Réglages', icon: 'settings' }
+      ]
+    }
   ]
 
   return (
@@ -379,10 +388,10 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
         <div className="side-search">
           <Icon name="search" size={15} /> Rechercher <span className="kbd">Ctrl K</span>
         </div>
-        {navGroups.map((group, gi) => (
-          <div key={gi}>
-            {gi > 0 && <div style={{ height: 1, background: 'var(--border)', margin: '8px 10px' }} />}
-            {group.map((n) => (
+        {navGroups.map((group) => (
+          <div key={group.title}>
+            <div className="nav-label">{group.title}</div>
+            {group.items.map((n) => (
               <button key={n.id} className={`nav-item ${page === n.id ? 'active' : ''}`} onClick={() => setPage(n.id)}>
                 <Icon name={n.icon} /> {n.label}
               </button>
