@@ -681,6 +681,7 @@ function Dashboard({ log, go, onRefresh, scope }: { log: string[]; go: (p: Page)
                     <div style={{ fontWeight: 700 }}>
                       {p.handle ? '@' + p.handle : p.profile}
                       {i === 0 && p.views > 0 && <span className="chip" style={{ marginLeft: 8 }}>🏆 top</span>}
+                      {p.videoCount > 0 && p.views === 0 && <span className="chip" style={{ marginLeft: 8, background: '#fef3c7', color: '#b45309' }}>⏳ stats en attente</span>}
                     </div>
                     <div className="muted small">{p.videoCount} vidéo{p.videoCount > 1 ? 's' : ''} · {fmtNum(p.followers)} abonné{p.followers > 1 ? 's' : ''}</div>
                   </div>
