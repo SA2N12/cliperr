@@ -316,10 +316,14 @@ async function runVideoGen(
     let musicTrack: string | undefined
     if (tracks.length) {
       emitIdeaVideo({ ideaId, status: 'running', message: 'Choix de la musique (IA)…' })
-      const chosen = await chooseMusicTrack(anthropicKey, model, idea, tracks)
+      // Évite de rejouer le dernier morceau utilisé sur ce compte (variété).
+      const lastKey = `music_last_${targetProfile}`
+      const exclude = repo.getSetting(lastKey)
+      const chosen = await chooseMusicTrack(anthropicKey, model, idea, tracks, exclude)
       if (chosen) {
         musicTrack = join(musicDir, chosen)
-        emitIdeaVideo({ ideaId, status: 'running', message: `Musique : ${chosen.replace(/^\d+-/, '').replace(/\.[^.]+$/, '')}` })
+        repo.setSetting(lastKey, chosen)
+        emitIdeaVideo({ ideaId, status: 'running', message: `Musique : ${chosen.replace(/^[a-z]+-\d+-/, '').replace(/\.[^.]+$/, '')}` })
       }
     }
     const { filePath, durationSec, usage } = await generateVideoFromIdea(ctx, {

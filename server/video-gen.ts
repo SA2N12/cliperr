@@ -99,51 +99,76 @@ Pour chaque scène : la phrase de VOIX OFF (français, courte, orale) + un IMAGE
   return { scenes: parsed.data.scenes.slice(0, 8), usage }
 }
 
-/** Choisit, via Claude, la musique la plus adaptée à la vidéo parmi les pistes dispo (d'après leurs noms). */
+// Ambiances disponibles (préfixe du nom de fichier) + indice de contexte pour l'IA.
+const MOOD_HINTS: Record<string, string> = {
+  dark: 'sombre, mystère, suspense, tension, effrayant, crime',
+  epic: 'épique, grandiose, historique, dramatique, récit intense',
+  hype: 'énergique, rapide, hype, buzz, tendance, punchy',
+  uplift: 'positif, motivant, inspirant, lumineux, feel-good',
+  chill: 'calme, doux, posé, réfléchi, focus, psychologie'
+}
+const moodOf = (file: string): string => file.split('-')[0]
+const pickRandom = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)]
+
+/**
+ * Choisit une musique ADAPTÉE au contenu (ambiance via Claude) puis VARIÉE :
+ * tirage aléatoire dans le groupe d'ambiance, en évitant le dernier morceau
+ * utilisé (`exclude`) pour ne pas remettre le même deux fois de suite.
+ */
 export async function chooseMusicTrack(
   key: string,
   model: string,
   idea: ViralIdea,
-  tracks: string[]
+  tracks: string[],
+  exclude?: string | null
 ): Promise<string | null> {
   if (!tracks.length) return null
   if (tracks.length === 1) return tracks[0]
-  const fallback = tracks[Math.floor(Math.random() * tracks.length)]
+
+  const moods = [...new Set(tracks.map(moodOf))]
+  let mood: string | null = null
   try {
     const client = new Anthropic({ apiKey: key })
     const tool = {
-      name: 'pick_music',
-      description: 'Choisit la musique de fond la plus adaptée à la vidéo.',
+      name: 'pick_mood',
+      description: 'Choisit l’ambiance musicale la plus adaptée à la vidéo.',
       input_schema: {
         type: 'object',
-        properties: {
-          track: { type: 'string', enum: tracks, description: 'Nom EXACT du fichier de musique le plus adapté' }
-        },
-        required: ['track']
+        properties: { mood: { type: 'string', enum: moods, description: 'Ambiance la plus adaptée' } },
+        required: ['mood']
       }
     } satisfies Anthropic.Tool
-    const prompt = `Choisis la musique de fond la plus adaptée à cette vidéo TikTok, en jugeant d'après les NOMS de fichiers (ils indiquent souvent le style/l'ambiance : epic, chill, hype, sad, funny…).
+    const hints = moods.map((m) => `- ${m} : ${MOOD_HINTS[m] ?? m}`).join('\n')
+    const prompt = `Choisis l’ambiance musicale la plus adaptée à cette vidéo TikTok.
 Titre : ${idea.title}
 Hook : ${idea.hook}
-Ambiance : ${idea.script.join(' ')}
-Musiques disponibles : ${tracks.join(', ')}
-Réponds via l'outil pick_music en choisissant un nom EXACT de la liste.`
+Contenu : ${idea.script.join(' ')}
+
+Ambiances possibles :
+${hints}
+
+Réponds via l’outil pick_mood.`
     const msg = await client.messages.create({
       model,
-      max_tokens: 200,
+      max_tokens: 120,
       tools: [tool],
-      tool_choice: { type: 'tool', name: 'pick_music' },
+      tool_choice: { type: 'tool', name: 'pick_mood' },
       messages: [{ role: 'user', content: prompt }]
     })
     const block = msg.content.find((b) => b.type === 'tool_use')
     if (block && block.type === 'tool_use') {
-      const t = (block.input as { track?: string }).track
-      if (typeof t === 'string' && tracks.includes(t)) return t
+      const m = (block.input as { mood?: string }).mood
+      if (typeof m === 'string' && moods.includes(m)) mood = m
     }
   } catch {
-    /* en cas d'échec IA, on retombe sur un choix aléatoire */
+    /* échec IA : on tire dans toute la bibliothèque */
   }
-  return fallback
+
+  let pool = mood ? tracks.filter((t) => moodOf(t) === mood) : tracks
+  if (!pool.length) pool = tracks
+  // On évite de rejouer le dernier morceau si une alternative existe.
+  const varied = pool.filter((t) => t !== exclude)
+  return pickRandom(varied.length ? varied : pool)
 }
 
 /** Voix off OpenAI (tts-1-hd, haute qualité) → fichier mp3. Débit légèrement soutenu (énergie TikTok). */
