@@ -396,6 +396,20 @@ function parisClock(): { hour: number; hm: number } {
 function dayKey(): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris' }).format(new Date())
 }
+/** Décompose un timestamp en date/heure Paris (pour dater les vidéos déjà publiées). */
+function parisPartsOf(ms: number): { date: string; hm: number; label: string } {
+  const dt = new Date(ms)
+  const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris' }).format(dt)
+  const p = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Europe/Paris',
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: false
+  }).formatToParts(dt)
+  const h = Number(p.find((x) => x.type === 'hour')?.value ?? '0') % 24
+  const m = Number(p.find((x) => x.type === 'minute')?.value ?? '0')
+  return { date, hm: h + m / 60, label: `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}` }
+}
 function autopilotNiches(): Record<string, string> {
   try {
     const raw = repo.getSetting('autopilot_niches')
@@ -974,45 +988,86 @@ app.post('/api/autopilot/run-now', wrap((_req, res) => {
   void runAutopilotTick(true).catch((e) => emitLog(`Pilote auto : ${e instanceof Error ? e.message : String(e)}`))
   res.json({ ok: true })
 }))
-// Planning du jour : créneaux estimés (heure Paris) par compte, lissés sur la fenêtre.
+// Planning du jour : vidéos DÉJÀ publiées (heure réelle) + À VENIR (estimées de
+// maintenant jusqu'à la fin de la fenêtre, dans l'ordre round-robin du pilote).
 app.get('/api/autopilot/plan', wrap(async (_req, res) => {
   const enabled = repo.getSetting('autopilot_enabled') === '1'
   const perDay = Math.max(1, Number(repo.getSetting('autopilot_per_day')) || 1)
   const profiles = uploadPostProfiles()
   const n = profiles.length
   const { hm: nowHm } = parisClock()
-  if (!n) return res.json({ enabled, perDay, window: { start: PUB_START_HOUR, end: PUB_END_HOUR }, nowHm, slots: [] })
+  const win = { start: PUB_START_HOUR, end: PUB_END_HOUR }
+  if (!n) return res.json({ enabled, perDay, window: win, nowHm, slots: [] })
   const meta = new Map((await cachedUploadPostProfiles()).map((p) => [p.username, p]))
   const today = dayKey()
-  const target = perDay * n
-  const windowLen = PUB_END_HOUR - PUB_START_HOUR
   const fmt = (h: number): string => {
     let hh = Math.floor(h)
     let mm = Math.round((h - hh) * 60)
     if (mm === 60) { hh += 1; mm = 0 }
-    return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`
+    return `${String(hh).padStart(2, '0')}:${String(Math.max(0, mm)).padStart(2, '0')}`
   }
-  const slots: { user: string; handle: string | null; avatarUrl: string | null; niche: string; ordinal: number; etaHm: number; eta: string; done: boolean }[] = []
-  profiles.forEach((user, a) => {
+  type Slot = { user: string; handle: string | null; avatarUrl: string | null; niche: string; ordinal: number; etaHm: number; eta: string; done: boolean }
+  const slots: Slot[] = []
+
+  // Heures RÉELLES des vidéos publiées aujourd'hui, par compte.
+  const doneTimes = new Map<string, number[]>()
+  for (const c of repo.listClips()) {
+    if (c.publishStatus !== 'published' || !c.profile) continue
+    if (parisPartsOf(c.createdAt).date !== today) continue
+    const arr = doneTimes.get(c.profile) ?? []
+    arr.push(c.createdAt)
+    doneTimes.set(c.profile, arr)
+  }
+  for (const arr of doneTimes.values()) arr.sort((a, b) => a - b)
+
+  const remaining = new Map<string, number>()
+  profiles.forEach((user) => {
     const done = Number(repo.getSetting(`autopilot_count_${user}_${today}`)) || 0
     const m = meta.get(user)
-    for (let j = 1; j <= perDay; j++) {
-      const k = a + 1 + (j - 1) * n // rang global dans l'ordre round-robin
-      const etaHm = target > 1 ? PUB_START_HOUR + ((k - 1) * windowLen) / target : PUB_START_HOUR
-      slots.push({
-        user,
-        handle: m?.tiktokHandle ?? null,
-        avatarUrl: m?.avatarUrl ?? null,
-        niche: nicheForProfile(user),
-        ordinal: j,
-        etaHm,
-        eta: fmt(etaHm),
-        done: done >= j
-      })
+    const info = { user, handle: m?.tiktokHandle ?? null, avatarUrl: m?.avatarUrl ?? null, niche: nicheForProfile(user) }
+    const times = doneTimes.get(user) ?? []
+    for (let j = 1; j <= done; j++) {
+      const ms = times[j - 1]
+      const pp = ms != null ? parisPartsOf(ms) : null
+      slots.push({ ...info, ordinal: j, etaHm: pp ? pp.hm : 0, eta: pp ? pp.label : '—', done: true })
     }
+    remaining.set(user, Math.max(0, perDay - done))
   })
-  slots.sort((x, y) => x.etaHm - y.etaHm)
-  res.json({ enabled, perDay, window: { start: PUB_START_HOUR, end: PUB_END_HOUR }, nowHm, today, slots })
+
+  // À venir : étalées régulièrement de maintenant → fin de fenêtre, en servant
+  // à chaque pas le compte le PLUS en retard (même logique que le pilote).
+  let remainingTotal = 0
+  for (const v of remaining.values()) remainingTotal += v
+  const winStart = Math.min(PUB_END_HOUR, Math.max(nowHm, PUB_START_HOUR))
+  const step = remainingTotal > 0 ? (PUB_END_HOUR - winStart) / remainingTotal : 0
+  const nextOrdinal = new Map<string, number>()
+  profiles.forEach((u) => nextOrdinal.set(u, (Number(repo.getSetting(`autopilot_count_${u}_${today}`)) || 0) + 1))
+  for (let i = 0; i < remainingTotal; i++) {
+    let best: string | null = null
+    let bestRem = 0
+    for (const u of profiles) {
+      const r = remaining.get(u) ?? 0
+      if (r > bestRem) { bestRem = r; best = u }
+    }
+    if (!best) break
+    remaining.set(best, (remaining.get(best) ?? 0) - 1)
+    const m = meta.get(best)
+    const etaHm = winStart + step * i
+    slots.push({
+      user: best,
+      handle: m?.tiktokHandle ?? null,
+      avatarUrl: m?.avatarUrl ?? null,
+      niche: nicheForProfile(best),
+      ordinal: nextOrdinal.get(best) ?? 1,
+      etaHm,
+      eta: fmt(etaHm),
+      done: false
+    })
+    nextOrdinal.set(best, (nextOrdinal.get(best) ?? 1) + 1)
+  }
+
+  slots.sort((a, b) => a.etaHm - b.etaHm)
+  res.json({ enabled, perDay, window: win, nowHm, today, slots })
 }))
 
 // TikTok

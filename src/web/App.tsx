@@ -1279,14 +1279,14 @@ function Queue({ clips, go, scope }: { clips: ClipDTO[]; go: (p: Page) => void; 
           <div className="row" style={{ marginBottom: 4 }}>
             <div>
               <strong>Pilote auto — aujourd’hui</strong>
-              <div className="muted small">{doneCount}/{slots.length} publiée{slots.length > 1 ? 's' : ''} · étalées de {plan.window.start}h à {plan.window.end}h (Paris)</div>
+              <div className="muted small">{doneCount}/{slots.length} publiée{slots.length > 1 ? 's' : ''} · heures réelles pour les publiées, estimations (≈) pour les suivantes jusqu’à {plan.window.end}h</div>
             </div>
             <span className="pill-badge"><span className="dot" /> {plan.perDay}/jour/compte</span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
             {slots.map((s, i) => (
               <div key={`${s.user}-${s.ordinal}`} className="row" style={{ gap: 12 }}>
-                <div style={{ width: 46, flexShrink: 0, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: s.done ? 'var(--muted)' : 'var(--accent-strong)' }}>{s.eta}</div>
+                <div style={{ width: 58, flexShrink: 0, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: s.done ? 'var(--muted)' : 'var(--accent-strong)' }}>{s.done ? s.eta : `≈ ${s.eta}`}</div>
                 <Avatar url={s.avatarUrl} name={s.user} size={30} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.handle ? '@' + s.handle : s.user}</div>
