@@ -323,7 +323,8 @@ async function genVideoFal(
   prompt: string,
   dest: string,
   refImagePath: string,
-  model: string = FAL_DEFAULT_MODEL
+  model: string = FAL_DEFAULT_MODEL,
+  durationSec: '5' | '10' = '5'
 ): Promise<void> {
   const auth = { Authorization: `Key ${falKey}` }
   const imageB64 = (await readFile(refImagePath)).toString('base64')
@@ -334,7 +335,7 @@ async function genVideoFal(
       prompt,
       image_url: `data:image/png;base64,${imageB64}`,
       resolution: '720p',
-      duration: '5'
+      duration: durationSec
     })
   })
   if (!submit.ok) throw new Error(`fal.ai ${submit.status} : ${(await submit.text()).slice(0, 160)}`)
@@ -471,7 +472,8 @@ export async function generateVideoFromIdea(
             `Animate this exact scene keeping the characters and art style strictly identical: ${sc.imagePrompt}.${talking} Natural lively character motion, smooth cinematic camera movement, vivid colors, no text.`,
             animClip,
             png,
-            opts.falVideoModel || FAL_DEFAULT_MODEL
+            opts.falVideoModel || FAL_DEFAULT_MODEL,
+            dur > 6.5 ? '10' : '5' // réplique longue → clip plus long (évite l'étirement excessif)
           )
         } catch (e) {
           animClip = null
@@ -485,14 +487,16 @@ export async function generateVideoFromIdea(
       await writeFile(ass, sceneAss(subText, dur))
       const scene = join(work, `scene${i}.mp4`)
       if (animClip) {
-        // Clip animé : recadré 1080x1920, dernière image clonée si la voix dure
-        // plus longtemps que le clip, sous-titres incrustés, voix off en piste audio.
+        // Clip animé : recadré 1080x1920 et ÉTIRÉ/COMPRESSÉ en douceur (setpts)
+        // pour couvrir exactement la durée de la voix — plus aucun gel d'image.
+        const clipDur = await mediaDuration(ctx.bin.ffprobe, animClip)
+        const ratio = Math.max(0.5, Math.min(2.5, dur / Math.max(0.5, clipDur)))
         await run(ctx.bin.ffmpeg, [
           '-y', '-loglevel', 'error',
           '-i', animClip,
           '-i', mp3,
           '-filter_complex',
-          `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,setsar=1,tpad=stop=-1:stop_mode=clone,subtitles=${ass}[v]`,
+          `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setpts=${ratio.toFixed(4)}*PTS,fps=30,setsar=1,subtitles=${ass}[v]`,
           '-map', '[v]', '-map', '1:a',
           '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
           '-c:a', 'aac', '-b:a', '128k',
