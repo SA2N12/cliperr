@@ -136,6 +136,8 @@ export async function generateEpisodeIdea(opts: {
   apiKey: string
   model?: string
   series: SeriesState
+  /** Tendances TikTok du moment (hashtags) — clin d'œil dans l'épisode si pertinent. */
+  trends?: string[]
 }): Promise<{ idea: ViralIdea; recap: string; usage: Usage | null }> {
   const model = opts.model ?? 'claude-haiku-4-5'
   const client = new Anthropic({ apiKey: opts.apiKey })
@@ -168,7 +170,7 @@ UNIVERS ET PERSONNAGES (à respecter strictement, mêmes personnages à chaque �
 ${s.universe}
 
 ${s.recap ? `RÉSUMÉ DES ÉPISODES PRÉCÉDENTS (continue cette histoire, ne te contredis pas) :\n${s.recap}` : `C'est le PREMIER épisode : pose l'univers et les personnages en quelques secondes, puis lance tout de suite une intrigue.`}
-
+${opts.trends && opts.trends.length ? `\nTENDANCES TIKTOK DU MOMENT (glisse un clin d'œil ou intègre-en une dans l'intrigue SEULEMENT si ça sert l'histoire — jamais au détriment de la continuité) :\n${opts.trends.slice(0, 15).map((t) => `- ${t}`).join('\n')}\n` : ''}
 Règles du format :
 - Hook : 1 phrase qui replonge instantanément dans l'histoire (« Ép. ${n} : ... »).
 - 5 à 7 phrases courtes, orales, tutoiement, énergiques ; une péripétie claire par épisode ; humour absurde assumé.

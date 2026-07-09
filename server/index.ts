@@ -74,6 +74,33 @@ const PRICES: Record<string, { in: number; out: number }> = {
   'claude-opus-4-8': { in: 5, out: 25 }
 }
 
+/**
+ * Modèle utilisé pour l'ÉCRITURE (idées, épisodes de série, storyboards).
+ * Réglé via `script_model` (éco/équilibré/max) — indépendant du modèle du
+ * pipeline de clipping (`highlights_model`), avec repli dessus.
+ */
+function scriptModel(): string {
+  const pick = repo.getSetting('script_model') || repo.getSetting(FLAG_MODEL) || 'haiku'
+  return MODEL_MAP[pick] ?? MODEL_MAP.haiku
+}
+
+// Tendances TikTok (RapidAPI) mises en cache 6 h — vide si l'API n'est pas configurée.
+let trendsCache: { at: number; tags: string[] } | null = null
+async function getTrendsCached(): Promise<string[]> {
+  if (trendsCache && Date.now() - trendsCache.at < 6 * 60 * 60 * 1000) return trendsCache.tags
+  const key = getEncrypted('rapidapi_key')
+  const host = repo.getSetting('trends_host') || 'tiktok-trending-data.p.rapidapi.com'
+  const path = repo.getSetting('trends_path') || ''
+  if (!key || !path) return []
+  try {
+    const tags = await fetchTikTokTrends(key, host, path)
+    trendsCache = { at: Date.now(), tags }
+    return tags
+  } catch {
+    return trendsCache?.tags ?? []
+  }
+}
+
 function addSpend(model: string, usage: Usage): void {
   const p = PRICES[model] ?? PRICES['claude-haiku-4-5']
   const cost = (usage.input_tokens * p.in + usage.output_tokens * p.out) / 1_000_000
@@ -309,7 +336,7 @@ async function runVideoGen(
   const openaiKey = getEncrypted('openai_key')
   if (!anthropicKey) { emitIdeaVideo({ ideaId, status: 'error', message: 'Clé Claude manquante (Réglages).' }); return null }
   if (!openaiKey) { emitIdeaVideo({ ideaId, status: 'error', message: 'Clé OpenAI manquante (Réglages).' }); return null }
-  const model = MODEL_MAP[repo.getSetting(FLAG_MODEL) ?? 'haiku'] ?? MODEL_MAP.haiku
+  const model = scriptModel()
   try {
     emitIdeaVideo({ ideaId, status: 'running', message: 'Démarrage…' })
     const ctx = await getContext()
@@ -546,7 +573,9 @@ async function runAutopilotTick(force = false): Promise<void> {
   try {
     const anthropicKey = getApiKey()
     if (!anthropicKey) { emitLog('Pilote auto : clé Claude manquante.'); return }
-    const model = MODEL_MAP[repo.getSetting(FLAG_MODEL) ?? 'haiku'] ?? MODEL_MAP.haiku
+    const model = scriptModel()
+    // Tendances TikTok du moment (si l'API est configurée) → scénarios ancrés sur l'actu.
+    const trends = await getTrendsCached()
 
     // Mode série (feuilleton) : épisode suivant de l'histoire ; sinon idée de niche.
     const series = seriesForProfile(user)
@@ -556,7 +585,7 @@ async function runAutopilotTick(force = false): Promise<void> {
     let refPath: string | undefined
     if (series) {
       emitLog(`Pilote auto : « ${series.title} » — épisode ${series.episode} pour « ${user} »…`)
-      const r = await generateEpisodeIdea({ apiKey: anthropicKey, model, series })
+      const r = await generateEpisodeIdea({ apiKey: anthropicKey, model, series, trends })
       if (r.usage) addSpend(model, r.usage)
       idea = r.idea
       ideaLabel = `Série : ${series.title}`
@@ -565,7 +594,7 @@ async function runAutopilotTick(force = false): Promise<void> {
       if (geminiKey) refPath = await ensureSeriesRef(user, series, geminiKey)
     } else {
       emitLog(`Pilote auto : génération pour « ${user} » (niche : ${niche})…`)
-      const { ideas, usage } = await generateViralIdeas({ apiKey: anthropicKey, model, niche, count: 1, trends: [] })
+      const { ideas, usage } = await generateViralIdeas({ apiKey: anthropicKey, model, niche, count: 1, trends })
       if (usage) addSpend(model, usage)
       if (!ideas.length) { emitLog(`Pilote auto : aucune idée générée pour « ${user} ».`); return }
       idea = ideas[0]
@@ -717,7 +746,7 @@ app.post('/api/ideas', wrap(async (req, res) => {
   if (!niche) return res.status(400).json({ error: 'Précise une niche ou un thème.' })
   const count = Math.min(8, Math.max(1, Math.round(Number(req.body?.count ?? 4))))
   const trends = Array.isArray(req.body?.trends) ? (req.body.trends as unknown[]).map(String).slice(0, 25) : []
-  const model = MODEL_MAP[repo.getSetting(FLAG_MODEL) ?? 'haiku'] ?? MODEL_MAP.haiku
+  const model = scriptModel()
   const { ideas, usage } = await generateViralIdeas({ apiKey, model, niche, count, trends })
   if (usage) addSpend(model, usage)
   // On enregistre chaque idée générée (page « Mes idées »).

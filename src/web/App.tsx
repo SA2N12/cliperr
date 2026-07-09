@@ -1896,7 +1896,7 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
     setFlags((f) => ({ ...f, [k]: r.value ?? '' }))
   }, [])
   useEffect(() => {
-    ;['publish_mode', 'highlights_model', 'transcribe_enabled', 'transcribe_backend', 'reframe_focus', 'tiktok_privacy', 'tiktok_client_key', 'tiktok_redirect', 'schedule_enabled', 'schedule_cron', 'uploadpost_user', 'uploadpost_users', 'uploadpost_fallback'].forEach((k) => loadFlag(k).catch(() => undefined))
+    ;['publish_mode', 'highlights_model', 'script_model', 'transcribe_enabled', 'transcribe_backend', 'reframe_focus', 'tiktok_privacy', 'tiktok_client_key', 'tiktok_redirect', 'schedule_enabled', 'schedule_cron', 'uploadpost_user', 'uploadpost_users', 'uploadpost_fallback'].forEach((k) => loadFlag(k).catch(() => undefined))
     api.apiKeyStatus().then(setKeyStatus).catch(() => undefined)
     api.groqStatus().then((r) => setGroqHas(r.has)).catch(() => undefined)
     api.rapidApiStatus().then((r) => setRapidHas(r.has)).catch(() => undefined)
@@ -1977,6 +1977,13 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
             <option value="haiku">Haiku 4.5 — éco</option>
             <option value="sonnet">Sonnet 4.6 — équilibré</option>
             <option value="opus">Opus 4.8 — max</option>
+          </select>
+        </Field>
+        <Field label="Modèle des scénarios (idées, épisodes de série, storyboards)">
+          <select value={flags.script_model || flags.highlights_model || 'haiku'} onChange={(e) => setFlag('script_model', e.target.value)}>
+            <option value="haiku">Haiku 4.5 — éco</option>
+            <option value="sonnet">Sonnet 4.6 — équilibré</option>
+            <option value="opus">Opus 4.8 — max (meilleure écriture, ~+0,06 $/vidéo)</option>
           </select>
         </Field>
       </div>
