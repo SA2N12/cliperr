@@ -9,7 +9,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { appPaths, config, assertConfig, type AppPaths } from './config'
 import { handleLogin, handleLogout, isAuthed, requireAuth } from './auth'
 import { sseHandler, emitProgress, emitLog, emitIdeaVideo } from './sse'
-import { generateVideoFromIdea, chooseMusicTrack } from './video-gen'
+import { generateVideoFromIdea, chooseMusicTrack, genImageGemini } from './video-gen'
 import {
   getApiKey,
   setApiKey,
@@ -300,7 +300,7 @@ function reloadScheduler(): void {
 let videoChain: Promise<void> = Promise.resolve()
 async function runVideoGen(
   ideaId: number,
-  opts: { profile?: string; autoPublish?: boolean; imageStyle?: string } = {}
+  opts: { profile?: string; autoPublish?: boolean; imageStyle?: string; characterRefPath?: string } = {}
 ): Promise<number | null> {
   const idea = repo.getIdea(ideaId)
   if (!idea) return null
@@ -335,6 +335,8 @@ async function runVideoGen(
       idea,
       musicTrack,
       imageStyle: opts.imageStyle,
+      geminiKey: getEncrypted('gemini_key'),
+      characterRefPath: opts.characterRefPath,
       onProgress: (m) => emitIdeaVideo({ ideaId, status: 'running', message: m })
     })
     if (usage) addSpend(model, usage)
@@ -464,6 +466,27 @@ function advanceSeries(user: string, recap: string): void {
   repo.setSetting('autopilot_series', JSON.stringify(map))
 }
 
+// Planche de référence des personnages (Nano Banana) : générée à l'épisode 1,
+// réutilisée ensuite pour garder des personnages IDENTIQUES d'un épisode à l'autre.
+const seriesRefDir = join(paths.data, 'series-refs')
+async function ensureSeriesRef(user: string, series: SeriesState, geminiKey: string): Promise<string | undefined> {
+  try {
+    mkdirSync(seriesRefDir, { recursive: true })
+    const p = join(seriesRefDir, `${user}.png`)
+    if (series.episode > 1 && existsSync(p)) return p
+    emitLog(`Pilote auto : planche des personnages « ${series.title} » (Nano Banana)…`)
+    await genImageGemini(
+      geminiKey,
+      `Character reference sheet showing ALL the recurring characters of this series together, full body, clearly separated on a neutral background, consistent art style: ${series.universe}. Vivid saturated colors, expressive faces, high detail, no text, no watermark.`,
+      p
+    )
+    return p
+  } catch (e) {
+    emitLog(`Pilote auto : planche personnages impossible (${e instanceof Error ? e.message : String(e)}) — génération sans référence.`)
+    return undefined
+  }
+}
+
 let autopilotBusy = false
 let autopilotTask: ScheduledTask | null = null
 
@@ -524,6 +547,7 @@ async function runAutopilotTick(force = false): Promise<void> {
     let idea: import('./ideas').ViralIdea
     let ideaLabel = niche
     let nextRecap: string | null = null
+    let refPath: string | undefined
     if (series) {
       emitLog(`Pilote auto : « ${series.title} » — épisode ${series.episode} pour « ${user} »…`)
       const r = await generateEpisodeIdea({ apiKey: anthropicKey, model, series })
@@ -531,6 +555,8 @@ async function runAutopilotTick(force = false): Promise<void> {
       idea = r.idea
       ideaLabel = `Série : ${series.title}`
       nextRecap = r.recap
+      const geminiKey = getEncrypted('gemini_key')
+      if (geminiKey) refPath = await ensureSeriesRef(user, series, geminiKey)
     } else {
       emitLog(`Pilote auto : génération pour « ${user} » (niche : ${niche})…`)
       const { ideas, usage } = await generateViralIdeas({ apiKey: anthropicKey, model, niche, count: 1, trends: [] })
@@ -542,7 +568,7 @@ async function runAutopilotTick(force = false): Promise<void> {
     const saved = repo.createIdea(ideaLabel, idea)
     // On passe par videoChain pour ne jamais monter deux vidéos en parallèle.
     const job = videoChain.then(() =>
-      runVideoGen(saved.id, { profile: user, autoPublish: true, imageStyle: series?.universe })
+      runVideoGen(saved.id, { profile: user, autoPublish: true, imageStyle: series?.universe, characterRefPath: refPath })
     )
     videoChain = job.then(() => undefined, () => undefined)
     const clipId = await job.catch(() => null)
@@ -858,6 +884,13 @@ app.post('/api/ideas/:id/video', wrap((req, res) => {
 app.get('/api/settings/openai', wrap((_req, res) => res.json({ has: !!getEncrypted('openai_key') })))
 app.post('/api/settings/openai', wrap((req, res) => {
   setEncrypted('openai_key', String(req.body?.key ?? ''))
+  res.json({ ok: true })
+}))
+
+// Clé Gemini / Nano Banana (personnages cohérents pour le mode série)
+app.get('/api/settings/gemini', wrap((_req, res) => res.json({ has: !!getEncrypted('gemini_key') })))
+app.post('/api/settings/gemini', wrap((req, res) => {
+  setEncrypted('gemini_key', String(req.body?.key ?? ''))
   res.json({ ok: true })
 }))
 

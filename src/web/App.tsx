@@ -1879,6 +1879,8 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
   const [upHas, setUpHas] = useState(false)
   const [openaiKey, setOpenaiKey] = useState('')
   const [openaiHas, setOpenaiHas] = useState(false)
+  const [geminiKey, setGeminiKey] = useState('')
+  const [geminiHas, setGeminiHas] = useState(false)
   const [music, setMusic] = useState<string[]>([])
   const [upProfiles, setUpProfiles] = useState<{ username: string; tiktokHandle: string | null; tiktokConnected: boolean; reauthRequired: boolean; blocked: boolean }[]>([])
   const [upSelected, setUpSelected] = useState<string[]>([])
@@ -1898,6 +1900,7 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
     api.rapidApiStatus().then((r) => setRapidHas(r.has)).catch(() => undefined)
     api.uploadPostStatus().then((r) => setUpHas(r.has)).catch(() => undefined)
     api.openaiStatus().then((r) => setOpenaiHas(r.has)).catch(() => undefined)
+    api.geminiStatus().then((r) => setGeminiHas(r.has)).catch(() => undefined)
     api.musicList().then((r) => setMusic(r.tracks)).catch(() => undefined)
     api.golinks().then((r) => setLinks(Object.entries(r.links).map(([slug, url]) => ({ slug, url })))).catch(() => undefined)
     api.tiktokStatus().then(setTt).catch(() => undefined)
@@ -2001,6 +2004,13 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
             <input className="input-full" style={{ flex: 1 }} type="password" placeholder="sk-…" value={openaiKey} onChange={(e) => setOpenaiKey(e.target.value)} />
             <button className="btn primary" onClick={async () => { await api.setOpenaiKey(openaiKey); setOpenaiKey(''); setOpenaiHas((await api.openaiStatus()).has); toast('Clé OpenAI enregistrée') }} disabled={!openaiKey.trim()}>Enregistrer</button>
           </div>
+        </Field>
+        <Field label={geminiHas ? 'Clé Gemini / Nano Banana configurée ✓' : 'Clé Gemini / Nano Banana (mode série)'}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input className="input-full" style={{ flex: 1 }} type="password" placeholder="AIza…  (aistudio.google.com/apikey)" value={geminiKey} onChange={(e) => setGeminiKey(e.target.value)} />
+            <button className="btn primary" onClick={async () => { await api.setGeminiKey(geminiKey); setGeminiKey(''); setGeminiHas((await api.geminiStatus()).has); toast('Clé Gemini enregistrée') }} disabled={!geminiKey.trim()}>Enregistrer</button>
+          </div>
+          <div className="muted small" style={{ marginTop: 6 }}>Utilisée pour les séries (feuilletons) : personnages identiques d’un épisode à l’autre grâce à une planche de référence. Sans clé, repli sur les images OpenAI (personnages moins constants).</div>
         </Field>
         <Field label="Musiques de fond (libres de droits)">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

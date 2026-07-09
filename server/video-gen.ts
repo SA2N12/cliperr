@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { z } from 'zod'
-import { writeFile, mkdir, rm } from 'fs/promises'
+import { writeFile, readFile, mkdir, rm } from 'fs/promises'
 import { join } from 'path'
 import { run, runCapture, type PipelineContext } from '../src/main/pipeline/context'
 import type { Usage } from '../src/main/pipeline/highlights'
@@ -29,6 +29,10 @@ export interface VideoGenOptions {
   musicTrack?: string
   /** Univers visuel imposé (mode série) : personnages récurrents + style, injecté dans chaque image. */
   imageStyle?: string
+  /** Clé Gemini (Nano Banana) : images de série avec personnages RÉELLEMENT cohérents. */
+  geminiKey?: string | null
+  /** Planche de référence des personnages (png) — utilisée par Nano Banana à chaque scène. */
+  characterRefPath?: string
   onProgress?: (msg: string) => void
 }
 
@@ -233,6 +237,39 @@ async function genImage(openaiKey: string, prompt: string, dest: string): Promis
   throw new Error('OpenAI image : réponse vide')
 }
 
+// ── Nano Banana (Gemini) : génération d'images avec personnages cohérents ──
+const GEMINI = 'https://generativelanguage.googleapis.com/v1beta'
+
+/**
+ * Génère une image via Gemini (« Nano Banana »). Si `refPath` est fourni,
+ * l'image de référence est jointe : le modèle réutilise EXACTEMENT les mêmes
+ * personnages/style — c'est sa spécialité, idéale pour les séries.
+ */
+export async function genImageGemini(
+  key: string,
+  prompt: string,
+  dest: string,
+  refPath?: string
+): Promise<void> {
+  const parts: Record<string, unknown>[] = [{ text: prompt }]
+  if (refPath) {
+    const b64 = (await readFile(refPath)).toString('base64')
+    parts.push({ inlineData: { mimeType: 'image/png', data: b64 } })
+  }
+  const res = await fetch(`${GEMINI}/models/gemini-2.5-flash-image:generateContent`, {
+    method: 'POST',
+    headers: { 'x-goog-api-key': key, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ contents: [{ parts }] })
+  })
+  if (!res.ok) throw new Error(`Gemini image ${res.status} : ${(await res.text()).slice(0, 200)}`)
+  const j = (await res.json()) as {
+    candidates?: { content?: { parts?: { inlineData?: { data?: string } }[] } }[]
+  }
+  const b64 = j.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data)?.inlineData?.data
+  if (!b64) throw new Error('Gemini image : réponse vide')
+  await writeFile(dest, Buffer.from(b64, 'base64'))
+}
+
 /** Durée d'un média en secondes (ffprobe). */
 async function mediaDuration(ffprobe: string, file: string): Promise<number> {
   const out = await runCapture(ffprobe, [
@@ -309,7 +346,17 @@ export async function generateVideoFromIdea(
       const imgPrompt = opts.imageStyle
         ? `${sc.imagePrompt}. Recurring characters and consistent art style across the whole series (keep them IDENTICAL in every image): ${opts.imageStyle}`
         : sc.imagePrompt
-      await genImage(opts.openaiKey, imgPrompt, png)
+      if (opts.geminiKey && opts.characterRefPath) {
+        // Nano Banana + planche de référence → personnages identiques à chaque scène.
+        const gPrompt = `Using EXACTLY the characters and art style from the reference image (same faces, colors, outfits, designs), create this new scene: ${sc.imagePrompt}. Vertical 9:16 composition, vivid saturated colors, expressive, dynamic, no text, no watermark.`
+        try {
+          await genImageGemini(opts.geminiKey, gPrompt, png, opts.characterRefPath)
+        } catch {
+          await genImage(opts.openaiKey, imgPrompt, png) // repli si Gemini indisponible
+        }
+      } else {
+        await genImage(opts.openaiKey, imgPrompt, png)
+      }
 
       log?.(`Scène ${i + 1}/${scenes.length} — montage…`)
       const ass = join(work, `s${i}.ass`)
