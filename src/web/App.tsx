@@ -1837,7 +1837,7 @@ function Autopilot({ toast }: { toast: (m: string) => void }): JSX.Element {
                     <>
                       <input className="input-full" value={series[p.username]?.title ?? ''} placeholder="Titre de la série — ex. L’île des fruits skibidi" onChange={(e) => setSerie(p.username, { title: e.target.value })} />
                       <textarea className="input-full" rows={3} value={series[p.username]?.universe ?? ''} placeholder="Univers : personnages récurrents + style visuel — ex. Des fruits en 3D style Pixar coincés sur une île volcanique : Bano la banane à lunettes (le chef), Fraisou la fraise peureuse, Nanas l’ananas musclé. Humour absurde « skibidi », couleurs saturées." onChange={(e) => setSerie(p.username, { universe: e.target.value })} />
-                      <div className="muted small">La série remplace la niche sur ce compte : chaque vidéo = l’épisode suivant de l’histoire (mémoire conservée, cliffhanger à chaque fin). Changer le titre relance une histoire à l’épisode 1.</div>
+                      <div className="muted small">La série remplace la niche sur ce compte : chaque vidéo = l’épisode suivant de l’histoire (mémoire conservée, cliffhanger à chaque fin). Cadence fixée à <b>1 épisode/jour</b> (scènes animées en vidéo si la clé fal.ai est configurée). Changer le titre relance une histoire à l’épisode 1.</div>
                     </>
                   )}
                 </div>
@@ -1881,6 +1881,8 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
   const [openaiHas, setOpenaiHas] = useState(false)
   const [geminiKey, setGeminiKey] = useState('')
   const [geminiHas, setGeminiHas] = useState(false)
+  const [falKey, setFalKey] = useState('')
+  const [falHas, setFalHas] = useState(false)
   const [music, setMusic] = useState<string[]>([])
   const [upProfiles, setUpProfiles] = useState<{ username: string; tiktokHandle: string | null; tiktokConnected: boolean; reauthRequired: boolean; blocked: boolean }[]>([])
   const [upSelected, setUpSelected] = useState<string[]>([])
@@ -1901,6 +1903,7 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
     api.uploadPostStatus().then((r) => setUpHas(r.has)).catch(() => undefined)
     api.openaiStatus().then((r) => setOpenaiHas(r.has)).catch(() => undefined)
     api.geminiStatus().then((r) => setGeminiHas(r.has)).catch(() => undefined)
+    api.falStatus().then((r) => setFalHas(r.has)).catch(() => undefined)
     api.musicList().then((r) => setMusic(r.tracks)).catch(() => undefined)
     api.golinks().then((r) => setLinks(Object.entries(r.links).map(([slug, url]) => ({ slug, url })))).catch(() => undefined)
     api.tiktokStatus().then(setTt).catch(() => undefined)
@@ -2011,6 +2014,13 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
             <button className="btn primary" onClick={async () => { await api.setGeminiKey(geminiKey); setGeminiKey(''); setGeminiHas((await api.geminiStatus()).has); toast('Clé Gemini enregistrée') }} disabled={!geminiKey.trim()}>Enregistrer</button>
           </div>
           <div className="muted small" style={{ marginTop: 6 }}>Utilisée pour les séries (feuilletons) : personnages identiques d’un épisode à l’autre grâce à une planche de référence. Sans clé, repli sur les images OpenAI (personnages moins constants).</div>
+        </Field>
+        <Field label={falHas ? 'Clé fal.ai configurée ✓' : 'Clé fal.ai (animation vidéo des séries)'}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input className="input-full" style={{ flex: 1 }} type="password" placeholder="clé fal.ai…  (fal.ai → Dashboard → Keys)" value={falKey} onChange={(e) => setFalKey(e.target.value)} />
+            <button className="btn primary" onClick={async () => { await api.setFalKey(falKey); setFalKey(''); setFalHas((await api.falStatus()).has); toast('Clé fal.ai enregistrée') }} disabled={!falKey.trim()}>Enregistrer</button>
+          </div>
+          <div className="muted small" style={{ marginTop: 6 }}>Anime chaque scène des épisodes de série (image → clip vidéo, ~0,18 $/scène). Sans clé, les scènes restent des images animées (zoom).</div>
         </Field>
         <Field label="Musiques de fond (libres de droits)">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

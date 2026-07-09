@@ -33,6 +33,12 @@ export interface VideoGenOptions {
   geminiKey?: string | null
   /** Planche de référence des personnages (png) — utilisée par Nano Banana à chaque scène. */
   characterRefPath?: string
+  /** Clé fal.ai : anime chaque scène (image → clip vidéo) au lieu du zoom Ken Burns. */
+  falKey?: string | null
+  /** Modèle fal.ai (image-to-video) — défaut Seedance lite. */
+  falVideoModel?: string
+  /** Active l'animation vidéo des scènes (mode série). */
+  animateScenes?: boolean
   onProgress?: (msg: string) => void
 }
 
@@ -270,6 +276,60 @@ export async function genImageGemini(
   await writeFile(dest, Buffer.from(b64, 'base64'))
 }
 
+// ── fal.ai : animation d'une scène (image → clip vidéo) ──
+// File d'attente fal.ai : on soumet la requête, on interroge le statut, puis on
+// télécharge le clip. Modèle par défaut : Seedance lite (excellent rapport
+// qualité/prix ~0,18 $ le clip 5 s en 720p), changeable via le setting
+// `fal_video_model` sans redéploiement.
+const FAL_QUEUE = 'https://queue.fal.run'
+export const FAL_DEFAULT_MODEL = 'fal-ai/bytedance/seedance/v1/lite/image-to-video'
+
+async function genVideoFal(
+  falKey: string,
+  prompt: string,
+  dest: string,
+  refImagePath: string,
+  model: string = FAL_DEFAULT_MODEL
+): Promise<void> {
+  const auth = { Authorization: `Key ${falKey}` }
+  const imageB64 = (await readFile(refImagePath)).toString('base64')
+  const submit = await fetch(`${FAL_QUEUE}/${model}`, {
+    method: 'POST',
+    headers: { ...auth, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      prompt,
+      image_url: `data:image/png;base64,${imageB64}`,
+      resolution: '720p',
+      duration: '5'
+    })
+  })
+  if (!submit.ok) throw new Error(`fal.ai ${submit.status} : ${(await submit.text()).slice(0, 160)}`)
+  const sub = (await submit.json()) as { request_id?: string; status_url?: string; response_url?: string }
+  if (!sub.request_id) throw new Error('fal.ai : réponse sans request_id')
+  const statusUrl = sub.status_url ?? `${FAL_QUEUE}/${model}/requests/${sub.request_id}/status`
+  const resultUrl = sub.response_url ?? `${FAL_QUEUE}/${model}/requests/${sub.request_id}`
+
+  const t0 = Date.now()
+  for (;;) {
+    if (Date.now() - t0 > 8 * 60 * 1000) throw new Error('fal.ai : délai dépassé')
+    await new Promise((r) => setTimeout(r, 6000))
+    const st = await fetch(statusUrl, { headers: auth })
+    if (!st.ok) throw new Error(`fal.ai suivi ${st.status}`)
+    const sj = (await st.json()) as { status?: string }
+    if (sj.status === 'FAILED' || sj.status === 'ERROR') throw new Error('fal.ai : génération échouée')
+    if (sj.status !== 'COMPLETED') continue
+    const rr = await fetch(resultUrl, { headers: auth })
+    if (!rr.ok) throw new Error(`fal.ai résultat ${rr.status}`)
+    const j = (await rr.json()) as { video?: { url?: string } }
+    const url = j.video?.url
+    if (!url) throw new Error('fal.ai : réponse sans vidéo')
+    const dl = await fetch(url)
+    if (!dl.ok) throw new Error(`fal.ai téléchargement ${dl.status}`)
+    await writeFile(dest, Buffer.from(await dl.arrayBuffer()))
+    return
+  }
+}
+
 /** Durée d'un média en secondes (ffprobe). */
 async function mediaDuration(ffprobe: string, file: string): Promise<number> {
   const out = await runCapture(ffprobe, [
@@ -358,39 +418,75 @@ export async function generateVideoFromIdea(
         await genImage(opts.openaiKey, imgPrompt, png)
       }
 
+      // Mode animé (série) : clip vidéo fal.ai à partir de l'image de la scène.
+      let animClip: string | null = null
+      if (opts.animateScenes && opts.falKey) {
+        log?.(`Scène ${i + 1}/${scenes.length} — animation vidéo (fal.ai)…`)
+        try {
+          animClip = join(work, `v${i}.mp4`)
+          await genVideoFal(
+            opts.falKey,
+            `Animate this exact scene keeping the characters and art style strictly identical: ${sc.imagePrompt}. Natural lively character motion, smooth cinematic camera movement, vivid colors, no text.`,
+            animClip,
+            png,
+            opts.falVideoModel || FAL_DEFAULT_MODEL
+          )
+        } catch (e) {
+          animClip = null
+          log?.(`Scène ${i + 1}/${scenes.length} — fal.ai indisponible (${e instanceof Error ? e.message : String(e)}) → image animée`)
+        }
+      }
+
       log?.(`Scène ${i + 1}/${scenes.length} — montage…`)
       const ass = join(work, `s${i}.ass`)
       await writeFile(ass, sceneAss(sc.narration, dur))
       const scene = join(work, `scene${i}.mp4`)
-      const frames = Math.max(1, Math.round(dur * 30))
-      await run(ctx.bin.ffmpeg, [
-        '-y',
-        '-loglevel',
-        'error',
-        '-loop',
-        '1',
-        '-i',
-        png,
-        '-i',
-        mp3,
-        '-filter_complex',
-        `[0:v]scale=1188:2112:force_original_aspect_ratio=increase,crop=1188:2112,zoompan=z='min(zoom+0.0004,1.10)':d=${frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30,setsar=1,subtitles=${ass}[v]`,
-        '-map',
-        '[v]',
-        '-map',
-        '1:a',
-        '-c:v',
-        'libx264',
-        '-pix_fmt',
-        'yuv420p',
-        '-c:a',
-        'aac',
-        '-b:a',
-        '128k',
-        '-t',
-        String(dur),
-        scene
-      ])
+      if (animClip) {
+        // Clip animé : recadré 1080x1920, dernière image clonée si la voix dure
+        // plus longtemps que le clip, sous-titres incrustés, voix off en piste audio.
+        await run(ctx.bin.ffmpeg, [
+          '-y', '-loglevel', 'error',
+          '-i', animClip,
+          '-i', mp3,
+          '-filter_complex',
+          `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,setsar=1,tpad=stop=-1:stop_mode=clone,subtitles=${ass}[v]`,
+          '-map', '[v]', '-map', '1:a',
+          '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+          '-c:a', 'aac', '-b:a', '128k',
+          '-t', String(dur),
+          scene
+        ])
+      } else {
+        const frames = Math.max(1, Math.round(dur * 30))
+        await run(ctx.bin.ffmpeg, [
+          '-y',
+          '-loglevel',
+          'error',
+          '-loop',
+          '1',
+          '-i',
+          png,
+          '-i',
+          mp3,
+          '-filter_complex',
+          `[0:v]scale=1188:2112:force_original_aspect_ratio=increase,crop=1188:2112,zoompan=z='min(zoom+0.0004,1.10)':d=${frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30,setsar=1,subtitles=${ass}[v]`,
+          '-map',
+          '[v]',
+          '-map',
+          '1:a',
+          '-c:v',
+          'libx264',
+          '-pix_fmt',
+          'yuv420p',
+          '-c:a',
+          'aac',
+          '-b:a',
+          '128k',
+          '-t',
+          String(dur),
+          scene
+        ])
+      }
       sceneFiles.push(scene)
     }
 

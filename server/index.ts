@@ -300,7 +300,7 @@ function reloadScheduler(): void {
 let videoChain: Promise<void> = Promise.resolve()
 async function runVideoGen(
   ideaId: number,
-  opts: { profile?: string; autoPublish?: boolean; imageStyle?: string; characterRefPath?: string } = {}
+  opts: { profile?: string; autoPublish?: boolean; imageStyle?: string; characterRefPath?: string; animateScenes?: boolean } = {}
 ): Promise<number | null> {
   const idea = repo.getIdea(ideaId)
   if (!idea) return null
@@ -337,6 +337,9 @@ async function runVideoGen(
       imageStyle: opts.imageStyle,
       geminiKey: getEncrypted('gemini_key'),
       characterRefPath: opts.characterRefPath,
+      falKey: getEncrypted('fal_key'),
+      falVideoModel: repo.getSetting('fal_video_model') || undefined,
+      animateScenes: opts.animateScenes,
       onProgress: (m) => emitIdeaVideo({ ideaId, status: 'running', message: m })
     })
     if (usage) addSpend(model, usage)
@@ -499,6 +502,9 @@ async function runAutopilotTick(force = false): Promise<void> {
   const today = dayKey()
   const profiles = uploadPostProfiles()
   if (!profiles.length) return
+  // Quota du jour par compte : les comptes en mode série sont plafonnés à
+  // 1 épisode/jour (rythme feuilleton + coût de l'animation vidéo).
+  const perDayFor = (u: string): number => (seriesForProfile(u) ? 1 : perDay)
 
   // ── Lissage horaire (ignoré en mode test « force ») ──
   // On ne poste que dans la fenêtre Paris, et on étale : à un instant t, on
@@ -508,7 +514,7 @@ async function runAutopilotTick(force = false): Promise<void> {
     const { hm } = parisClock()
     if (hm < PUB_START_HOUR || hm >= PUB_END_HOUR) return
     const windowLen = PUB_END_HOUR - PUB_START_HOUR
-    const target = perDay * profiles.length
+    const target = profiles.reduce((s, u) => s + perDayFor(u), 0)
     const producedToday = profiles.reduce(
       (s, u) => s + (Number(repo.getSetting(`autopilot_count_${u}_${today}`)) || 0),
       0
@@ -523,7 +529,7 @@ async function runAutopilotTick(force = false): Promise<void> {
     const quotaTs = Number(repo.getSetting(`quota_reached_${user}`)) || 0
     if (quotaTs && Date.now() - quotaTs < 6 * 60 * 60 * 1000) continue // saturé récemment
     const done = Number(repo.getSetting(`autopilot_count_${user}_${today}`)) || 0
-    if (done >= perDay) continue
+    if (done >= perDayFor(user)) continue
     eligible.push({ user, done })
   }
   if (!eligible.length) return
@@ -568,14 +574,20 @@ async function runAutopilotTick(force = false): Promise<void> {
     const saved = repo.createIdea(ideaLabel, idea)
     // On passe par videoChain pour ne jamais monter deux vidéos en parallèle.
     const job = videoChain.then(() =>
-      runVideoGen(saved.id, { profile: user, autoPublish: true, imageStyle: series?.universe, characterRefPath: refPath })
+      runVideoGen(saved.id, {
+        profile: user,
+        autoPublish: true,
+        imageStyle: series?.universe,
+        characterRefPath: refPath,
+        animateScenes: !!series // séries = scènes animées (fal.ai) si la clé est configurée
+      })
     )
     videoChain = job.then(() => undefined, () => undefined)
     const clipId = await job.catch(() => null)
     if (clipId) {
       repo.setSetting(countKey, String(done + 1))
       if (series && nextRecap != null) advanceSeries(user, nextRecap) // mémoire + épisode suivant
-      emitLog(`Pilote auto : vidéo publiée sur « ${user} » (${done + 1}/${perDay} aujourd'hui).`)
+      emitLog(`Pilote auto : vidéo publiée sur « ${user} » (${done + 1}/${perDayFor(user)} aujourd'hui).`)
     } else {
       emitLog(`Pilote auto : échec pour « ${user} » (voir journaux).`)
     }
@@ -894,6 +906,13 @@ app.post('/api/settings/gemini', wrap((req, res) => {
   res.json({ ok: true })
 }))
 
+// Clé fal.ai (animation vidéo des scènes de série : image → clip animé)
+app.get('/api/settings/fal', wrap((_req, res) => res.json({ has: !!getEncrypted('fal_key') })))
+app.post('/api/settings/fal', wrap((req, res) => {
+  setEncrypted('fal_key', String(req.body?.key ?? ''))
+  res.json({ ok: true })
+}))
+
 // Musiques de fond (libres de droits) pour les vidéos IA
 const musicUpload = multer({
   storage: multer.diskStorage({
@@ -1152,14 +1171,21 @@ app.get('/api/autopilot/plan', wrap(async (_req, res) => {
   profiles.forEach((user) => {
     const done = Number(repo.getSetting(`autopilot_count_${user}_${today}`)) || 0
     const m = meta.get(user)
-    const info = { user, handle: m?.tiktokHandle ?? null, avatarUrl: m?.avatarUrl ?? null, niche: nicheForProfile(user) }
+    const serie = seriesForProfile(user)
+    const info = {
+      user,
+      handle: m?.tiktokHandle ?? null,
+      avatarUrl: m?.avatarUrl ?? null,
+      niche: serie ? `Série : ${serie.title}` : nicheForProfile(user)
+    }
     const times = doneTimes.get(user) ?? []
     for (let j = 1; j <= done; j++) {
       const ms = times[j - 1]
       const pp = ms != null ? parisPartsOf(ms) : null
       slots.push({ ...info, ordinal: j, etaHm: pp ? pp.hm : 0, eta: pp ? pp.label : '—', done: true })
     }
-    remaining.set(user, Math.max(0, perDay - done))
+    // Les comptes en mode série sont plafonnés à 1 épisode/jour.
+    remaining.set(user, Math.max(0, (serie ? 1 : perDay) - done))
   })
 
   // À venir : étalées régulièrement de maintenant → fin de fenêtre, en servant
@@ -1181,11 +1207,12 @@ app.get('/api/autopilot/plan', wrap(async (_req, res) => {
     remaining.set(best, (remaining.get(best) ?? 0) - 1)
     const m = meta.get(best)
     const etaHm = winStart + step * i
+    const bestSerie = seriesForProfile(best)
     slots.push({
       user: best,
       handle: m?.tiktokHandle ?? null,
       avatarUrl: m?.avatarUrl ?? null,
-      niche: nicheForProfile(best),
+      niche: bestSerie ? `Série : ${bestSerie.title} — Ép. ${bestSerie.episode}` : nicheForProfile(best),
       ordinal: nextOrdinal.get(best) ?? 1,
       etaHm,
       eta: fmt(etaHm),
