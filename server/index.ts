@@ -34,7 +34,7 @@ import { detectFaceCenterX } from '../src/main/pipeline/face'
 import { isLocalFile } from '../src/main/pipeline/ingest'
 import { downloadViaApi, isYouTubeUrl, type SourceMetaApi } from './ytdl-api'
 import { listUploadPostProfiles, type UploadPostProfile } from '../src/main/publish/uploadpost'
-import { generateViralIdeas, fetchTikTokTrends } from './ideas'
+import { generateViralIdeas, generateEpisodeIdea, fetchTikTokTrends, type SeriesState } from './ideas'
 import type { PipelineContext } from '../src/main/pipeline/context'
 import type { Usage } from '../src/main/pipeline/highlights'
 import type { ProgressEvent } from '../src/shared/types'
@@ -300,7 +300,7 @@ function reloadScheduler(): void {
 let videoChain: Promise<void> = Promise.resolve()
 async function runVideoGen(
   ideaId: number,
-  opts: { profile?: string; autoPublish?: boolean } = {}
+  opts: { profile?: string; autoPublish?: boolean; imageStyle?: string } = {}
 ): Promise<number | null> {
   const idea = repo.getIdea(ideaId)
   if (!idea) return null
@@ -334,6 +334,7 @@ async function runVideoGen(
       voice: repo.getSetting('tts_voice') || 'onyx',
       idea,
       musicTrack,
+      imageStyle: opts.imageStyle,
       onProgress: (m) => emitIdeaVideo({ ideaId, status: 'running', message: m })
     })
     if (usage) addSpend(model, usage)
@@ -436,6 +437,33 @@ function nicheForProfile(user: string): string {
   return DEFAULT_NICHES[((idx < 0 ? 0 : idx) % DEFAULT_NICHES.length)]
 }
 
+// ── Mode série (feuilleton) par compte : autopilot_series = { [user]: SeriesState } ──
+function autopilotSeries(): Record<string, SeriesState> {
+  try {
+    const raw = repo.getSetting('autopilot_series')
+    if (raw) {
+      const o = JSON.parse(raw) as unknown
+      if (o && typeof o === 'object') return o as Record<string, SeriesState>
+    }
+  } catch {
+    /* JSON invalide → vide */
+  }
+  return {}
+}
+function seriesForProfile(user: string): SeriesState | null {
+  const s = autopilotSeries()[user]
+  if (!s || !s.enabled || !(s.title || '').trim() || !(s.universe || '').trim()) return null
+  return { enabled: true, title: s.title.trim(), universe: s.universe.trim(), episode: Math.max(1, Number(s.episode) || 1), recap: (s.recap || '').trim() }
+}
+/** Après un épisode publié : incrémente le compteur et enregistre la mémoire de l'histoire. */
+function advanceSeries(user: string, recap: string): void {
+  const map = autopilotSeries()
+  const s = map[user]
+  if (!s) return
+  map[user] = { ...s, episode: Math.max(1, Number(s.episode) || 1) + 1, recap: recap.slice(0, 600) }
+  repo.setSetting('autopilot_series', JSON.stringify(map))
+}
+
 let autopilotBusy = false
 let autopilotTask: ScheduledTask | null = null
 
@@ -487,20 +515,40 @@ async function runAutopilotTick(force = false): Promise<void> {
 
   autopilotBusy = true
   try {
-    emitLog(`Pilote auto : génération pour « ${user} » (niche : ${niche})…`)
     const anthropicKey = getApiKey()
     if (!anthropicKey) { emitLog('Pilote auto : clé Claude manquante.'); return }
     const model = MODEL_MAP[repo.getSetting(FLAG_MODEL) ?? 'haiku'] ?? MODEL_MAP.haiku
-    const { ideas, usage } = await generateViralIdeas({ apiKey: anthropicKey, model, niche, count: 1, trends: [] })
-    if (usage) addSpend(model, usage)
-    if (!ideas.length) { emitLog(`Pilote auto : aucune idée générée pour « ${user} ».`); return }
-    const saved = repo.createIdea(niche, ideas[0])
+
+    // Mode série (feuilleton) : épisode suivant de l'histoire ; sinon idée de niche.
+    const series = seriesForProfile(user)
+    let idea: import('./ideas').ViralIdea
+    let ideaLabel = niche
+    let nextRecap: string | null = null
+    if (series) {
+      emitLog(`Pilote auto : « ${series.title} » — épisode ${series.episode} pour « ${user} »…`)
+      const r = await generateEpisodeIdea({ apiKey: anthropicKey, model, series })
+      if (r.usage) addSpend(model, r.usage)
+      idea = r.idea
+      ideaLabel = `Série : ${series.title}`
+      nextRecap = r.recap
+    } else {
+      emitLog(`Pilote auto : génération pour « ${user} » (niche : ${niche})…`)
+      const { ideas, usage } = await generateViralIdeas({ apiKey: anthropicKey, model, niche, count: 1, trends: [] })
+      if (usage) addSpend(model, usage)
+      if (!ideas.length) { emitLog(`Pilote auto : aucune idée générée pour « ${user} ».`); return }
+      idea = ideas[0]
+    }
+
+    const saved = repo.createIdea(ideaLabel, idea)
     // On passe par videoChain pour ne jamais monter deux vidéos en parallèle.
-    const job = videoChain.then(() => runVideoGen(saved.id, { profile: user, autoPublish: true }))
+    const job = videoChain.then(() =>
+      runVideoGen(saved.id, { profile: user, autoPublish: true, imageStyle: series?.universe })
+    )
     videoChain = job.then(() => undefined, () => undefined)
     const clipId = await job.catch(() => null)
     if (clipId) {
       repo.setSetting(countKey, String(done + 1))
+      if (series && nextRecap != null) advanceSeries(user, nextRecap) // mémoire + épisode suivant
       emitLog(`Pilote auto : vidéo publiée sur « ${user} » (${done + 1}/${perDay} aujourd'hui).`)
     } else {
       emitLog(`Pilote auto : échec pour « ${user} » (voir journaux).`)
@@ -954,22 +1002,32 @@ app.get('/api/autopilot', wrap(async (_req, res) => {
   const today = dayKey()
   const niches = autopilotNiches()
   const ctas = profileCtas()
+  const seriesMap = autopilotSeries()
   res.json({
     enabled: repo.getSetting('autopilot_enabled') === '1',
     perDay: Math.max(1, Number(repo.getSetting('autopilot_per_day')) || 1),
     busy: autopilotBusy,
-    profiles: profiles.map((u) => ({
-      username: u,
-      handle: meta.get(u)?.tiktokHandle ?? null,
-      avatarUrl: meta.get(u)?.avatarUrl ?? null,
-      niche: (niches[u] ?? '').trim() || nicheForProfile(u),
-      cta: (ctas[u] ?? '').trim(),
-      doneToday: Number(repo.getSetting(`autopilot_count_${u}_${today}`)) || 0
-    }))
+    profiles: profiles.map((u) => {
+      const s = seriesMap[u]
+      return {
+        username: u,
+        handle: meta.get(u)?.tiktokHandle ?? null,
+        avatarUrl: meta.get(u)?.avatarUrl ?? null,
+        niche: (niches[u] ?? '').trim() || nicheForProfile(u),
+        cta: (ctas[u] ?? '').trim(),
+        series: {
+          enabled: !!s?.enabled,
+          title: (s?.title ?? '').trim(),
+          universe: (s?.universe ?? '').trim(),
+          episode: Math.max(1, Number(s?.episode) || 1)
+        },
+        doneToday: Number(repo.getSetting(`autopilot_count_${u}_${today}`)) || 0
+      }
+    })
   })
 }))
 app.post('/api/autopilot', wrap((req, res) => {
-  const b = (req.body ?? {}) as { enabled?: unknown; perDay?: unknown; niches?: unknown; ctas?: unknown }
+  const b = (req.body ?? {}) as { enabled?: unknown; perDay?: unknown; niches?: unknown; ctas?: unknown; series?: unknown }
   const wasEnabled = repo.getSetting('autopilot_enabled') === '1'
   if (typeof b.enabled === 'boolean') repo.setSetting('autopilot_enabled', b.enabled ? '1' : '0')
   if (b.perDay != null) repo.setSetting('autopilot_per_day', String(Math.max(1, Math.min(5, Math.round(Number(b.perDay)) || 1))))
@@ -986,6 +1044,29 @@ app.post('/api/autopilot', wrap((req, res) => {
       if (typeof v === 'string' && v.trim()) clean[k] = v.trim().slice(0, 220)
     }
     repo.setSetting('profile_ctas', JSON.stringify(clean))
+  }
+  if (b.series && typeof b.series === 'object') {
+    const cur = autopilotSeries()
+    const next: Record<string, SeriesState> = {}
+    for (const [k, v] of Object.entries(b.series as Record<string, unknown>)) {
+      if (!v || typeof v !== 'object') continue
+      const s = v as { enabled?: unknown; title?: unknown; universe?: unknown }
+      const title = typeof s.title === 'string' ? s.title.trim().slice(0, 120) : ''
+      const universe = typeof s.universe === 'string' ? s.universe.trim().slice(0, 600) : ''
+      const enabled = s.enabled === true
+      if (!title && !universe && !enabled) continue
+      // Nouveau titre = nouvelle histoire → on repart à l'épisode 1, mémoire vide.
+      const prev = cur[k]
+      const isNewStory = !prev || prev.title !== title
+      next[k] = {
+        enabled,
+        title,
+        universe,
+        episode: isNewStory ? 1 : Math.max(1, Number(prev.episode) || 1),
+        recap: isNewStory ? '' : prev.recap || ''
+      }
+    }
+    repo.setSetting('autopilot_series', JSON.stringify(next))
   }
   reloadAutopilot()
   // Passage OFF → ON : on lance tout de suite un premier cycle (1 vidéo),

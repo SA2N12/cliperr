@@ -101,10 +101,23 @@ export const api = {
       enabled: boolean
       perDay: number
       busy: boolean
-      profiles: { username: string; handle: string | null; avatarUrl: string | null; niche: string; cta: string; doneToday: number }[]
+      profiles: {
+        username: string
+        handle: string | null
+        avatarUrl: string | null
+        niche: string
+        cta: string
+        series: { enabled: boolean; title: string; universe: string; episode: number }
+        doneToday: number
+      }[]
     }>('/api/autopilot'),
-  saveAutopilot: (cfg: { enabled?: boolean; perDay?: number; niches?: Record<string, string>; ctas?: Record<string, string> }) =>
-    post<{ ok: boolean }>('/api/autopilot', cfg),
+  saveAutopilot: (cfg: {
+    enabled?: boolean
+    perDay?: number
+    niches?: Record<string, string>
+    ctas?: Record<string, string>
+    series?: Record<string, { enabled: boolean; title: string; universe: string }>
+  }) => post<{ ok: boolean }>('/api/autopilot', cfg),
   runAutopilotNow: () => post<{ ok: boolean }>('/api/autopilot/run-now'),
   autopilotPlan: () =>
     req<{

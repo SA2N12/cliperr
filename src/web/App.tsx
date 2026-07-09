@@ -1728,13 +1728,15 @@ function Sparkline({ data }: { data: number[] }): JSX.Element | null {
 }
 
 // ── Pilote automatique : contenu quotidien autonome par compte ──
-type AutopilotProfile = { username: string; handle: string | null; avatarUrl: string | null; niche: string; cta: string; doneToday: number }
+type SeriesCfg = { enabled: boolean; title: string; universe: string; episode: number }
+type AutopilotProfile = { username: string; handle: string | null; avatarUrl: string | null; niche: string; cta: string; series: SeriesCfg; doneToday: number }
 type AutopilotState = { enabled: boolean; perDay: number; busy: boolean; profiles: AutopilotProfile[] }
 
 function Autopilot({ toast }: { toast: (m: string) => void }): JSX.Element {
   const [state, setState] = useState<AutopilotState | null>(null)
   const [niches, setNiches] = useState<Record<string, string>>({})
   const [ctas, setCtas] = useState<Record<string, string>>({})
+  const [series, setSeries] = useState<Record<string, SeriesCfg>>({})
   const [enabled, setEnabled] = useState(false)
   const [perDay, setPerDay] = useState(1)
   const [saving, setSaving] = useState(false)
@@ -1747,17 +1749,24 @@ function Autopilot({ toast }: { toast: (m: string) => void }): JSX.Element {
       setPerDay(s.perDay)
       const n: Record<string, string> = {}
       const c: Record<string, string> = {}
-      s.profiles.forEach((p) => { n[p.username] = p.niche; c[p.username] = p.cta })
+      const sr: Record<string, SeriesCfg> = {}
+      s.profiles.forEach((p) => { n[p.username] = p.niche; c[p.username] = p.cta; sr[p.username] = p.series })
       setNiches(n)
       setCtas(c)
+      setSeries(sr)
     } catch { /* ignore */ }
   }, [])
   useEffect(() => { void load() }, [load])
 
+  const setSerie = (u: string, patch: Partial<SeriesCfg>): void =>
+    setSeries((m) => ({ ...m, [u]: { enabled: false, title: '', universe: '', episode: 1, ...m[u], ...patch } }))
+
   const save = async (over?: { enabled?: boolean }): Promise<void> => {
     setSaving(true)
     try {
-      await api.saveAutopilot({ enabled: over?.enabled ?? enabled, perDay, niches, ctas })
+      const seriesOut: Record<string, { enabled: boolean; title: string; universe: string }> = {}
+      for (const [u, s] of Object.entries(series)) seriesOut[u] = { enabled: s.enabled, title: s.title, universe: s.universe }
+      await api.saveAutopilot({ enabled: over?.enabled ?? enabled, perDay, niches, ctas, series: seriesOut })
       toast('Pilote auto enregistré')
       await load()
     } catch (e) {
@@ -1818,6 +1827,19 @@ function Autopilot({ toast }: { toast: (m: string) => void }): JSX.Element {
                 <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <input className="input-full" value={niches[p.username] ?? ''} placeholder="Niche — ex. mystères non résolus…" onChange={(e) => setNiches((m) => ({ ...m, [p.username]: e.target.value }))} />
                   <input className="input-full" value={ctas[p.username] ?? ''} placeholder="CTA ajouté aux légendes — ex. 🔗 Mon guide gratuit est dans la bio" onChange={(e) => setCtas((m) => ({ ...m, [p.username]: e.target.value }))} />
+                  <label className="switch" style={{ marginTop: 4 }}>
+                    <input type="checkbox" checked={!!series[p.username]?.enabled} onChange={(e) => setSerie(p.username, { enabled: e.target.checked })} />
+                    <span className="track" />
+                    Mode série (feuilleton à épisodes)
+                    {series[p.username]?.enabled && <span className="chip" style={{ marginLeft: 6 }}>Ép. {series[p.username]?.episode ?? 1}</span>}
+                  </label>
+                  {series[p.username]?.enabled && (
+                    <>
+                      <input className="input-full" value={series[p.username]?.title ?? ''} placeholder="Titre de la série — ex. L’île des fruits skibidi" onChange={(e) => setSerie(p.username, { title: e.target.value })} />
+                      <textarea className="input-full" rows={3} value={series[p.username]?.universe ?? ''} placeholder="Univers : personnages récurrents + style visuel — ex. Des fruits en 3D style Pixar coincés sur une île volcanique : Bano la banane à lunettes (le chef), Fraisou la fraise peureuse, Nanas l’ananas musclé. Humour absurde « skibidi », couleurs saturées." onChange={(e) => setSerie(p.username, { universe: e.target.value })} />
+                      <div className="muted small">La série remplace la niche sur ce compte : chaque vidéo = l’épisode suivant de l’histoire (mémoire conservée, cliffhanger à chaque fin). Changer le titre relance une histoire à l’épisode 1.</div>
+                    </>
+                  )}
                 </div>
               </div>
             ))}

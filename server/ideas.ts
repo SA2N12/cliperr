@@ -105,6 +105,105 @@ Pour chaque idée : un titre accrocheur, un hook (3 premières secondes), l'angl
   }
 }
 
+// ── Mode série (feuilleton à épisodes, type « île des fruits skibidi ») ──
+
+export interface SeriesState {
+  enabled: boolean
+  /** Titre de la série (ex. « L'île des fruits skibidi »). */
+  title: string
+  /** Univers : personnages récurrents + style visuel, réutilisés à chaque épisode. */
+  universe: string
+  /** Numéro du prochain épisode à produire (commence à 1). */
+  episode: number
+  /** Résumé cumulé des épisodes déjà publiés (mémoire de l'histoire). */
+  recap: string
+}
+
+const EpisodeSchema = z.object({
+  title: z.string(),
+  hook: z.string(),
+  script: z.array(z.string()),
+  hashtags: z.array(z.string()),
+  recap: z.string()
+})
+
+/**
+ * Écrit l'épisode suivant d'une série : histoire courte absurde/drôle qui
+ * continue l'intrigue (mémoire via `recap`) et finit sur un cliffhanger.
+ * Renvoie l'idée prête pour la génération vidéo + le résumé mis à jour.
+ */
+export async function generateEpisodeIdea(opts: {
+  apiKey: string
+  model?: string
+  series: SeriesState
+}): Promise<{ idea: ViralIdea; recap: string; usage: Usage | null }> {
+  const model = opts.model ?? 'claude-haiku-4-5'
+  const client = new Anthropic({ apiKey: opts.apiKey })
+  const s = opts.series
+  const n = Math.max(1, s.episode)
+
+  const tool = {
+    name: 'write_episode',
+    description: 'Écrit le prochain épisode de la série TikTok.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: `Titre commençant par « Ép. ${n} — », court et intrigant` },
+        hook: { type: 'string', description: 'Accroche des 2 premières secondes (rappel express + relance immédiate)' },
+        script: {
+          type: 'array',
+          items: { type: 'string' },
+          description: "Déroulé de l'épisode en 5 à 7 phrases courtes orales (la dernière = cliffhanger + teasing épisode suivant)"
+        },
+        hashtags: { type: 'array', items: { type: 'string' }, description: '5 à 8 hashtags (dont un hashtag de série stable)' },
+        recap: { type: 'string', description: 'Résumé cumulé de TOUTE la série épisodes 1 à ' + n + ' inclus, max 500 caractères (mémoire pour la suite)' }
+      },
+      required: ['title', 'hook', 'script', 'hashtags', 'recap']
+    }
+  } satisfies Anthropic.Tool
+
+  const prompt = `Tu écris l'épisode ${n} de la série TikTok « ${s.title} » — format feuilleton court (30-40 s), absurde, drôle et ultra-addictif (style « brainrot » qui cartonne sur TikTok).
+
+UNIVERS ET PERSONNAGES (à respecter strictement, mêmes personnages à chaque épisode) :
+${s.universe}
+
+${s.recap ? `RÉSUMÉ DES ÉPISODES PRÉCÉDENTS (continue cette histoire, ne te contredis pas) :\n${s.recap}` : `C'est le PREMIER épisode : pose l'univers et les personnages en quelques secondes, puis lance tout de suite une intrigue.`}
+
+Règles du format :
+- Hook : 1 phrase qui replonge instantanément dans l'histoire (« Ép. ${n} : ... »).
+- 5 à 7 phrases courtes, orales, tutoiement, énergiques ; une péripétie claire par épisode ; humour absurde assumé.
+- DERNIÈRE PHRASE = CLIFFHANGER puissant + teasing (« Épisode ${n + 1} demain... abonne-toi ou tu vas le rater »).
+- Écris pour l'ORAL (voix de synthèse française) : nombres en toutes lettres, pas de mots anglais inutiles (« skibidi » et les noms propres de l'univers sont OK).
+- \`recap\` : résume toute l'histoire jusqu'à cet épisode inclus (max 500 caractères), c'est la mémoire de la série.
+
+Réponds uniquement via l'outil write_episode.`
+
+  const msg = await client.messages.create({
+    model,
+    max_tokens: 2500,
+    tools: [tool],
+    tool_choice: { type: 'tool', name: 'write_episode' },
+    messages: [{ role: 'user', content: prompt }]
+  })
+  const usage: Usage | null = msg.usage
+    ? { input_tokens: msg.usage.input_tokens, output_tokens: msg.usage.output_tokens }
+    : null
+  const block = msg.content.find((b) => b.type === 'tool_use')
+  if (!block || block.type !== 'tool_use') throw new Error('Épisode non généré — réessaie')
+  const parsed = EpisodeSchema.safeParse(block.input)
+  if (!parsed.success) throw new Error('Épisode invalide — réessaie')
+  const ep = parsed.data
+  const idea: ViralIdea = {
+    title: ep.title.startsWith('Ép.') ? ep.title : `Ép. ${n} — ${ep.title}`,
+    hook: ep.hook,
+    angle: `Feuilleton « ${s.title} » : cliffhanger à chaque épisode → abonnements`,
+    script: ep.script,
+    format: '30-40 s, série verticale, sous-titres incrustés',
+    hashtags: ep.hashtags.map(normTag).filter(Boolean)
+  }
+  return { idea, recap: ep.recap.slice(0, 600), usage }
+}
+
 // ── Tendances réelles via RapidAPI ──
 
 /** Extrait récursivement des noms de hashtags depuis une réponse JSON de forme inconnue. */

@@ -27,6 +27,8 @@ export interface VideoGenOptions {
   idea: ViralIdea
   /** Chemin d'une musique de fond (libre de droits) à mixer sous la voix. */
   musicTrack?: string
+  /** Univers visuel imposé (mode série) : personnages récurrents + style, injecté dans chaque image. */
+  imageStyle?: string
   onProgress?: (msg: string) => void
 }
 
@@ -34,7 +36,8 @@ export interface VideoGenOptions {
 async function buildStoryboard(
   key: string,
   model: string,
-  idea: ViralIdea
+  idea: ViralIdea,
+  styleHint?: string
 ): Promise<{ scenes: Scene[]; usage: Usage | null }> {
   const client = new Anthropic({ apiKey: key })
   const tool = {
@@ -79,7 +82,8 @@ Règles de rétention (déterminantes pour la performance et les revenus TikTok)
 - Monte en intensité ; garde l'info la plus forte (le payoff) pour l'avant-dernière scène.
 - DERNIÈRE scène = punchline mémorable + appel à l'action naturel (ex. « Abonne-toi, la suite est folle », « Dis-moi en commentaire si tu le savais »).
 - Ton : tutoiement, énergique, immersif, comme si tu parlais à un pote.
-
+- ÉCRIS POUR L'ORAL (le texte est lu par une voix de synthèse française) : nombres en toutes lettres (« mille neuf cent douze »), pas de sigles ambigus, pas de mots anglais inutiles, ponctuation naturelle.
+${styleHint ? `\nUNIVERS VISUEL IMPOSÉ (série à personnages récurrents — décris CES personnages et CE style dans CHAQUE imagePrompt, de façon identique d'une scène à l'autre) : ${styleHint}\n` : ''}
 Pour chaque scène : la phrase de VOIX OFF (français, courte, orale) + un IMAGE PROMPT en anglais décrivant un visuel vertical ULTRA-cinématographique, dramatique et très détaillé (éclairage volumétrique, ambiance, angle fort, couleurs riches), sans aucun texte. Réponds uniquement via l'outil storyboard.`
 
   const msg = await client.messages.create({
@@ -171,13 +175,31 @@ Réponds via l’outil pick_mood.`
   return pickRandom(varied.length ? varied : pool)
 }
 
-/** Voix off OpenAI (tts-1-hd, haute qualité) → fichier mp3. Débit légèrement soutenu (énergie TikTok). */
+/**
+ * Voix off OpenAI → fichier mp3. Modèle `gpt-4o-mini-tts` : prononciation
+ * française nettement meilleure + pilotable par consignes (ton, débit).
+ * Repli automatique sur `tts-1-hd` si le modèle n'est pas disponible.
+ */
 async function tts(openaiKey: string, voice: string, text: string, dest: string): Promise<void> {
-  const res = await fetch(`${OPENAI}/audio/speech`, {
+  let res = await fetch(`${OPENAI}/audio/speech`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: 'tts-1-hd', voice, input: text, response_format: 'mp3', speed: 1.08 })
+    body: JSON.stringify({
+      model: 'gpt-4o-mini-tts',
+      voice,
+      input: text,
+      response_format: 'mp3',
+      instructions:
+        'Parle en français de France avec une prononciation native impeccable (liaisons naturelles, nombres et noms propres bien articulés). Ton de créateur TikTok : énergique, complice, vivant. Débit soutenu mais parfaitement intelligible.'
+    })
   })
+  if (!res.ok && (res.status === 400 || res.status === 404)) {
+    res = await fetch(`${OPENAI}/audio/speech`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'tts-1-hd', voice, input: text, response_format: 'mp3', speed: 1.08 })
+    })
+  }
   if (!res.ok) throw new Error(`OpenAI TTS ${res.status} : ${(await res.text()).slice(0, 200)}`)
   await writeFile(dest, Buffer.from(await res.arrayBuffer()))
 }
@@ -265,7 +287,8 @@ export async function generateVideoFromIdea(
   const { scenes, usage } = await buildStoryboard(
     opts.anthropicKey,
     opts.anthropicModel || 'claude-haiku-4-5',
-    opts.idea
+    opts.idea,
+    opts.imageStyle
   )
   if (!scenes.length) throw new Error('Storyboard vide — réessaie')
 
@@ -283,7 +306,10 @@ export async function generateVideoFromIdea(
 
       log?.(`Scène ${i + 1}/${scenes.length} — image IA…`)
       const png = join(work, `i${i}.png`)
-      await genImage(opts.openaiKey, sc.imagePrompt, png)
+      const imgPrompt = opts.imageStyle
+        ? `${sc.imagePrompt}. Recurring characters and consistent art style across the whole series (keep them IDENTICAL in every image): ${opts.imageStyle}`
+        : sc.imagePrompt
+      await genImage(opts.openaiKey, imgPrompt, png)
 
       log?.(`Scène ${i + 1}/${scenes.length} — montage…`)
       const ass = join(work, `s${i}.ass`)
