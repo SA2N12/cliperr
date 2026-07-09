@@ -1185,16 +1185,16 @@ app.get('/api/autopilot/plan', wrap(async (_req, res) => {
   type Slot = { user: string; handle: string | null; avatarUrl: string | null; niche: string; ordinal: number; etaHm: number; eta: string; done: boolean }
   const slots: Slot[] = []
 
-  // Heures RÉELLES des vidéos publiées aujourd'hui, par compte.
-  const doneTimes = new Map<string, number[]>()
+  // Heures RÉELLES + titres des vidéos publiées aujourd'hui, par compte.
+  const doneTimes = new Map<string, { at: number; title: string | null }[]>()
   for (const c of repo.listClips()) {
     if (c.publishStatus !== 'published' || !c.profile) continue
     if (parisPartsOf(c.createdAt).date !== today) continue
     const arr = doneTimes.get(c.profile) ?? []
-    arr.push(c.createdAt)
+    arr.push({ at: c.createdAt, title: c.title })
     doneTimes.set(c.profile, arr)
   }
-  for (const arr of doneTimes.values()) arr.sort((a, b) => a - b)
+  for (const arr of doneTimes.values()) arr.sort((a, b) => a.at - b.at)
 
   const remaining = new Map<string, number>()
   profiles.forEach((user) => {
@@ -1209,9 +1209,18 @@ app.get('/api/autopilot/plan', wrap(async (_req, res) => {
     }
     const times = doneTimes.get(user) ?? []
     for (let j = 1; j <= done; j++) {
-      const ms = times[j - 1]
-      const pp = ms != null ? parisPartsOf(ms) : null
-      slots.push({ ...info, ordinal: j, etaHm: pp ? pp.hm : 0, eta: pp ? pp.label : '—', done: true })
+      const t = times[j - 1]
+      const pp = t ? parisPartsOf(t.at) : null
+      // Pour les publiées : on affiche le TITRE RÉEL de la vidéo (pas la config
+      // actuelle du compte, qui a pu changer depuis — ex. passage en mode série).
+      slots.push({
+        ...info,
+        niche: t?.title || info.niche,
+        ordinal: j,
+        etaHm: pp ? pp.hm : 0,
+        eta: pp ? pp.label : '—',
+        done: true
+      })
     }
     // Les comptes en mode série sont plafonnés à 1 épisode/jour.
     remaining.set(user, Math.max(0, (serie ? 1 : perDay) - done))
