@@ -327,7 +327,7 @@ function reloadScheduler(): void {
 let videoChain: Promise<void> = Promise.resolve()
 async function runVideoGen(
   ideaId: number,
-  opts: { profile?: string; autoPublish?: boolean; imageStyle?: string; characterRefPath?: string; animateScenes?: boolean } = {}
+  opts: { profile?: string; autoPublish?: boolean; imageStyle?: string; characterRefPath?: string; animateScenes?: boolean; dialogue?: boolean; noMusic?: boolean } = {}
 ): Promise<number | null> {
   const idea = repo.getIdea(ideaId)
   if (!idea) return null
@@ -342,7 +342,7 @@ async function runVideoGen(
     const ctx = await getContext()
     const tracks = musicTracks()
     let musicTrack: string | undefined
-    if (tracks.length) {
+    if (tracks.length && !opts.noMusic) {
       emitIdeaVideo({ ideaId, status: 'running', message: 'Choix de la musique (IA)…' })
       // Évite de rejouer le dernier morceau utilisé sur ce compte (variété).
       const lastKey = `music_last_${targetProfile}`
@@ -367,6 +367,7 @@ async function runVideoGen(
       falKey: getEncrypted('fal_key'),
       falVideoModel: repo.getSetting('fal_video_model') || undefined,
       animateScenes: opts.animateScenes,
+      dialogue: opts.dialogue,
       onProgress: (m) => emitIdeaVideo({ ideaId, status: 'running', message: m })
     })
     if (usage) addSpend(model, usage)
@@ -608,7 +609,9 @@ async function runAutopilotTick(force = false): Promise<void> {
         autoPublish: true,
         imageStyle: series?.universe,
         characterRefPath: refPath,
-        animateScenes: !!series // séries = scènes animées (fal.ai) si la clé est configurée
+        animateScenes: !!series, // séries = scènes animées (fal.ai) si la clé est configurée
+        dialogue: !!series, // séries = les personnages parlent (voix par personnage)
+        noMusic: !!series // séries = pas de musique de fond (dialogues seuls)
       })
     )
     videoChain = job.then(() => undefined, () => undefined)

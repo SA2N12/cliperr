@@ -155,7 +155,7 @@ export async function generateEpisodeIdea(opts: {
         script: {
           type: 'array',
           items: { type: 'string' },
-          description: "Déroulé de l'épisode en 5 à 7 phrases courtes orales (la dernière = cliffhanger + teasing épisode suivant)"
+          description: "Déroulé de l'épisode en 5 à 7 RÉPLIQUES de dialogue entre les personnages, format « Nom : réplique » (la dernière = cliffhanger + teasing épisode suivant)"
         },
         hashtags: { type: 'array', items: { type: 'string' }, description: '5 à 8 hashtags (dont un hashtag de série stable)' },
         recap: { type: 'string', description: 'Résumé cumulé de TOUTE la série épisodes 1 à ' + n + ' inclus, max 500 caractères (mémoire pour la suite)' }
@@ -172,9 +172,10 @@ ${s.universe}
 ${s.recap ? `RÉSUMÉ DES ÉPISODES PRÉCÉDENTS (continue cette histoire, ne te contredis pas) :\n${s.recap}` : `C'est le PREMIER épisode : pose l'univers et les personnages en quelques secondes, puis lance tout de suite une intrigue.`}
 ${opts.trends && opts.trends.length ? `\nTENDANCES TIKTOK DU MOMENT (glisse un clin d'œil ou intègre-en une dans l'intrigue SEULEMENT si ça sert l'histoire — jamais au détriment de la continuité) :\n${opts.trends.slice(0, 15).map((t) => `- ${t}`).join('\n')}\n` : ''}
 Règles du format :
-- Hook : 1 phrase qui replonge instantanément dans l'histoire (« Ép. ${n} : ... »).
-- 5 à 7 phrases courtes, orales, tutoiement, énergiques ; une péripétie claire par épisode ; humour absurde assumé.
-- DERNIÈRE PHRASE = CLIFFHANGER puissant + teasing (« Épisode ${n + 1} demain... abonne-toi ou tu vas le rater »).
+- L'épisode est joué en DIALOGUES : les personnages parlent entre eux (pas de narrateur). Chaque ligne du script = « Nom : réplique » (courte, très orale, pleine d'émotion — cris, chuchotements, panique, rires).
+- Hook : la 1re réplique replonge instantanément dans l'histoire et accroche.
+- 5 à 7 répliques ; une péripétie claire par épisode ; humour absurde assumé.
+- DERNIÈRE RÉPLIQUE = CLIFFHANGER puissant dit par un personnage (+ teasing épisode ${n + 1}).
 - Écris pour l'ORAL (voix de synthèse française) : nombres en toutes lettres, pas de mots anglais inutiles (« skibidi » et les noms propres de l'univers sont OK).
 - \`recap\` : résume toute l'histoire jusqu'à cet épisode inclus (max 500 caractères), c'est la mémoire de la série.
 

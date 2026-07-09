@@ -12,12 +12,22 @@ import type { ViralIdea } from '../src/shared/types'
 
 const OPENAI = 'https://api.openai.com/v1'
 
-const SceneSchema = z.object({ narration: z.string(), imagePrompt: z.string() })
-const StoryboardSchema = z.object({ scenes: z.array(SceneSchema) })
+const SceneSchema = z.object({ narration: z.string(), imagePrompt: z.string(), speaker: z.string().optional() })
+const CastSchema = z.object({ name: z.string(), voice: z.string(), style: z.string() })
+const StoryboardSchema = z.object({ scenes: z.array(SceneSchema), cast: z.array(CastSchema).optional() })
 export interface Scene {
   narration: string
   imagePrompt: string
+  /** Mode dialogue : nom du personnage qui dit la réplique. */
+  speaker?: string
 }
+export interface CastMember {
+  name: string
+  voice: string
+  style: string
+}
+/** Voix disponibles côté OpenAI TTS (gpt-4o-mini-tts). */
+const OPENAI_VOICES = ['alloy', 'ash', 'ballad', 'coral', 'echo', 'fable', 'onyx', 'nova', 'sage', 'shimmer']
 
 export interface VideoGenOptions {
   anthropicKey: string
@@ -39,6 +49,8 @@ export interface VideoGenOptions {
   falVideoModel?: string
   /** Active l'animation vidéo des scènes (mode série). */
   animateScenes?: boolean
+  /** Mode dialogue : les personnages parlent (voix + intonation par personnage), pas de narrateur. */
+  dialogue?: boolean
   onProgress?: (msg: string) => void
 }
 
@@ -47,38 +59,53 @@ async function buildStoryboard(
   key: string,
   model: string,
   idea: ViralIdea,
-  styleHint?: string
-): Promise<{ scenes: Scene[]; usage: Usage | null }> {
+  styleHint?: string,
+  dialogue?: boolean
+): Promise<{ scenes: Scene[]; cast: CastMember[]; usage: Usage | null }> {
   const client = new Anthropic({ apiKey: key })
+  const sceneProps: Record<string, unknown> = {
+    narration: {
+      type: 'string',
+      description: dialogue
+        ? 'La RÉPLIQUE du personnage en français : courte (2 à 14 mots), très orale et expressive (interjections, exclamations). L\'histoire doit se comprendre uniquement par les répliques.'
+        : 'Une phrase de voix off en français : courte (≤ 18 mots), orale, percutante, tutoiement. La 1re est un hook choc qui crée une tension immédiate ; la dernière est une punchline + appel à l\'action.'
+    },
+    imagePrompt: {
+      type: 'string',
+      description:
+        'Description visuelle en anglais, très cinématographique et dramatique (éclairage travaillé, ambiance, angle fort), pour une image verticale ; AUCUN texte, logo ni watermark' +
+        (dialogue ? ' ; le personnage qui parle est au premier plan, bouche ouverte, très expressif' : '')
+    }
+  }
+  if (dialogue) {
+    sceneProps.speaker = { type: 'string', description: 'Nom EXACT du personnage qui dit la réplique (doit figurer dans le casting)' }
+  }
+  const properties: Record<string, unknown> = {
+    scenes: {
+      type: 'array',
+      items: { type: 'object', properties: sceneProps, required: dialogue ? ['narration', 'imagePrompt', 'speaker'] : ['narration', 'imagePrompt'] }
+    }
+  }
+  if (dialogue) {
+    properties.cast = {
+      type: 'array',
+      description: 'Casting vocal : un membre par personnage qui parle dans cet épisode',
+      items: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'Nom du personnage' },
+          voice: { type: 'string', enum: OPENAI_VOICES, description: 'Voix TTS attribuée — varie les timbres entre personnages (graves, aiguës…)' },
+          style: { type: 'string', description: 'Comment il parle, en français : timbre, débit, émotion, tics de langage (ex. « voix grave et lente, très bête, rit à la fin de ses phrases »)' }
+        },
+        required: ['name', 'voice', 'style']
+      }
+    }
+  }
   const tool = {
     name: 'storyboard',
-    description: 'Découpe une idée de vidéo TikTok en scènes (voix off + visuel).',
-    input_schema: {
-      type: 'object',
-      properties: {
-        scenes: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              narration: {
-                type: 'string',
-                description:
-                  'Une phrase de voix off en français : courte (≤ 18 mots), orale, percutante, tutoiement. La 1re est un hook choc qui crée une tension immédiate ; la dernière est une punchline + appel à l\'action.'
-              },
-              imagePrompt: {
-                type: 'string',
-                description:
-                  'Description visuelle en anglais, très cinématographique et dramatique (éclairage travaillé, ambiance, angle fort), pour une image verticale ; AUCUN texte, logo ni watermark'
-              }
-            },
-            required: ['narration', 'imagePrompt']
-          }
-        }
-      },
-      required: ['scenes']
-    }
-  } satisfies Anthropic.Tool
+    description: 'Découpe une idée de vidéo TikTok en scènes (voix + visuel).',
+    input_schema: { type: 'object', properties, required: dialogue ? ['cast', 'scenes'] : ['scenes'] }
+  } as Anthropic.Tool
 
   const prompt = `Tu es un scénariste TikTok expert en RÉTENTION et en viralité. Transforme cette idée en storyboard de 5 à 7 scènes pour une vidéo verticale « faceless » de 25 à 40 secondes.
 Titre : ${idea.title}
@@ -94,7 +121,12 @@ Règles de rétention (déterminantes pour la performance et les revenus TikTok)
 - Ton : tutoiement, énergique, immersif, comme si tu parlais à un pote.
 - ÉCRIS POUR L'ORAL (le texte est lu par une voix de synthèse française) : nombres en toutes lettres (« mille neuf cent douze »), pas de sigles ambigus, pas de mots anglais inutiles, ponctuation naturelle.
 ${styleHint ? `\nUNIVERS VISUEL IMPOSÉ (série à personnages récurrents — décris CES personnages et CE style dans CHAQUE imagePrompt, de façon identique d'une scène à l'autre) : ${styleHint}\n` : ''}
-Pour chaque scène : la phrase de VOIX OFF (français, courte, orale) + un IMAGE PROMPT en anglais décrivant un visuel vertical ULTRA-cinématographique, dramatique et très détaillé (éclairage volumétrique, ambiance, angle fort, couleurs riches), sans aucun texte. Réponds uniquement via l'outil storyboard.`
+${dialogue ? `FORMAT DIALOGUE — PAS DE NARRATEUR :
+- Chaque scène = UNE réplique d'UN personnage de l'univers (champ speaker). Les personnages se répondent, l'histoire avance uniquement par leurs échanges.
+- Répliques courtes, vivantes, pleines d'émotion (cris, chuchotements, rires, panique…). La dernière réplique = le cliffhanger.
+- CASTING : pour chaque personnage qui parle, choisis une voix TTS différente (varie graves/aiguës selon le physique du personnage) et décris précisément son intonation dans « style » — c'est ce qui fait vivre les personnages.
+` : ''}
+Pour chaque scène : ${dialogue ? 'la RÉPLIQUE (speaker + narration)' : 'la phrase de VOIX OFF (français, courte, orale)'} + un IMAGE PROMPT en anglais décrivant un visuel vertical ULTRA-cinématographique, dramatique et très détaillé (éclairage volumétrique, ambiance, angle fort, couleurs riches), sans aucun texte. Réponds uniquement via l'outil storyboard.`
 
   const msg = await client.messages.create({
     model,
@@ -107,10 +139,10 @@ Pour chaque scène : la phrase de VOIX OFF (français, courte, orale) + un IMAGE
     ? { input_tokens: msg.usage.input_tokens, output_tokens: msg.usage.output_tokens }
     : null
   const block = msg.content.find((b) => b.type === 'tool_use')
-  if (!block || block.type !== 'tool_use') return { scenes: [], usage }
+  if (!block || block.type !== 'tool_use') return { scenes: [], cast: [], usage }
   const parsed = StoryboardSchema.safeParse(block.input)
-  if (!parsed.success) return { scenes: [], usage }
-  return { scenes: parsed.data.scenes.slice(0, 8), usage }
+  if (!parsed.success) return { scenes: [], cast: [], usage }
+  return { scenes: parsed.data.scenes.slice(0, 8), cast: parsed.data.cast ?? [], usage }
 }
 
 // Ambiances disponibles (préfixe du nom de fichier) + indice de contexte pour l'IA.
@@ -190,7 +222,10 @@ Réponds via l’outil pick_mood.`
  * française nettement meilleure + pilotable par consignes (ton, débit).
  * Repli automatique sur `tts-1-hd` si le modèle n'est pas disponible.
  */
-async function tts(openaiKey: string, voice: string, text: string, dest: string): Promise<void> {
+async function tts(openaiKey: string, voice: string, text: string, dest: string, characterStyle?: string): Promise<void> {
+  const instructions = characterStyle
+    ? `Tu es un doubleur professionnel de dessin animé. Français de France, prononciation native impeccable. Tu joues ce personnage : ${characterStyle}. Intonation TRÈS expressive et théâtrale, émotions marquées, vivant.`
+    : 'Parle en français de France avec une prononciation native impeccable (liaisons naturelles, nombres et noms propres bien articulés). Ton de créateur TikTok : énergique, complice, vivant. Débit soutenu mais parfaitement intelligible.'
   let res = await fetch(`${OPENAI}/audio/speech`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
@@ -199,8 +234,7 @@ async function tts(openaiKey: string, voice: string, text: string, dest: string)
       voice,
       input: text,
       response_format: 'mp3',
-      instructions:
-        'Parle en français de France avec une prononciation native impeccable (liaisons naturelles, nombres et noms propres bien articulés). Ton de créateur TikTok : énergique, complice, vivant. Débit soutenu mais parfaitement intelligible.'
+      instructions
     })
   })
   if (!res.ok && (res.status === 400 || res.status === 404)) {
@@ -381,13 +415,15 @@ export async function generateVideoFromIdea(
   const voice = opts.voice || 'onyx'
   const log = opts.onProgress
   log?.('Écriture du storyboard (IA)…')
-  const { scenes, usage } = await buildStoryboard(
+  const { scenes, cast, usage } = await buildStoryboard(
     opts.anthropicKey,
     opts.anthropicModel || 'claude-haiku-4-5',
     opts.idea,
-    opts.imageStyle
+    opts.imageStyle,
+    opts.dialogue
   )
   if (!scenes.length) throw new Error('Storyboard vide — réessaie')
+  const castMap = new Map(cast.map((c) => [c.name.trim().toLowerCase(), c]))
 
   const stamp = Date.now()
   const work = join(ctx.dirs.downloads, `idea-${stamp}`)
@@ -396,9 +432,12 @@ export async function generateVideoFromIdea(
   try {
     for (let i = 0; i < scenes.length; i++) {
       const sc = scenes[i]
-      log?.(`Scène ${i + 1}/${scenes.length} — voix off…`)
+      // Mode dialogue : voix + intonation du personnage qui parle.
+      const member = sc.speaker ? castMap.get(sc.speaker.trim().toLowerCase()) : undefined
+      const sceneVoice = member && OPENAI_VOICES.includes(member.voice) ? member.voice : voice
+      log?.(`Scène ${i + 1}/${scenes.length} — voix${member ? ` de ${member.name}` : ' off'}…`)
       const mp3 = join(work, `a${i}.mp3`)
-      await tts(opts.openaiKey, voice, sc.narration, mp3)
+      await tts(opts.openaiKey, sceneVoice, sc.narration, mp3, member ? `${member.name} — ${member.style}` : undefined)
       const dur = (await mediaDuration(ctx.bin.ffprobe, mp3)) + 0.4
 
       log?.(`Scène ${i + 1}/${scenes.length} — image IA…`)
@@ -424,9 +463,12 @@ export async function generateVideoFromIdea(
         log?.(`Scène ${i + 1}/${scenes.length} — animation vidéo (fal.ai)…`)
         try {
           animClip = join(work, `v${i}.mp4`)
+          const talking = sc.speaker
+            ? ` The character "${sc.speaker}" is TALKING: clear mouth movement, expressive face and hand gestures while speaking.`
+            : ''
           await genVideoFal(
             opts.falKey,
-            `Animate this exact scene keeping the characters and art style strictly identical: ${sc.imagePrompt}. Natural lively character motion, smooth cinematic camera movement, vivid colors, no text.`,
+            `Animate this exact scene keeping the characters and art style strictly identical: ${sc.imagePrompt}.${talking} Natural lively character motion, smooth cinematic camera movement, vivid colors, no text.`,
             animClip,
             png,
             opts.falVideoModel || FAL_DEFAULT_MODEL
@@ -439,7 +481,8 @@ export async function generateVideoFromIdea(
 
       log?.(`Scène ${i + 1}/${scenes.length} — montage…`)
       const ass = join(work, `s${i}.ass`)
-      await writeFile(ass, sceneAss(sc.narration, dur))
+      const subText = opts.dialogue && sc.speaker ? `${sc.speaker} : ${sc.narration}` : sc.narration
+      await writeFile(ass, sceneAss(subText, dur))
       const scene = join(work, `scene${i}.mp4`)
       if (animClip) {
         // Clip animé : recadré 1080x1920, dernière image clonée si la voix dure
