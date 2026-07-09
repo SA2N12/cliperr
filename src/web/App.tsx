@@ -305,6 +305,14 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
     refresh().catch(() => undefined)
     api.tiktokProfile().then((p) => setTtProfile(p)).catch(() => undefined)
     const unsub = subscribe({
+      // (Re)connexion du flux : purge les générations « en cours » orphelines
+      // (un redémarrage serveur tue la génération sans émettre d'événement de fin).
+      onOpen: () =>
+        setIdeaVideo((m) => {
+          const next: typeof m = {}
+          for (const [k, v] of Object.entries(m)) if (v.status !== 'running') next[Number(k)] = v
+          return next
+        }),
       onLog: (m) => pushLog(m),
       onProgress: (e: ProgressEvent) => {
         pushLog(`[${e.stage}] ${e.status} ${Math.round((e.progress || 0) * 100)}%${e.message ? ' — ' + e.message : ''}`)

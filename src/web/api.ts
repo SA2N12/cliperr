@@ -210,8 +210,11 @@ export function subscribe(handlers: {
   onProgress?: (e: ProgressEvent) => void
   onLog?: (m: string) => void
   onIdeaVideo?: (e: { ideaId: number; status: 'running' | 'done' | 'error'; message: string }) => void
+  /** Appelé à chaque (re)connexion du flux — utile pour purger les états périmés après un redémarrage serveur. */
+  onOpen?: () => void
 }): () => void {
   const es = new EventSource('/api/events')
+  es.onopen = () => handlers.onOpen?.()
   es.addEventListener('progress', (ev) => handlers.onProgress?.(JSON.parse((ev as MessageEvent).data)))
   es.addEventListener('log', (ev) => handlers.onLog?.(JSON.parse((ev as MessageEvent).data).message))
   es.addEventListener('ideavideo', (ev) => handlers.onIdeaVideo?.(JSON.parse((ev as MessageEvent).data)))
