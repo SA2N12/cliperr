@@ -368,6 +368,7 @@ async function runVideoGen(
       falVideoModel: repo.getSetting('fal_video_model') || undefined,
       animateScenes: opts.animateScenes,
       dialogue: opts.dialogue,
+      videoEngine: repo.getSetting('series_video_engine') || 'seedance',
       onProgress: (m) => emitIdeaVideo({ ideaId, status: 'running', message: m })
     })
     if (usage) addSpend(model, usage)

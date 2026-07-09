@@ -51,6 +51,8 @@ export interface VideoGenOptions {
   animateScenes?: boolean
   /** Mode dialogue : les personnages parlent (voix + intonation par personnage), pas de narrateur. */
   dialogue?: boolean
+  /** Moteur d'animation des séries : 'veo' = scènes parlées Veo (voix native + lipsync), sinon fal.ai + TTS. */
+  videoEngine?: string
   onProgress?: (msg: string) => void
 }
 
@@ -365,6 +367,76 @@ async function genVideoFal(
   }
 }
 
+// ── Veo (Gemini) : scène PARLÉE — le personnage prononce sa réplique avec
+// voix native + lipsync + bruitages, à partir de l'image de la scène. ──
+const VEO_MODELS = ['veo-3.1-fast-generate-001', 'veo-3.1-fast-generate-preview', 'veo-3.0-fast-generate-001']
+let veoModelCache: string | null = null
+
+export async function genVideoVeoTalking(
+  key: string,
+  prompt: string,
+  dest: string,
+  refImagePath: string,
+  durationSec: 4 | 6 | 8 = 8
+): Promise<void> {
+  const headers = { 'x-goog-api-key': key, 'Content-Type': 'application/json' }
+  const instance: Record<string, unknown> = {
+    prompt,
+    image: { bytesBase64Encoded: (await readFile(refImagePath)).toString('base64'), mimeType: 'image/png' }
+  }
+  const models = veoModelCache ? [veoModelCache] : VEO_MODELS
+  let opName: string | null = null
+  let lastErr = ''
+  for (const m of models) {
+    // Certains déploiements refusent durationSeconds → on retente sans.
+    for (const params of [{ aspectRatio: '9:16', durationSeconds: durationSec }, { aspectRatio: '9:16' }]) {
+      const r = await fetch(`${GEMINI}/models/${m}:predictLongRunning`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ instances: [instance], parameters: params })
+      })
+      if (r.ok) {
+        veoModelCache = m
+        opName = ((await r.json()) as { name?: string }).name ?? null
+        break
+      }
+      lastErr = `${m} → ${r.status} ${(await r.text()).slice(0, 140)}`
+      if (r.status === 404) break // modèle inconnu, inutile de retenter sans durée
+    }
+    if (opName) break
+  }
+  if (!opName) throw new Error(`Veo indisponible (${lastErr})`)
+
+  const t0 = Date.now()
+  for (;;) {
+    if (Date.now() - t0 > 10 * 60 * 1000) throw new Error('Veo : délai dépassé')
+    await new Promise((r) => setTimeout(r, 10000))
+    const r = await fetch(`${GEMINI}/${opName}`, { headers: { 'x-goog-api-key': key } })
+    if (!r.ok) throw new Error(`Veo suivi ${r.status}`)
+    const j = (await r.json()) as {
+      done?: boolean
+      error?: { message?: string }
+      response?: {
+        generateVideoResponse?: { generatedSamples?: { video?: { uri?: string } }[] }
+        generatedVideos?: { video?: { uri?: string } }[]
+      }
+    }
+    if (j.error) throw new Error(`Veo : ${j.error.message ?? 'erreur'}`)
+    if (!j.done) continue
+    const uri =
+      j.response?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri ??
+      j.response?.generatedVideos?.[0]?.video?.uri
+    if (!uri) throw new Error('Veo : réponse sans vidéo')
+    let dl = await fetch(uri, { headers: { 'x-goog-api-key': key } })
+    if (dl.status === 401 || dl.status === 403) {
+      dl = await fetch(`${uri}${uri.includes('?') ? '&' : '?'}key=${encodeURIComponent(key)}`)
+    }
+    if (!dl.ok) throw new Error(`Veo téléchargement ${dl.status}`)
+    await writeFile(dest, Buffer.from(await dl.arrayBuffer()))
+    return
+  }
+}
+
 /** Durée d'un média en secondes (ffprobe). */
 async function mediaDuration(ffprobe: string, file: string): Promise<number> {
   const out = await runCapture(ffprobe, [
@@ -433,21 +505,18 @@ export async function generateVideoFromIdea(
   try {
     for (let i = 0; i < scenes.length; i++) {
       const sc = scenes[i]
-      // Mode dialogue : voix + intonation du personnage qui parle.
       const member = sc.speaker ? castMap.get(sc.speaker.trim().toLowerCase()) : undefined
-      const sceneVoice = member && OPENAI_VOICES.includes(member.voice) ? member.voice : voice
-      log?.(`Scène ${i + 1}/${scenes.length} — voix${member ? ` de ${member.name}` : ' off'}…`)
-      const mp3 = join(work, `a${i}.mp3`)
-      await tts(opts.openaiKey, sceneVoice, sc.narration, mp3, member ? `${member.name} — ${member.style}` : undefined)
-      const dur = (await mediaDuration(ctx.bin.ffprobe, mp3)) + 0.4
+      const subText = opts.dialogue && sc.speaker ? `${sc.speaker} : ${sc.narration}` : sc.narration
+      const scene = join(work, `scene${i}.mp4`)
+      const ass = join(work, `s${i}.ass`)
 
+      // 1) Image de la scène (Nano Banana + planche de référence si dispo).
       log?.(`Scène ${i + 1}/${scenes.length} — image IA…`)
       const png = join(work, `i${i}.png`)
       const imgPrompt = opts.imageStyle
         ? `${sc.imagePrompt}. Recurring characters and consistent art style across the whole series (keep them IDENTICAL in every image): ${opts.imageStyle}`
         : sc.imagePrompt
       if (opts.geminiKey && opts.characterRefPath) {
-        // Nano Banana + planche de référence → personnages identiques à chaque scène.
         const gPrompt = `Using EXACTLY the characters and art style from the reference image (same faces, colors, outfits, designs), create this new scene: ${sc.imagePrompt}. Vertical 9:16 composition, vivid saturated colors, expressive, dynamic, no text, no watermark.`
         try {
           await genImageGemini(opts.geminiKey, gPrompt, png, opts.characterRefPath)
@@ -458,7 +527,51 @@ export async function generateVideoFromIdea(
         await genImage(opts.openaiKey, imgPrompt, png)
       }
 
-      // Mode animé (série) : clip vidéo fal.ai à partir de l'image de la scène.
+      // 2a) Moteur VEO : scène PARLÉE — le personnage prononce sa réplique
+      // (voix native jouée + vraie synchro labiale + bruitages d'ambiance).
+      let sceneDone = false
+      if (opts.animateScenes && opts.videoEngine === 'veo' && opts.geminiKey) {
+        log?.(`Scène ${i + 1}/${scenes.length} — scène parlée (Veo)…`)
+        try {
+          const clip = join(work, `v${i}.mp4`)
+          const words = sc.narration.trim().split(/\s+/).length
+          const veoDur: 4 | 6 | 8 = words <= 6 ? 4 : words <= 12 ? 6 : 8
+          const who = member?.name ?? sc.speaker ?? 'the main character'
+          const style = member?.style ? ` (${member.style})` : ''
+          await genVideoVeoTalking(
+            opts.geminiKey,
+            `${sc.imagePrompt}. The character "${who}" speaks in French with an expressive cartoon voice${style}, saying EXACTLY: « ${sc.narration} ». Accurate lip-sync while talking, expressive face and hand gestures, other characters react, keep the characters and art style strictly identical to the first frame, vivid colors, no text, no captions.`,
+            clip,
+            png,
+            veoDur
+          )
+          const clipDur = await mediaDuration(ctx.bin.ffprobe, clip)
+          await writeFile(ass, sceneAss(subText, clipDur))
+          await run(ctx.bin.ffmpeg, [
+            '-y', '-loglevel', 'error',
+            '-i', clip,
+            '-filter_complex',
+            `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,setsar=1,subtitles=${ass}[v]`,
+            '-map', '[v]', '-map', '0:a?',
+            '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+            '-c:a', 'aac', '-ar', '44100', '-ac', '2', '-b:a', '128k',
+            scene
+          ])
+          sceneFiles.push(scene)
+          sceneDone = true
+        } catch (e) {
+          log?.(`Scène ${i + 1}/${scenes.length} — Veo indisponible (${e instanceof Error ? e.message : String(e)}) → voix TTS + animation`)
+        }
+      }
+      if (sceneDone) continue
+
+      // 2b) Chemin classique : voix TTS (jouée par personnage) puis animation fal.ai / Ken Burns.
+      const sceneVoice = member && OPENAI_VOICES.includes(member.voice) ? member.voice : voice
+      log?.(`Scène ${i + 1}/${scenes.length} — voix${member ? ` de ${member.name}` : ' off'}…`)
+      const mp3 = join(work, `a${i}.mp3`)
+      await tts(opts.openaiKey, sceneVoice, sc.narration, mp3, member ? `${member.name} — ${member.style}` : undefined)
+      const dur = (await mediaDuration(ctx.bin.ffprobe, mp3)) + 0.4
+
       let animClip: string | null = null
       if (opts.animateScenes && opts.falKey) {
         log?.(`Scène ${i + 1}/${scenes.length} — animation vidéo (fal.ai)…`)
@@ -482,10 +595,7 @@ export async function generateVideoFromIdea(
       }
 
       log?.(`Scène ${i + 1}/${scenes.length} — montage…`)
-      const ass = join(work, `s${i}.ass`)
-      const subText = opts.dialogue && sc.speaker ? `${sc.speaker} : ${sc.narration}` : sc.narration
       await writeFile(ass, sceneAss(subText, dur))
-      const scene = join(work, `scene${i}.mp4`)
       if (animClip) {
         // Clip animé : recadré 1080x1920 et ÉTIRÉ/COMPRESSÉ en douceur (setpts)
         // pour couvrir exactement la durée de la voix — plus aucun gel d'image.
@@ -499,38 +609,23 @@ export async function generateVideoFromIdea(
           `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setpts=${ratio.toFixed(4)}*PTS,fps=30,setsar=1,subtitles=${ass}[v]`,
           '-map', '[v]', '-map', '1:a',
           '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
-          '-c:a', 'aac', '-b:a', '128k',
+          '-c:a', 'aac', '-ar', '44100', '-ac', '2', '-b:a', '128k',
           '-t', String(dur),
           scene
         ])
       } else {
         const frames = Math.max(1, Math.round(dur * 30))
         await run(ctx.bin.ffmpeg, [
-          '-y',
-          '-loglevel',
-          'error',
-          '-loop',
-          '1',
-          '-i',
-          png,
-          '-i',
-          mp3,
+          '-y', '-loglevel', 'error',
+          '-loop', '1',
+          '-i', png,
+          '-i', mp3,
           '-filter_complex',
           `[0:v]scale=1188:2112:force_original_aspect_ratio=increase,crop=1188:2112,zoompan=z='min(zoom+0.0004,1.10)':d=${frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30,setsar=1,subtitles=${ass}[v]`,
-          '-map',
-          '[v]',
-          '-map',
-          '1:a',
-          '-c:v',
-          'libx264',
-          '-pix_fmt',
-          'yuv420p',
-          '-c:a',
-          'aac',
-          '-b:a',
-          '128k',
-          '-t',
-          String(dur),
+          '-map', '[v]', '-map', '1:a',
+          '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+          '-c:a', 'aac', '-ar', '44100', '-ac', '2', '-b:a', '128k',
+          '-t', String(dur),
           scene
         ])
       }
