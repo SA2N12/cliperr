@@ -1588,28 +1588,32 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, flex: 1, alignItems: 'stretch' }}>
                   {userSlots.map((s) => renderBlock(s, { hideAvatar: true }))}
-                  {!userSlots.some((s) => s.seriesOn) && userSlots.length < 5 && (
-                    <button
-                      onClick={() => void addVideo(u, userSlots.length)}
-                      title="Ajouter une vidéo par jour sur ce compte"
-                      style={{
-                        width: 44,
-                        borderRadius: 12,
-                        background: '#fff',
-                        border: '2px dashed #c9c9cf',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: 22,
-                        fontWeight: 600,
-                        color: 'var(--muted)',
-                        fontFamily: 'inherit'
-                      }}
-                    >
-                      +
-                    </button>
-                  )}
+                  {(() => {
+                    const seriesOn = userSlots.some((s) => s.seriesOn)
+                    const maxed = userSlots.length >= 5
+                    if (seriesOn || maxed) {
+                      return (
+                        <button
+                          disabled
+                          className="btn"
+                          title={seriesOn ? 'Compte en mode série : 1 épisode/jour maximum' : 'Maximum atteint (5 vidéos/jour)'}
+                          style={{ width: 44, borderRadius: 12, justifyContent: 'center', padding: 0, fontSize: 20 }}
+                        >
+                          +
+                        </button>
+                      )
+                    }
+                    return (
+                      <button
+                        className="btn"
+                        onClick={() => void addVideo(u, userSlots.length)}
+                        title="Ajouter une vidéo par jour sur ce compte"
+                        style={{ width: 44, borderRadius: 12, justifyContent: 'center', padding: 0, fontSize: 20 }}
+                      >
+                        +
+                      </button>
+                    )
+                  })()}
                 </div>
               </div>
             )
