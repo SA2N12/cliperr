@@ -1328,8 +1328,9 @@ function genPct(msg: string): number {
 }
 
 // Planning du jour du pilote : blocs cliquables (heure + type par créneau).
-// Composant autonome, affiché sur la page Pilote auto.
-function TodayPlan({ ideaVideo, toast, scope }: { ideaVideo: IdeaVideoMap; toast: (m: string) => void; scope?: string }): JSX.Element | null {
+// `groupByAccount` : une ligne de blocs par compte (page Pilote auto) ;
+// sinon grille chronologique unique (File d'attente).
+function TodayPlan({ ideaVideo, toast, scope, groupByAccount }: { ideaVideo: IdeaVideoMap; toast: (m: string) => void; scope?: string; groupByAccount?: boolean }): JSX.Element | null {
   const [plan, setPlan] = useState<AutopilotPlan | null>(null)
   const [paused, setPaused] = useState(false)
   const [editSlot, setEditSlot] = useState<AutopilotSlot | null>(null)
@@ -1358,7 +1359,48 @@ function TodayPlan({ ideaVideo, toast, scope }: { ideaVideo: IdeaVideoMap; toast
   const slots = (plan?.slots ?? []).filter((s) => !scope || scope === ALL_SCOPE || s.user === scope)
   const doneCount = slots.filter((s) => s.done).length
   const nextIdx = slots.findIndex((s) => !s.done)
+  const nextKey = nextIdx >= 0 ? `${slots[nextIdx].user}-${slots[nextIdx].ordinal}` : null
   if (!plan?.enabled || slots.length === 0) return null
+
+  const renderBlock = (s: AutopilotSlot, opts?: { hideAvatar?: boolean }): JSX.Element => {
+    const generating = !!activeGen && `${s.user}-${s.ordinal}` === nextKey
+    return (
+      <button
+        key={`${s.user}-${s.ordinal}`}
+        onClick={() => !s.done && setEditSlot(s)}
+        title={s.done ? s.niche : `${s.niche} — clique pour personnaliser (heure, type)`}
+        style={{
+          width: opts?.hideAvatar ? 100 : 112,
+          padding: '10px 8px',
+          borderRadius: 12,
+          background: s.done ? 'var(--panel-2)' : '#fff',
+          border: s.done ? '1px solid var(--border)' : `2px dashed ${generating ? 'var(--accent)' : s.pinned || s.type ? 'var(--accent-strong)' : '#c9c9cf'}`,
+          cursor: s.done ? 'default' : 'pointer',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 6,
+          fontFamily: 'inherit'
+        }}
+      >
+        <div style={{ fontWeight: 700, fontSize: 13, fontVariantNumeric: 'tabular-nums', color: s.done ? 'var(--muted)' : 'var(--accent-strong)' }}>
+          {s.done ? s.eta : `≈ ${s.eta}`}{(s.pinned || s.type) && !s.done ? ' 📌' : ''}
+        </div>
+        {!opts?.hideAvatar && <Avatar url={s.avatarUrl} name={s.user} size={30} />}
+        {!opts?.hideAvatar && (
+          <div className="muted small" style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {s.handle ? '@' + s.handle : s.user}
+          </div>
+        )}
+        <div className="small" style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>
+          {s.done ? '✓ publiée' : generating ? '⚙️ création…' : s.niche.split(' (')[0]}
+        </div>
+      </button>
+    )
+  }
+
+  // Ordre des lignes (mode par compte) : premier passage de chaque compte.
+  const users = [...new Set(slots.map((s) => s.user))]
 
   return (
     <div className="card" style={{ marginBottom: 16 }}>
@@ -1375,42 +1417,33 @@ function TodayPlan({ ideaVideo, toast, scope }: { ideaVideo: IdeaVideoMap; toast
           <button className="btn small" onClick={() => void resume()}>Reprendre</button>
         </div>
       )}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 14 }}>
-        {slots.map((s, i) => {
-          const generating = i === nextIdx && !!activeGen
-          return (
-            <button
-              key={`${s.user}-${s.ordinal}`}
-              onClick={() => !s.done && setEditSlot(s)}
-              title={s.done ? s.niche : `${s.niche} — clique pour personnaliser (heure, type)`}
-              style={{
-                width: 112,
-                padding: '10px 8px',
-                borderRadius: 12,
-                background: s.done ? 'var(--panel-2)' : '#fff',
-                border: s.done ? '1px solid var(--border)' : `2px dashed ${generating ? 'var(--accent)' : s.pinned || s.type ? 'var(--accent-strong)' : '#c9c9cf'}`,
-                cursor: s.done ? 'default' : 'pointer',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: 6,
-                fontFamily: 'inherit'
-              }}
-            >
-              <div style={{ fontWeight: 700, fontSize: 13, fontVariantNumeric: 'tabular-nums', color: s.done ? 'var(--muted)' : 'var(--accent-strong)' }}>
-                {s.done ? s.eta : `≈ ${s.eta}`}{(s.pinned || s.type) && !s.done ? ' 📌' : ''}
+      {groupByAccount ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 14 }}>
+          {users.map((u) => {
+            const userSlots = slots.filter((s) => s.user === u)
+            const first = userSlots[0]
+            const uDone = userSlots.filter((s) => s.done).length
+            return (
+              <div key={u} style={{ display: 'flex', alignItems: 'center', gap: 12, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+                <div style={{ width: 148, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Avatar url={first.avatarUrl} name={u} size={32} />
+                  <div style={{ minWidth: 0 }}>
+                    <div className="small" style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{first.handle ? '@' + first.handle : u}</div>
+                    <div className="muted small">{uDone}/{userSlots.length} publiée{uDone > 1 ? 's' : ''}</div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, flex: 1 }}>
+                  {userSlots.map((s) => renderBlock(s, { hideAvatar: true }))}
+                </div>
               </div>
-              <Avatar url={s.avatarUrl} name={s.user} size={30} />
-              <div className="muted small" style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {s.handle ? '@' + s.handle : s.user}
-              </div>
-              <div className="small" style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>
-                {s.done ? '✓ publiée' : generating ? '⚙️ création…' : s.niche.split(' (')[0]}
-              </div>
-            </button>
-          )
-        })}
-      </div>
+            )
+          })}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 14 }}>
+          {slots.map((s) => renderBlock(s))}
+        </div>
+      )}
       {activeGen && (
         <div style={{ marginTop: 12 }}>
           <div className="bar"><div style={{ width: `${genPct(activeGen.message)}%`, transition: 'width 0.4s ease' }} /></div>
@@ -1920,7 +1953,7 @@ function Autopilot({ toast, ideaVideo }: { toast: (m: string) => void; ideaVideo
         <button className={`btn ${enabled ? '' : 'primary'}`} disabled={saving} onClick={toggle}>{enabled ? 'Désactiver' : 'Activer'}</button>
       </div>
 
-      <TodayPlan ideaVideo={ideaVideo} toast={toast} />
+      <TodayPlan ideaVideo={ideaVideo} toast={toast} groupByAccount />
 
       <div className="card">
         <div style={{ fontWeight: 600, marginBottom: 4 }}>Cadence, niche &amp; CTA par compte</div>
