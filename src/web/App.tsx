@@ -422,7 +422,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
         {page === 'ideas' && <Ideas toast={showToast} go={setPage} />}
         {page === 'history' && <History sources={sources} clips={clips} progress={progress} onRefresh={refresh} toast={showToast} goClips={() => setPage('clips')} />}
         {page === 'clips' && <Clips clips={clips} sources={sources} onRefresh={refresh} toast={showToast} ttProfile={ttProfile} scope={scope} />}
-        {page === 'queue' && <Queue clips={clips} go={setPage} />}
+        {page === 'queue' && <Queue clips={clips} go={setPage} scope={scope} ideaVideo={ideaVideo} toast={showToast} />}
         {page === 'published' && <Published clips={clips} go={setPage} scope={scope} />}
         {page === 'settings' && <Settings toast={showToast} onTtProfile={setTtProfile} />}
       </main>
@@ -1422,7 +1422,7 @@ function TodayPlan({ ideaVideo, toast, scope }: { ideaVideo: IdeaVideoMap; toast
   )
 }
 
-function Queue({ clips, go }: { clips: ClipDTO[]; go: (p: Page) => void }): JSX.Element {
+function Queue({ clips, go, scope, ideaVideo, toast }: { clips: ClipDTO[]; go: (p: Page) => void; scope: string; ideaVideo: IdeaVideoMap; toast: (m: string) => void }): JSX.Element {
   const [status, setStatus] = useState<{ enabled: boolean; paused: boolean; cron: string; nextRunAt: number | null; intervalSec: number | null; lastRunAt: number | null } | null>(null)
   const [now, setNow] = useState(Date.now())
   const load = useCallback((): void => {
@@ -1465,6 +1465,8 @@ function Queue({ clips, go }: { clips: ClipDTO[]; go: (p: Page) => void }): JSX.
           </button>
         )}
       </div>
+
+      <TodayPlan ideaVideo={ideaVideo} toast={toast} scope={scope} />
 
       {!status?.enabled ? (
         <div className="card" style={{ textAlign: 'center', padding: 36 }}>
