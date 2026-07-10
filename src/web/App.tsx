@@ -1269,7 +1269,7 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
           ordinal: slot.ordinal,
           hm: Number.isFinite(h) && Number.isFinite(m) ? h + m / 60 : null,
           type: type === 'auto' ? null : type,
-          subject: type === 'custom' ? subject : null
+          subject: type === 'custom' || type === 'clip' ? subject : null
         })
         toast('Créneau personnalisé ✓')
       }
@@ -1303,11 +1303,18 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
         <select className="input-full" value={type === 'niche' ? 'auto' : type} onChange={(e) => setType(e.target.value)} style={{ marginBottom: 10 }}>
           <option value="auto">Vidéo de niche (défaut)</option>
           {slot.hasSeries && <option value="serie">Épisode de série</option>}
+          <option value="clip">Clip (rediff live / reportage YouTube)</option>
           <option value="custom">Sujet personnalisé…</option>
         </select>
         {!slot.hasSeries && <div className="muted small" style={{ marginTop: -4, marginBottom: 10 }}>Pour proposer « Épisode de série » : configure la série du compte (⚙️ de la ligne → onglet Série).</div>}
         {type === 'custom' && (
           <input className="input-full" value={subject} placeholder="Sujet exact de la vidéo — ex. le mystère du vol MH370" onChange={(e) => setSubject(e.target.value)} style={{ marginBottom: 10 }} />
+        )}
+        {type === 'clip' && (
+          <>
+            <input className="input-full" value={subject} placeholder="URL YouTube de la rediffusion / du reportage" onChange={(e) => setSubject(e.target.value)} style={{ marginBottom: 4 }} />
+            <div className="muted small" style={{ marginBottom: 10 }}>L'IA télécharge la vidéo, repère les meilleurs moments et publie le meilleur clip 9:16 sous-titré. Réutilise la même URL sur plusieurs blocs : chacun publiera le clip suivant.</div>
+          </>
         )}
         <div className="muted small" style={{ marginBottom: 14 }}>L'heure choisie est prioritaire sur la répartition automatique (valable aujourd'hui uniquement).</div>
 
@@ -1315,7 +1322,7 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
           <button className="btn" disabled={busy} onClick={() => void removeSlot()} style={{ color: 'var(--bad)', marginRight: 'auto' }} title="Retire cette vidéo (baisse la cadence du compte)">🗑 Supprimer</button>
           {(slot.pinned || slot.type) && <button className="btn" disabled={busy} onClick={() => void apply(true)}>Réinitialiser</button>}
           <button className="btn" disabled={busy} onClick={onClose}>Annuler</button>
-          <button className="btn primary" disabled={busy || (type === 'custom' && !subject.trim())} onClick={() => void apply(false)}>
+          <button className="btn primary" disabled={busy || ((type === 'custom' || type === 'clip') && !subject.trim())} onClick={() => void apply(false)}>
             {busy ? 'Enregistrement…' : 'Enregistrer'}
           </button>
         </div>
@@ -1352,7 +1359,7 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
   const [niche, setNiche] = useState('')
   const [cta, setCta] = useState('')
   const [serie, setSerie] = useState<SeriesCfg>({ enabled: false, title: '', universe: '', episode: 1 })
-  const [tab, setTab] = useState<'general' | 'niche' | 'serie'>('general')
+  const [tab, setTab] = useState<'general' | 'niche' | 'serie' | 'clips'>('general')
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
@@ -1407,6 +1414,7 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
           <button className={`tab ${tab === 'serie' ? 'on' : ''}`} onClick={() => setTab('serie')}>
             Série {serie.title.trim() && serie.universe.trim() ? '🟢' : ''}
           </button>
+          <button className={`tab ${tab === 'clips' ? 'on' : ''}`} onClick={() => setTab('clips')}>Clips</button>
         </div>
 
         {tab === 'general' && (
@@ -1444,6 +1452,22 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
             <label className="muted small" style={{ display: 'block', marginBottom: 4 }}>Univers (personnages récurrents + style visuel)</label>
             <textarea className="input-full" rows={4} value={serie.universe} placeholder="Décris les personnages (noms + traits visuels précis) et le style — c’est ce qui garde les personnages identiques d’un épisode à l’autre." onChange={(e) => setSerie((s) => ({ ...s, universe: e.target.value }))} style={{ marginBottom: 4 }} />
             <div className="muted small">Épisodes en vidéo animée avec dialogues joués (voix par personnage) et cliffhanger. Mémoire de l’histoire conservée. Changer le titre relance à l’épisode 1.</div>
+          </>
+        )}
+
+        {tab === 'clips' && (
+          <>
+            <div className="small" style={{ fontWeight: 600, marginBottom: 6 }}>Clips depuis une rediff de live ou un reportage YouTube</div>
+            <div className="muted small" style={{ marginBottom: 10 }}>
+              L’IA télécharge la vidéo, transcrit, repère les <b>meilleurs moments</b>, recadre en 9:16 et incruste les sous-titres — puis publie le clip sur ce compte avec titre et hashtags générés.
+            </div>
+            <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--panel-2)', border: '1px solid var(--border)' }}>
+              <div className="small" style={{ fontWeight: 600 }}>Comment l’utiliser</div>
+              <div className="muted small">
+                Sur le planning : <b>+</b> (ou clic sur un bloc) → type <b>« Clip »</b> → colle l’URL YouTube de la rediffusion/du reportage.
+                Une même URL peut alimenter plusieurs blocs : l’analyse extrait 3 clips, chaque bloc publie le meilleur suivant (sans retélécharger).
+              </div>
+            </div>
           </>
         )}
 

@@ -130,7 +130,7 @@ function getContext(): Promise<PipelineContext> {
 // ── Pipeline (un seul à la fois) ──
 let pipelineChain: Promise<void> = Promise.resolve()
 
-async function runForSource(sourceId: number, clipCount: number): Promise<void> {
+async function runForSource(sourceId: number, clipCount: number, profileOverride?: string): Promise<void> {
   const source = repo.getSource(sourceId)
   if (!source) throw new Error(`Source #${sourceId} introuvable`)
   const send = (ev: ProgressEvent): void => emitProgress(ev)
@@ -216,7 +216,7 @@ async function runForSource(sourceId: number, clipCount: number): Promise<void> 
             title: c.title,
             description: c.description,
             hashtags: c.hashtags,
-            profile: activeProfile()
+            profile: profileOverride ?? activeProfile()
           })
           if (autoApprove) repo.setClipReview(clip.id, 'approved')
         },
@@ -644,9 +644,49 @@ async function runAutopilotTick(force = false): Promise<void> {
     // Tendances TikTok du moment (si l'API est configurée) → scénarios ancrés sur l'actu.
     const trends = await getTrendsCached()
 
+    const subject = (slotOv.subject ?? '').trim()
+
+    // ── Type « clip » : découpe les meilleurs moments d'une rediff de live /
+    // d'un reportage YouTube (URL renseignée sur le bloc) et publie le meilleur.
+    if (slotOv.type === 'clip') {
+      if (!/^https?:\/\//i.test(subject)) {
+        emitLog(`Pilote auto : le créneau « clip » de « ${user} » n'a pas d'URL — clique le bloc et colle l'URL YouTube.`)
+        return
+      }
+      // Réutilise une source déjà analysée pour cette URL (clips restants) ;
+      // sinon pipeline complet : téléchargement → analyse IA → 3 clips 9:16.
+      let candidates = repo
+        .listSources()
+        .filter((s) => s.url === subject && s.status === 'done')
+        .flatMap((s) => repo.listClips(s.id))
+        .filter((c) => c.publishStatus !== 'published')
+      if (!candidates.length) {
+        emitLog(`Pilote auto : extraction de clips depuis ${subject} pour « ${user} » (téléchargement + analyse)…`)
+        const created = repo.createSource(subject)
+        const job = pipelineChain.then(() => runForSource(created.id, 3, user))
+        pipelineChain = job.then(() => undefined, () => undefined)
+        await job
+        const after = repo.getSource(created.id)
+        if (!after || after.status !== 'done') {
+          emitLog(`Pilote auto : extraction échouée pour « ${user} » — ${after?.error ?? 'erreur inconnue'}.`)
+          return
+        }
+        candidates = repo.listClips(created.id).filter((c) => c.publishStatus !== 'published')
+      }
+      const clip = candidates.sort((a, b) => (b.score ?? 0) - (a.score ?? 0))[0]
+      if (!clip) {
+        emitLog(`Pilote auto : aucun clip exploitable dans ${subject}.`)
+        return
+      }
+      repo.setClipReview(clip.id, 'approved')
+      await publishClipById(clip.id, paths, emitLog, { uploadPostUser: user })
+      repo.setSetting(countKey, String(done + 1))
+      emitLog(`Pilote auto : clip publié sur « ${user} » (${done + 1}/${perDayFor(user)} aujourd'hui).`)
+      return
+    }
+
     // Type du créneau : par défaut vidéo de niche ; « Épisode de série » ou
     // « Sujet libre » se choisissent explicitement sur le bloc du planning.
-    const subject = (slotOv.subject ?? '').trim()
     const series: SeriesState | null = slotOv.type === 'serie' ? seriesConfiguredFor(user) : null
 
     let idea: import('./ideas').ViralIdea
@@ -1348,6 +1388,7 @@ app.get('/api/autopilot/plan', wrap(async (_req, res) => {
     // Libellé selon le type du créneau (niche par défaut).
     let label: string
     if (ov?.type === 'custom' && (ov.subject ?? '').trim()) label = `Sujet : ${(ov.subject ?? '').trim()}`
+    else if (ov?.type === 'clip') label = `Clip : ${(ov.subject ?? '').trim().replace(/^https?:\/\/(www\.)?/, '').slice(0, 50) || 'URL à renseigner'}`
     else if (ov?.type === 'serie' && confSerie) label = `Série : ${confSerie.title} — Ép. ${confSerie.episode}`
     else label = nicheForProfile(best)
     const etaHm = ov?.hm != null ? ov.hm : winStart + step * i
@@ -1442,12 +1483,12 @@ app.post('/api/autopilot/slot', wrap((req, res) => {
       if (!t || t === 'auto') {
         delete o.type
         delete o.subject
-      } else if (['niche', 'serie', 'custom'].includes(t)) {
+      } else if (['niche', 'serie', 'custom', 'clip'].includes(t)) {
         o.type = t
       }
     }
     if (b.subject !== undefined) {
-      const s = String(b.subject ?? '').trim().slice(0, 200)
+      const s = String(b.subject ?? '').trim().slice(0, 300)
       if (s) o.subject = s
       else delete o.subject
     }
