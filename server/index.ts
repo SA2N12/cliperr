@@ -1593,8 +1593,9 @@ app.post('/api/autopilot/clip-channels/test', wrap(async (req, res) => {
         longCount: long.length,
         sample: target.title
       })
-    } catch {
-      results.push({ channel: ch, status: 'erreur', videos: 0, longCount: 0 })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      results.push({ channel: ch, status: /429|quota/i.test(msg) ? 'quota' : 'erreur', videos: 0, longCount: 0 })
     }
   }
   res.json({ results })

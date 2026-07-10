@@ -1388,6 +1388,8 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
         return { icon: '⛔', text: 'Vidéos protégées : téléchargement impossible via l’API — chaîne inutilisable', color: 'var(--bad)' }
       case 'introuvable':
         return { icon: '❌', text: 'Introuvable — vérifie l’orthographe exacte du nom de la chaîne', color: 'var(--bad)' }
+      case 'quota':
+        return { icon: '⛔', text: 'Quota mensuel RapidAPI épuisé — le test, le choix auto et les téléchargements sont bloqués jusqu’à la remise à zéro (ou passe au plan supérieur sur rapidapi.com)', color: 'var(--bad)' }
       default:
         return { icon: '⚠️', text: 'Erreur pendant le test — réessaie', color: '#b45309' }
     }
