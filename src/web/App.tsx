@@ -1989,8 +1989,6 @@ type AutopilotState = { enabled: boolean; perDay: number; busy: boolean; profile
 
 function Autopilot({ toast, ideaVideo }: { toast: (m: string) => void; ideaVideo: IdeaVideoMap }): JSX.Element {
   const [state, setState] = useState<AutopilotState | null>(null)
-  const [niches, setNiches] = useState<Record<string, string>>({})
-  const [ctas, setCtas] = useState<Record<string, string>>({})
   const [series, setSeries] = useState<Record<string, SeriesCfg>>({})
   const [perDays, setPerDays] = useState<Record<string, number>>({})
   const [enabled, setEnabled] = useState(false)
@@ -2001,29 +1999,23 @@ function Autopilot({ toast, ideaVideo }: { toast: (m: string) => void; ideaVideo
       const s = await api.autopilotState()
       setState(s)
       setEnabled(s.enabled)
-      const n: Record<string, string> = {}
-      const c: Record<string, string> = {}
       const sr: Record<string, SeriesCfg> = {}
       const pd: Record<string, number> = {}
-      s.profiles.forEach((p) => { n[p.username] = p.niche; c[p.username] = p.cta; sr[p.username] = p.series; pd[p.username] = p.perDay })
-      setNiches(n)
-      setCtas(c)
+      s.profiles.forEach((p) => { sr[p.username] = p.series; pd[p.username] = p.perDay })
       setSeries(sr)
       setPerDays(pd)
     } catch { /* ignore */ }
   }, [])
   useEffect(() => { void load() }, [load])
 
-  const setSerie = (u: string, patch: Partial<SeriesCfg>): void =>
-    setSeries((m) => ({ ...m, [u]: { enabled: false, title: '', universe: '', episode: 1, ...m[u], ...patch } }))
-
-  const save = async (over?: { enabled?: boolean }): Promise<void> => {
+  const toggle = async (): Promise<void> => {
+    const v = !enabled
+    setEnabled(v)
     setSaving(true)
     try {
-      const seriesOut: Record<string, { enabled: boolean; title: string; universe: string }> = {}
-      for (const [u, s] of Object.entries(series)) seriesOut[u] = { enabled: s.enabled, title: s.title, universe: s.universe }
-      await api.saveAutopilot({ enabled: over?.enabled ?? enabled, perDays, niches, ctas, series: seriesOut })
-      toast('Pilote auto enregistré')
+      // N'envoie QUE l'interrupteur : les réglages par compte se gèrent via ⚙️.
+      await api.saveAutopilot({ enabled: v })
+      toast(v ? 'Pilote auto activé' : 'Pilote auto désactivé')
       await load()
     } catch (e) {
       toast('Erreur : ' + (e as Error).message)
@@ -2031,7 +2023,6 @@ function Autopilot({ toast, ideaVideo }: { toast: (m: string) => void; ideaVideo
       setSaving(false)
     }
   }
-  const toggle = async (): Promise<void> => { const v = !enabled; setEnabled(v); await save({ enabled: v }) }
   const runNow = async (): Promise<void> => {
     try { await api.runAutopilotNow(); toast('Cycle lancé — suis la progression en bas à droite'); window.setTimeout(() => void load(), 1500) }
     catch (e) { toast('Erreur : ' + (e as Error).message) }
@@ -2056,65 +2047,15 @@ function Autopilot({ toast, ideaVideo }: { toast: (m: string) => void; ideaVideo
           <div style={{ fontWeight: 700, fontSize: 16 }}>{enabled ? '🟢 Pilote actif' : '⚪ Pilote en pause'}</div>
           <div className="muted small">{enabled ? `Génère et publie automatiquement selon la cadence de chaque compte — ${totalPerDay} vidéo${totalPerDay > 1 ? 's' : ''}/jour au total.` : 'Active-le pour lancer la production quotidienne 100% autonome.'}</div>
         </div>
+        <button className="btn" disabled={!!state?.busy} onClick={() => void runNow()} title="Génère et publie 1 vidéo maintenant (test)">
+          <Icon name="bolt" size={15} /> {state?.busy ? 'Génération…' : 'Tester maintenant'}
+        </button>
         <button className={`btn ${enabled ? '' : 'primary'}`} disabled={saving} onClick={toggle}>{enabled ? 'Désactiver' : 'Activer'}</button>
       </div>
 
       <TodayPlan ideaVideo={ideaVideo} toast={toast} groupByAccount onConfigSaved={() => void load()} />
-
-      <div className="card">
-        <div style={{ fontWeight: 600, marginBottom: 4 }}>Cadence, niche &amp; CTA par compte</div>
-        <div className="muted small" style={{ marginBottom: 12 }}>
-          Règle le nombre de <b>vidéos/jour</b> compte par compte (0 = compte en pause). La publication est étalée de 9h à 23h. Le <b>CTA</b> est ajouté automatiquement à la fin de <b>chaque légende</b> publiée sur ce compte.
-        </div>
-        {profiles.length === 0 ? (
-          <div className="muted">Aucun compte upload-post connecté. Ajoute-les dans Réglages.</div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {profiles.map((p) => (
-              <div key={p.username} className="row" style={{ gap: 12, alignItems: 'flex-start' }}>
-                <Avatar url={p.avatarUrl} name={p.username} size={38} />
-                <div style={{ width: 120, minWidth: 0, paddingTop: 4 }}>
-                  <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.handle ? '@' + p.handle : p.username}</div>
-                  <div className="muted small">{p.doneToday} publiée{p.doneToday > 1 ? 's' : ''} auj.</div>
-                </div>
-                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <span className="muted small" style={{ whiteSpace: 'nowrap' }}>Vidéos / jour :</span>
-                    <select value={perDays[p.username] ?? p.perDay} onChange={(e) => setPerDays((m) => ({ ...m, [p.username]: Number(e.target.value) }))}>
-                      <option value={0}>0 — en pause</option>
-                      {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}
-                    </select>
-                    {series[p.username]?.enabled && (perDays[p.username] ?? p.perDay) > 1 && (
-                      <span className="muted small">série : plafonné à 1/jour</span>
-                    )}
-                  </div>
-                  <input className="input-full" value={niches[p.username] ?? ''} placeholder="Niche — ex. mystères non résolus…" onChange={(e) => setNiches((m) => ({ ...m, [p.username]: e.target.value }))} />
-                  <input className="input-full" value={ctas[p.username] ?? ''} placeholder="CTA ajouté aux légendes — ex. 🔗 Mon guide gratuit est dans la bio" onChange={(e) => setCtas((m) => ({ ...m, [p.username]: e.target.value }))} />
-                  <label className="switch" style={{ marginTop: 4 }}>
-                    <input type="checkbox" checked={!!series[p.username]?.enabled} onChange={(e) => setSerie(p.username, { enabled: e.target.checked })} />
-                    <span className="track" />
-                    Mode série (feuilleton à épisodes)
-                    {series[p.username]?.enabled && <span className="chip" style={{ marginLeft: 6 }}>Ép. {series[p.username]?.episode ?? 1}</span>}
-                  </label>
-                  {series[p.username]?.enabled && (
-                    <>
-                      <input className="input-full" value={series[p.username]?.title ?? ''} placeholder="Titre de la série — ex. L’île des fruits skibidi" onChange={(e) => setSerie(p.username, { title: e.target.value })} />
-                      <textarea className="input-full" rows={3} value={series[p.username]?.universe ?? ''} placeholder="Univers : personnages récurrents + style visuel — ex. Des fruits en 3D style Pixar coincés sur une île volcanique : Bano la banane à lunettes (le chef), Fraisou la fraise peureuse, Nanas l’ananas musclé. Humour absurde « skibidi », couleurs saturées." onChange={(e) => setSerie(p.username, { universe: e.target.value })} />
-                      <div className="muted small">La série remplace la niche sur ce compte : chaque vidéo = l’épisode suivant de l’histoire (mémoire conservée, cliffhanger à chaque fin). Cadence fixée à <b>1 épisode/jour</b> (scènes animées en vidéo si la clé fal.ai est configurée). Changer le titre relance une histoire à l’épisode 1.</div>
-                    </>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-        <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
-          <button className="btn primary" disabled={saving} onClick={() => void save()}>{saving ? 'Enregistrement…' : 'Enregistrer'}</button>
-          <button className="btn" disabled={!!state?.busy} onClick={() => void runNow()} title="Génère et publie 1 vidéo maintenant (test)">
-            <Icon name="bolt" size={15} /> {state?.busy ? 'Génération en cours…' : 'Tester maintenant'}
-          </button>
-        </div>
-      </div>
+      {profiles.length === 0 && <div className="card muted">Aucun compte upload-post connecté. Ajoute-les dans Réglages.</div>}
+      <div className="muted small" style={{ margin: '4px 2px' }}>⚙️ sur une ligne = réglages du compte (cadence, niche, CTA, série) · clic sur un bloc = heure et type de cette vidéo.</div>
     </>
   )
 }
