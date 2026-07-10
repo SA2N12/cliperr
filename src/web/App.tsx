@@ -1335,6 +1335,7 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
   const [niche, setNiche] = useState('')
   const [cta, setCta] = useState('')
   const [serie, setSerie] = useState<SeriesCfg>({ enabled: false, title: '', universe: '', episode: 1 })
+  const [tab, setTab] = useState<'general' | 'niche' | 'serie'>('general')
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
@@ -1383,33 +1384,64 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
           {serie.enabled && <span className="chip">Ép. {serie.episode}</span>}
         </div>
 
-        <label className="muted small" style={{ display: 'block', marginBottom: 4 }}>Vidéos / jour</label>
-        <select value={perDay} onChange={(e) => setPerDay(Number(e.target.value))} style={{ marginBottom: 12 }}>
-          <option value={0}>0 — en pause</option>
-          {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}
-        </select>
-        {serie.enabled && perDay > 1 && <div className="muted small" style={{ marginTop: -8, marginBottom: 12 }}>Série active : plafonné à 1 épisode/jour.</div>}
+        <div className="tabs" style={{ marginBottom: 14 }}>
+          <button className={`tab ${tab === 'general' ? 'on' : ''}`} onClick={() => setTab('general')}>Général</button>
+          <button className={`tab ${tab === 'niche' ? 'on' : ''}`} onClick={() => setTab('niche')}>Vidéos de niche</button>
+          <button className={`tab ${tab === 'serie' ? 'on' : ''}`} onClick={() => setTab('serie')}>
+            Série {serie.enabled ? '🟢' : ''}
+          </button>
+        </div>
 
-        <label className="muted small" style={{ display: 'block', marginBottom: 4 }}>Niche</label>
-        <input className="input-full" value={niche} placeholder="ex. mystères non résolus…" onChange={(e) => setNiche(e.target.value)} style={{ marginBottom: 12 }} />
-
-        <label className="muted small" style={{ display: 'block', marginBottom: 4 }}>CTA (ajouté à chaque légende)</label>
-        <input className="input-full" value={cta} placeholder="ex. 🔗 Mon guide gratuit est dans la bio" onChange={(e) => setCta(e.target.value)} style={{ marginBottom: 12 }} />
-
-        <label className="switch" style={{ marginBottom: 10 }}>
-          <input type="checkbox" checked={serie.enabled} onChange={(e) => setSerie((s) => ({ ...s, enabled: e.target.checked }))} />
-          <span className="track" />
-          Mode série (feuilleton à épisodes)
-        </label>
-        {serie.enabled && (
+        {tab === 'general' && (
           <>
-            <input className="input-full" value={serie.title} placeholder="Titre de la série — ex. L’île des fruits skibidi" onChange={(e) => setSerie((s) => ({ ...s, title: e.target.value }))} style={{ marginBottom: 8 }} />
-            <textarea className="input-full" rows={3} value={serie.universe} placeholder="Univers : personnages récurrents + style visuel" onChange={(e) => setSerie((s) => ({ ...s, universe: e.target.value }))} style={{ marginBottom: 8 }} />
-            <div className="muted small" style={{ marginBottom: 8 }}>Changer le titre relance une histoire à l’épisode 1.</div>
+            <label className="muted small" style={{ display: 'block', marginBottom: 4 }}>Vidéos / jour</label>
+            <select value={perDay} onChange={(e) => setPerDay(Number(e.target.value))} style={{ marginBottom: 4 }}>
+              <option value={0}>0 — en pause</option>
+              {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+            <div className="muted small" style={{ marginBottom: 12 }}>
+              {serie.enabled && perDay > 1 ? 'Série active : plafonné à 1 épisode/jour.' : 'Publication étalée automatiquement de 9h à 23h.'}
+            </div>
+            <label className="muted small" style={{ display: 'block', marginBottom: 4 }}>CTA (ajouté à chaque légende publiée)</label>
+            <input className="input-full" value={cta} placeholder="ex. 🔗 Mon guide gratuit est dans la bio" onChange={(e) => setCta(e.target.value)} style={{ marginBottom: 4 }} />
+            <div className="muted small">C’est lui qui transforme les vues en abonnés/clics — adapte-le au contenu du compte.</div>
           </>
         )}
 
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 10 }}>
+        {tab === 'niche' && (
+          <>
+            <label className="muted small" style={{ display: 'block', marginBottom: 4 }}>Niche / thème des vidéos classiques</label>
+            <input className="input-full" value={niche} placeholder="ex. mystères non résolus, sport, psychologie…" onChange={(e) => setNiche(e.target.value)} style={{ marginBottom: 4 }} />
+            <div className="muted small">
+              Chaque vidéo « niche » est une idée originale générée dans ce thème (hook fort, script rétention, images IA, voix off).
+              {serie.enabled ? ' Ce compte est en mode série : la niche ne sert que si tu forces « Vidéo de niche » sur un bloc du planning, ou si tu désactives la série.' : ''}
+            </div>
+          </>
+        )}
+
+        {tab === 'serie' && (
+          <>
+            <label className="switch" style={{ marginBottom: 10 }}>
+              <input type="checkbox" checked={serie.enabled} onChange={(e) => setSerie((s) => ({ ...s, enabled: e.target.checked }))} />
+              <span className="track" />
+              Mode série (feuilleton à épisodes)
+              {serie.enabled && <span className="chip" style={{ marginLeft: 6 }}>Ép. {serie.episode}</span>}
+            </label>
+            {serie.enabled ? (
+              <>
+                <label className="muted small" style={{ display: 'block', marginBottom: 4 }}>Titre de la série</label>
+                <input className="input-full" value={serie.title} placeholder="ex. L’île des fruits skibidi" onChange={(e) => setSerie((s) => ({ ...s, title: e.target.value }))} style={{ marginBottom: 10 }} />
+                <label className="muted small" style={{ display: 'block', marginBottom: 4 }}>Univers (personnages récurrents + style visuel)</label>
+                <textarea className="input-full" rows={4} value={serie.universe} placeholder="Décris les personnages (noms + traits visuels précis) et le style — c’est ce qui garde les personnages identiques d’un épisode à l’autre." onChange={(e) => setSerie((s) => ({ ...s, universe: e.target.value }))} style={{ marginBottom: 4 }} />
+                <div className="muted small">1 épisode/jour · dialogues joués (voix par personnage) · cliffhanger à chaque fin · changer le titre relance à l’épisode 1.</div>
+              </>
+            ) : (
+              <div className="muted small">Active le mode série pour transformer ce compte en feuilleton quotidien : une histoire continue, personnages récurrents, épisode après épisode.</div>
+            )}
+          </>
+        )}
+
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
           <button className="btn" disabled={busy} onClick={onClose}>Annuler</button>
           <button className="btn primary" disabled={busy || !profile} onClick={() => void save()}>{busy ? 'Enregistrement…' : 'Enregistrer'}</button>
         </div>
