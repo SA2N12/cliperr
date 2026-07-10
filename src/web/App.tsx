@@ -1230,15 +1230,31 @@ const CRON_LABELS: Record<string, string> = {
   '0 */3 * * *': 'toutes les 3 h'
 }
 
-type AutopilotSlot = { user: string; handle: string | null; avatarUrl: string | null; niche: string; ordinal: number; etaHm: number; eta: string; done: boolean; pinned?: boolean; type?: string; subject?: string; hasSeries?: boolean }
+type AutopilotSlot = { user: string; handle: string | null; avatarUrl: string | null; niche: string; ordinal: number; etaHm: number; eta: string; done: boolean; pinned?: boolean; type?: string; subject?: string; hasSeries?: boolean; seriesOn?: boolean }
 type AutopilotPlan = { enabled: boolean; perDay: number; targetPerDay?: number; window: { start: number; end: number }; nowHm: number; slots: AutopilotSlot[] }
 
 // Fenêtre d'édition d'un créneau du planning : heure + type de contenu.
-function SlotModal({ slot, onClose, onSaved, toast }: { slot: AutopilotSlot; onClose: () => void; onSaved: () => void; toast: (m: string) => void }): JSX.Element {
+// `quota` = nb de vidéos/jour actuel du compte (pour le bouton Supprimer).
+function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSlot; quota: number; onClose: () => void; onSaved: () => void; toast: (m: string) => void }): JSX.Element {
   const [time, setTime] = useState(slot.eta.match(/^\d{2}:\d{2}$/) ? slot.eta : '12:00')
   const [type, setType] = useState(slot.type ?? 'auto')
   const [subject, setSubject] = useState(slot.subject ?? '')
   const [busy, setBusy] = useState(false)
+
+  const removeSlot = async (): Promise<void> => {
+    setBusy(true)
+    try {
+      await api.saveAutopilotSlot({ user: slot.user, ordinal: slot.ordinal, reset: true })
+      await api.saveAutopilotAccount({ user: slot.user, perDay: Math.max(0, quota - 1) })
+      toast(`Créneau supprimé — ${Math.max(0, quota - 1)} vidéo${quota - 1 > 1 ? 's' : ''}/jour pour ce compte`)
+      onSaved()
+      onClose()
+    } catch (e) {
+      toast('Erreur : ' + (e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const apply = async (reset: boolean): Promise<void> => {
     setBusy(true)
@@ -1295,7 +1311,8 @@ function SlotModal({ slot, onClose, onSaved, toast }: { slot: AutopilotSlot; onC
         )}
         <div className="muted small" style={{ marginBottom: 14 }}>L'heure choisie est prioritaire sur la répartition automatique (valable aujourd'hui uniquement).</div>
 
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+          <button className="btn" disabled={busy} onClick={() => void removeSlot()} style={{ color: 'var(--bad)', marginRight: 'auto' }} title="Retire cette vidéo (baisse la cadence du compte)">🗑 Supprimer</button>
           {(slot.pinned || slot.type) && <button className="btn" disabled={busy} onClick={() => void apply(true)}>Réinitialiser</button>}
           <button className="btn" disabled={busy} onClick={onClose}>Annuler</button>
           <button className="btn primary" disabled={busy || (type === 'custom' && !subject.trim())} onClick={() => void apply(false)}>
@@ -1355,7 +1372,6 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
     try {
       await api.saveAutopilotAccount({
         user,
-        perDay,
         niche,
         cta,
         series: { enabled: serie.enabled, title: serie.title, universe: serie.universe }
@@ -1394,13 +1410,11 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
 
         {tab === 'general' && (
           <>
-            <label className="muted small" style={{ display: 'block', marginBottom: 4 }}>Vidéos / jour</label>
-            <select value={perDay} onChange={(e) => setPerDay(Number(e.target.value))} style={{ marginBottom: 4 }}>
-              <option value={0}>0 — en pause</option>
-              {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}
-            </select>
-            <div className="muted small" style={{ marginBottom: 12 }}>
-              {serie.enabled && perDay > 1 ? 'Série active : plafonné à 1 épisode/jour.' : 'Publication étalée automatiquement de 9h à 23h.'}
+            <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--panel-2)', border: '1px solid var(--border)', marginBottom: 12 }}>
+              <div className="small" style={{ fontWeight: 600 }}>
+                Cadence : {serie.enabled ? '1 épisode/jour (série)' : perDay === 0 ? 'en pause' : `${perDay} vidéo${perDay > 1 ? 's' : ''}/jour`}
+              </div>
+              <div className="muted small">S'ajuste sur le planning : bouton <b>+</b> en bout de ligne pour ajouter, <b>🗑 Supprimer</b> sur un bloc pour retirer. Publication étalée de 9h à 23h.</div>
             </div>
             <label className="muted small" style={{ display: 'block', marginBottom: 4 }}>CTA (ajouté à chaque légende publiée)</label>
             <input className="input-full" value={cta} placeholder="ex. 🔗 Mon guide gratuit est dans la bio" onChange={(e) => setCta(e.target.value)} style={{ marginBottom: 4 }} />
@@ -1478,6 +1492,19 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
   const resume = async (): Promise<void> => {
     await api.setFlag('queue_paused', '0')
     load()
+  }
+
+  // Bouton « + » en bout de ligne : ajoute une vidéo/jour au compte.
+  const addVideo = async (u: string, current: number): Promise<void> => {
+    const next = Math.min(5, current + 1)
+    try {
+      await api.saveAutopilotAccount({ user: u, perDay: next })
+      toast(`${next} vidéo${next > 1 ? 's' : ''}/jour pour ce compte`)
+      load()
+      onConfigSaved?.()
+    } catch (e) {
+      toast('Erreur : ' + (e as Error).message)
+    }
   }
 
   const slots = (plan?.slots ?? []).filter((s) => !scope || scope === ALL_SCOPE || s.user === scope)
@@ -1559,8 +1586,30 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
                     <Icon name="settings" size={14} />
                   </button>
                 </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, flex: 1 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, flex: 1, alignItems: 'stretch' }}>
                   {userSlots.map((s) => renderBlock(s, { hideAvatar: true }))}
+                  {!userSlots.some((s) => s.seriesOn) && userSlots.length < 5 && (
+                    <button
+                      onClick={() => void addVideo(u, userSlots.length)}
+                      title="Ajouter une vidéo par jour sur ce compte"
+                      style={{
+                        width: 44,
+                        borderRadius: 12,
+                        background: '#fff',
+                        border: '2px dashed #c9c9cf',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 22,
+                        fontWeight: 600,
+                        color: 'var(--muted)',
+                        fontFamily: 'inherit'
+                      }}
+                    >
+                      +
+                    </button>
+                  )}
                 </div>
               </div>
             )
@@ -1577,7 +1626,18 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
           <div className="muted small" style={{ marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activeGen.message}</div>
         </div>
       )}
-      {editSlot && <SlotModal slot={editSlot} onClose={() => setEditSlot(null)} onSaved={load} toast={toast} />}
+      {editSlot && (
+        <SlotModal
+          slot={editSlot}
+          quota={slots.filter((x) => x.user === editSlot.user).length}
+          onClose={() => setEditSlot(null)}
+          onSaved={() => {
+            load()
+            onConfigSaved?.()
+          }}
+          toast={toast}
+        />
+      )}
       {cfgUser && (
         <AccountConfigModal
           user={cfgUser}

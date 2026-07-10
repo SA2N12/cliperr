@@ -1289,6 +1289,8 @@ app.get('/api/autopilot/plan', wrap(async (_req, res) => {
     type?: string
     subject?: string
     hasSeries?: boolean
+    /** Série ACTIVÉE sur ce compte (cadence plafonnée à 1/jour). */
+    seriesOn?: boolean
   }
   const slots: Slot[] = []
   const ovToday = slotOverrides()[today] ?? {}
@@ -1313,7 +1315,8 @@ app.get('/api/autopilot/plan', wrap(async (_req, res) => {
       user,
       handle: m?.tiktokHandle ?? null,
       avatarUrl: m?.avatarUrl ?? null,
-      niche: serie ? `Série : ${serie.title}` : nicheForProfile(user)
+      niche: serie ? `Série : ${serie.title}` : nicheForProfile(user),
+      seriesOn: !!serie
     }
     const times = doneTimes.get(user) ?? []
     for (let j = 1; j <= done; j++) {
@@ -1375,7 +1378,8 @@ app.get('/api/autopilot/plan', wrap(async (_req, res) => {
       pinned: ov?.hm != null,
       type: ov?.type,
       subject: ov?.subject,
-      hasSeries: !!confSerie
+      hasSeries: !!confSerie,
+      seriesOn: !!bestSerie
     })
     nextOrdinal.set(best, ordinal + 1)
   }
