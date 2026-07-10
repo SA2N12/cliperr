@@ -30,10 +30,19 @@ function cookieArgs(browser?: string | null, file?: string | null): string[] {
  * Active le plugin PO token (bgutil) s'il est installé. On pointe `--plugin-dirs`
  * sur le dossier `yt-dlp-plugins` : yt-dlp y cherche les paquets `<pkg>/yt_dlp_plugins`
  * (cf. installPotPlugin qui extrait dans `yt-dlp-plugins/bgutil/yt_dlp_plugins`).
+ *
+ * Le provider bgutil tourne dans un conteneur séparé (variable `BGUTIL_URL`,
+ * ex. http://bgutil-provider:4416). Sans lui indiquer cette URL, le plugin HTTP
+ * chercherait le provider sur 127.0.0.1:4416 (absent dans notre conteneur) et
+ * n'obtiendrait aucun PO token.
  */
 function pluginArgs(binDir: string): string[] {
   const base = join(binDir, 'yt-dlp-plugins')
-  return existsSync(base) ? ['--plugin-dirs', base] : []
+  if (!existsSync(base)) return []
+  const args = ['--plugin-dirs', base]
+  const potUrl = process.env.BGUTIL_URL
+  if (potUrl) args.push('--extractor-args', `youtubepot-bgutilhttp:base_url=${potUrl}`)
+  return args
 }
 
 /** Diagnostic verbeux : formats + chargement des plugins + tentatives de PO token. */

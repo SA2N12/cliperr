@@ -189,6 +189,13 @@ export const api = {
   setGroqKey: (key: string) => post('/api/settings/groq', { key }),
   rapidApiStatus: () => req<{ has: boolean }>('/api/settings/rapidapi'),
   setRapidApiKey: (key: string) => post('/api/settings/rapidapi', { key }),
+  cookiesStatus: () => req<{ has: boolean }>('/api/settings/cookies'),
+  uploadCookies: (file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return req<{ ok: boolean }>('/api/settings/cookies', { method: 'POST', body: fd })
+  },
+  deleteCookies: () => req<{ ok: boolean }>('/api/settings/cookies', { method: 'DELETE' }),
   uploadPostStatus: () => req<{ has: boolean }>('/api/settings/uploadpost'),
   setUploadPostKey: (key: string) => post('/api/settings/uploadpost', { key }),
   uploadPostProfiles: () =>

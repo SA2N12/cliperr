@@ -2225,6 +2225,7 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
   const [groqHas, setGroqHas] = useState(false)
   const [rapidKey, setRapidKey] = useState('')
   const [rapidHas, setRapidHas] = useState(false)
+  const [cookiesHas, setCookiesHas] = useState(false)
   const [upKey, setUpKey] = useState('')
   const [upHas, setUpHas] = useState(false)
   const [openaiKey, setOpenaiKey] = useState('')
@@ -2250,6 +2251,7 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
     api.apiKeyStatus().then(setKeyStatus).catch(() => undefined)
     api.groqStatus().then((r) => setGroqHas(r.has)).catch(() => undefined)
     api.rapidApiStatus().then((r) => setRapidHas(r.has)).catch(() => undefined)
+    api.cookiesStatus().then((r) => setCookiesHas(r.has)).catch(() => undefined)
     api.uploadPostStatus().then((r) => setUpHas(r.has)).catch(() => undefined)
     api.openaiStatus().then((r) => setOpenaiHas(r.has)).catch(() => undefined)
     api.geminiStatus().then((r) => setGeminiHas(r.has)).catch(() => undefined)
@@ -2339,17 +2341,44 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
       </div>
 
       <div className="card" style={{ marginBottom: 16 }}>
-        <h3 style={{ marginTop: 0 }}>Téléchargement des vidéos (URL YouTube)</h3>
+        <h3 style={{ marginTop: 0 }}>Téléchargement des vidéos (clips YouTube)</h3>
         <p className="small" style={{ marginTop: 0 }}>
-          Sur le serveur, YouTube bloque le téléchargement direct. Avec une clé RapidAPI
-          (API « YouTube Media Downloader »), l'onglet URL télécharge la vidéo via l'API,
-          sans cookies ni navigateur.
+          Sur le serveur, YouTube exige une session connectée pour télécharger
+          (« Sign in to confirm you're not a bot »). La méthode fiable : importer tes
+          <b> cookies YouTube</b>. Le PO token est déjà en place côté serveur ; les cookies complètent le dispositif.
         </p>
-        <Field label={rapidHas ? 'Clé RapidAPI configurée ✓' : 'Clé RapidAPI'}>
+        <Field label={cookiesHas ? 'Cookies YouTube configurés ✓' : 'Cookies YouTube (recommandé)'}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <label className="btn primary" style={{ cursor: 'pointer' }}>
+                <Icon name="upload" size={15} /> {cookiesHas ? 'Remplacer le fichier' : 'Importer cookies.txt'}
+                <input type="file" accept=".txt,text/plain" style={{ display: 'none' }} onChange={async (e) => {
+                  const f = e.target.files?.[0]; if (!f) return
+                  try { await api.uploadCookies(f); setCookiesHas((await api.cookiesStatus()).has); toast('Cookies YouTube enregistrés ✅') }
+                  catch (err) { toast(`Erreur : ${String((err as Error).message)}`) }
+                  e.target.value = ''
+                }} />
+              </label>
+              {cookiesHas && (
+                <button className="btn" onClick={async () => {
+                  try { await api.deleteCookies(); setCookiesHas(false); toast('Cookies supprimés') }
+                  catch (err) { toast(`Erreur : ${String((err as Error).message)}`) }
+                }}>Supprimer</button>
+              )}
+            </div>
+            <div className="muted small">
+              Exporte les cookies avec l'extension « Get cookies.txt LOCALLY » depuis une page
+              <b> youtube.com</b> connectée (un compte Google <b>jetable</b> de préférence), puis importe le fichier ici.
+              À refaire si les téléchargements se remettent à échouer (cookies expirés).
+            </div>
+          </div>
+        </Field>
+        <Field label={rapidHas ? 'Clé RapidAPI configurée ✓ (recherche + repli)' : 'Clé RapidAPI (recherche de clips)'}>
           <div style={{ display: 'flex', gap: 8 }}>
             <input className="input-full" style={{ flex: 1 }} type="password" placeholder="x-rapidapi-key…" value={rapidKey} onChange={(e) => setRapidKey(e.target.value)} />
             <button className="btn primary" onClick={async () => { await api.setRapidApiKey(rapidKey); setRapidKey(''); setRapidHas((await api.rapidApiStatus()).has); toast('Clé RapidAPI enregistrée') }} disabled={!rapidKey.trim()}>Enregistrer</button>
           </div>
+          <div className="muted small" style={{ marginTop: 6 }}>Sert à la recherche et au choix automatique des vidéos à cliper. Son téléchargement direct est souvent bloqué par YouTube (403) — privilégie les cookies ci-dessus.</div>
         </Field>
       </div>
 

@@ -2,7 +2,7 @@ import express, { type Request, type Response } from 'express'
 import cookieParser from 'cookie-parser'
 import multer from 'multer'
 import cron, { type ScheduledTask } from 'node-cron'
-import { mkdirSync, existsSync, readdirSync, rmSync } from 'fs'
+import { mkdirSync, existsSync, readdirSync, rmSync, readFileSync } from 'fs'
 import { join, basename } from 'path'
 import Anthropic from '@anthropic-ai/sdk'
 
@@ -151,13 +151,16 @@ async function runForSource(sourceId: number, clipCount: number, profileOverride
   try {
     const ctx = await getContext()
 
-    // Téléchargement via RapidAPI : sur le VPS, l'IP datacenter est bloquée par
-    // YouTube → yt-dlp échoue. Si une clé est configurée et que l'URL est YouTube,
-    // on récupère le MP4 via l'API et on passe ensuite un fichier LOCAL au pipeline
-    // (qui le détecte via isLocalFile et saute yt-dlp).
+    // Téléchargement YouTube côté serveur. Deux voies :
+    //  1) Si des cookies YouTube sont fournis → yt-dlp les utilise (avec le PO
+    //     token bgutil) pour passer le « Sign in to confirm you're not a bot ».
+    //     C'est la voie fiable : on laisse le pipeline télécharger via yt-dlp.
+    //  2) Sinon, repli legacy via RapidAPI (récupère un MP4 puis passe un fichier
+    //     LOCAL au pipeline). Note : YouTube verrouille souvent ces liens sur l'IP
+    //     de l'API → HTTP 403. Les cookies (voie 1) sont donc à privilégier.
     let effectiveUrl = source.url
     let apiMeta: SourceMetaApi | null = null
-    if (rapidApiKey && !isLocalFile(source.url) && isYouTubeUrl(source.url)) {
+    if (rapidApiKey && !cookiesFile && !isLocalFile(source.url) && isYouTubeUrl(source.url)) {
       const dl = await downloadViaApi(
         ctx,
         rapidApiKey,
@@ -1236,6 +1239,41 @@ app.post('/api/settings/groq', wrap((req, res) => {
 app.get('/api/settings/rapidapi', wrap((_req, res) => res.json({ has: !!getEncrypted('rapidapi_key') })))
 app.post('/api/settings/rapidapi', wrap((req, res) => {
   setEncrypted('rapidapi_key', String(req.body?.key ?? ''))
+  res.json({ ok: true })
+}))
+
+// Cookies YouTube (fichier Netscape cookies.txt exporté depuis un navigateur
+// connecté). Indispensable pour télécharger depuis le VPS : YouTube exige une
+// session pour lever le « Sign in to confirm you're not a bot ». Combinés au PO
+// token bgutil, ils débloquent yt-dlp côté serveur.
+const cookiesPath = join(paths.data, 'yt-cookies.txt')
+const cookiesUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, paths.data),
+    filename: (_req, _file, cb) => cb(null, 'yt-cookies.txt')
+  }),
+  limits: { fileSize: 2 * 1024 * 1024 }
+})
+app.get('/api/settings/cookies', wrap((_req, res) => res.json({ has: existsSync(cookiesPath) })))
+app.post('/api/settings/cookies', cookiesUpload.single('file'), wrap((req, res) => {
+  const f = (req as Request & { file?: Express.Multer.File }).file
+  if (!f) return res.status(400).json({ error: 'Fichier manquant' })
+  const content = readFileSync(cookiesPath, 'utf8')
+  if (!/youtube\.com/i.test(content)) {
+    rmSync(cookiesPath, { force: true })
+    return res.status(400).json({
+      error:
+        'Ce fichier ne ressemble pas à des cookies YouTube (aucun domaine youtube.com). ' +
+        'Exporte bien les cookies depuis une page youtube.com connectée, au format « Netscape ».'
+    })
+  }
+  repo.setSetting('ytdlp_cookies_file', cookiesPath)
+  emitLog('Cookies YouTube enregistrés ✅ — les téléchargements de clips vont pouvoir passer.')
+  res.json({ ok: true })
+}))
+app.delete('/api/settings/cookies', wrap((_req, res) => {
+  if (existsSync(cookiesPath)) rmSync(cookiesPath, { force: true })
+  repo.setSetting('ytdlp_cookies_file', '')
   res.json({ ok: true })
 }))
 
