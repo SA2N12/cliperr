@@ -148,6 +148,8 @@ export const api = {
     post<{ ok: boolean }>('/api/autopilot/slot', slot),
   saveAutopilotAccount: (cfg: { user: string; perDay?: number; niche?: string; cta?: string; clipChannels?: string; series?: { enabled: boolean; title: string; universe: string } }) =>
     post<{ ok: boolean }>('/api/autopilot/account', cfg),
+  testClipChannels: (channels: string) =>
+    post<{ results: { channel: string; status: string; videos: number; longCount: number; sample?: string }[] }>('/api/autopilot/clip-channels/test', { channels }),
 
   // Idées virales + tendances
   generateIdeas: (niche: string, count: number, trends: string[]) =>

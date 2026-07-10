@@ -88,6 +88,20 @@ export async function searchYouTubeVideos(apiKey: string, keyword: string): Prom
   return out
 }
 
+/** Vérifie (sans télécharger) qu'une vidéo est téléchargeable via l'API (formats MP4 présents). */
+export async function probeDownloadable(apiKey: string, videoId: string): Promise<boolean> {
+  try {
+    const res = await fetch(`https://${HOST}/v2/video/details?videoId=${encodeURIComponent(videoId)}`, {
+      headers: { 'x-rapidapi-host': HOST, 'x-rapidapi-key': apiKey }
+    })
+    if (!res.ok) return false
+    const d = (await res.json()) as VideoDetails
+    return !!d.videos?.items?.length
+  } catch {
+    return false
+  }
+}
+
 /** Extrait l'ID d'une vidéo depuis une URL YouTube (watch, youtu.be, shorts, embed…). */
 export function extractVideoId(input: string): string | null {
   try {

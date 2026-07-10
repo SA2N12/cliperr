@@ -32,7 +32,7 @@ import { runPipeline, type ReframeFocus } from '../src/main/pipeline/orchestrato
 import { transcribeSource, transcribeWithGroq, type Word } from '../src/main/pipeline/transcribe'
 import { detectFaceCenterX } from '../src/main/pipeline/face'
 import { isLocalFile } from '../src/main/pipeline/ingest'
-import { downloadViaApi, isYouTubeUrl, searchYouTubeVideos, type SourceMetaApi } from './ytdl-api'
+import { downloadViaApi, isYouTubeUrl, searchYouTubeVideos, probeDownloadable, type SourceMetaApi } from './ytdl-api'
 import { listUploadPostProfiles, type UploadPostProfile } from '../src/main/publish/uploadpost'
 import { generateViralIdeas, generateEpisodeIdea, fetchTikTokTrends, type SeriesState } from './ideas'
 import type { PipelineContext } from '../src/main/pipeline/context'
@@ -1560,6 +1560,44 @@ app.post('/api/autopilot/account', wrap((req, res) => {
     repo.setSetting('autopilot_series', JSON.stringify(map))
   }
   res.json({ ok: true })
+}))
+
+// Test de compatibilité des chaînes préférées (catégorie Clip) : pour chaque
+// chaîne, vérifie qu'elle est trouvable, qu'elle a des vidéos longues (15-120 min)
+// et que ses vidéos sont téléchargeables (pas de protection).
+app.post('/api/autopilot/clip-channels/test', wrap(async (req, res) => {
+  const raw = String((req.body as { channels?: unknown })?.channels ?? '')
+  const channels = raw.split(/\r?\n/).map((s) => s.trim()).filter(Boolean).slice(0, 5)
+  const key = getEncrypted('rapidapi_key')
+  if (!key) return res.status(400).json({ error: 'Clé RapidAPI manquante (Réglages).' })
+  if (!channels.length) return res.status(400).json({ error: 'Aucune chaîne à tester.' })
+  const norm = (s: string): string => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  const results: { channel: string; status: string; videos: number; longCount: number; sample?: string }[] = []
+  for (const ch of channels) {
+    try {
+      const found = await searchYouTubeVideos(key, ch)
+      const mine = found.filter(
+        (v) => v.channel && (norm(v.channel).includes(norm(ch)) || norm(ch).includes(norm(v.channel)))
+      )
+      if (!mine.length) {
+        results.push({ channel: ch, status: 'introuvable', videos: 0, longCount: 0 })
+        continue
+      }
+      const long = mine.filter((v) => v.durationSec != null && v.durationSec >= 15 * 60 && v.durationSec <= 120 * 60)
+      const target = long[0] ?? mine[0]
+      const downloadable = await probeDownloadable(key, target.id)
+      results.push({
+        channel: ch,
+        status: !downloadable ? 'protege' : long.length ? 'ok' : 'aucune_longue',
+        videos: mine.length,
+        longCount: long.length,
+        sample: target.title
+      })
+    } catch {
+      results.push({ channel: ch, status: 'erreur', videos: 0, longCount: 0 })
+    }
+  }
+  res.json({ results })
 }))
 
 // Personnalise un créneau du jour (heure et/ou type) — clic sur un bloc du planning.

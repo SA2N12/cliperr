@@ -1364,6 +1364,34 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
   const [serie, setSerie] = useState<SeriesCfg>({ enabled: false, title: '', universe: '', episode: 1 })
   const [tab, setTab] = useState<'general' | 'niche' | 'serie' | 'clips'>('general')
   const [busy, setBusy] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [chanResults, setChanResults] = useState<{ channel: string; status: string; videos: number; longCount: number; sample?: string }[] | null>(null)
+
+  const testChannels = async (): Promise<void> => {
+    setTesting(true)
+    setChanResults(null)
+    try {
+      setChanResults((await api.testClipChannels(clipChannels)).results)
+    } catch (e) {
+      toast('Erreur : ' + (e as Error).message)
+    } finally {
+      setTesting(false)
+    }
+  }
+  const chanLine = (r: { status: string; videos: number; longCount: number; sample?: string }): { icon: string; text: string; color?: string } => {
+    switch (r.status) {
+      case 'ok':
+        return { icon: '✅', text: `Compatible — ${r.videos} vidéo${r.videos > 1 ? 's' : ''} trouvée${r.videos > 1 ? 's' : ''} dont ${r.longCount} longue${r.longCount > 1 ? 's' : ''} (15-120 min)${r.sample ? ` · ex. « ${r.sample.slice(0, 60)} »` : ''}`, color: 'var(--good)' }
+      case 'aucune_longue':
+        return { icon: '⚠️', text: 'Chaîne trouvée mais aucune vidéo de 15-120 min dans les premiers résultats — le choix auto risque de l’ignorer', color: '#b45309' }
+      case 'protege':
+        return { icon: '⛔', text: 'Vidéos protégées : téléchargement impossible via l’API — chaîne inutilisable', color: 'var(--bad)' }
+      case 'introuvable':
+        return { icon: '❌', text: 'Introuvable — vérifie l’orthographe exacte du nom de la chaîne', color: 'var(--bad)' }
+      default:
+        return { icon: '⚠️', text: 'Erreur pendant le test — réessaie', color: '#b45309' }
+    }
+  }
 
   useEffect(() => {
     api.autopilotState().then((s) => {
@@ -1475,7 +1503,23 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
               onChange={(e) => setClipChannels(e.target.value)}
               style={{ marginBottom: 4 }}
             />
-            <div className="muted small">En mode choix auto, l’IA privilégie ces chaînes/émissions pour trouver des rediffs et reportages à cliper. Une même vidéo n’est jamais utilisée deux fois ; chaque analyse extrait 3 clips publiés au fil des blocs.</div>
+            <div className="muted small" style={{ marginBottom: 10 }}>En mode choix auto, l’IA privilégie ces chaînes/émissions pour trouver des rediffs et reportages à cliper. Une même vidéo n’est jamais utilisée deux fois ; chaque analyse extrait 3 clips publiés au fil des blocs.</div>
+            <button className="btn" disabled={testing || !clipChannels.trim()} onClick={() => void testChannels()}>
+              🧪 {testing ? 'Test en cours…' : 'Tester la compatibilité des chaînes'}
+            </button>
+            {chanResults && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
+                {chanResults.map((r) => {
+                  const l = chanLine(r)
+                  return (
+                    <div key={r.channel} className="small" style={{ padding: '8px 10px', borderRadius: 8, background: 'var(--panel-2)', border: '1px solid var(--border)' }}>
+                      <span style={{ fontWeight: 600 }}>{l.icon} {r.channel}</span>{' '}
+                      <span style={{ color: l.color }}>{l.text}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </>
         )}
 
