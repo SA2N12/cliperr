@@ -81,7 +81,7 @@ export async function searchYouTubeVideos(apiKey: string, keyword: string): Prom
       id,
       url: `https://www.youtube.com/watch?v=${id}`,
       title: typeof o.title === 'string' ? o.title : '',
-      durationSec: parseDurationValue(o.lengthSeconds ?? o.durationSeconds ?? o.duration),
+      durationSec: parseDurationValue(o.lengthSeconds ?? o.durationSeconds ?? o.duration ?? o.lengthText),
       channel: (o.channel as { name?: string } | undefined)?.name ?? null
     })
   }
