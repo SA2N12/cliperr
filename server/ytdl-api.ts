@@ -40,6 +40,54 @@ interface VideoDetails {
   audios?: { items?: AudioItem[] }
 }
 
+// ── Recherche YouTube (même API RapidAPI) : sert au pilote pour choisir
+// automatiquement une vidéo à cliper (rediff, reportage, podcast…). ──
+export interface YtSearchItem {
+  id: string
+  url: string
+  title: string
+  durationSec: number | null
+  channel: string | null
+}
+
+function parseDurationValue(v: unknown): number | null {
+  if (typeof v === 'number' && v > 0) return Math.round(v)
+  if (typeof v === 'string') {
+    const n = Number(v)
+    if (Number.isFinite(n) && n > 0) return Math.round(n)
+    const parts = v.split(':').map(Number)
+    if (parts.length >= 2 && parts.every((x) => Number.isFinite(x))) {
+      return parts.reduce((acc, x) => acc * 60 + x, 0)
+    }
+  }
+  return null
+}
+
+export async function searchYouTubeVideos(apiKey: string, keyword: string): Promise<YtSearchItem[]> {
+  const res = await fetch(
+    `https://${HOST}/v2/search/videos?keyword=${encodeURIComponent(keyword)}&sortBy=relevance`,
+    { headers: { 'x-rapidapi-host': HOST, 'x-rapidapi-key': apiKey } }
+  )
+  if (!res.ok) throw new Error(`Recherche YouTube ${res.status} : ${(await res.text()).slice(0, 150)}`)
+  const j = (await res.json()) as { items?: unknown[] }
+  const items = Array.isArray(j.items) ? j.items : []
+  const out: YtSearchItem[] = []
+  for (const raw of items) {
+    if (!raw || typeof raw !== 'object') continue
+    const o = raw as Record<string, unknown>
+    const id = typeof o.id === 'string' ? o.id : ''
+    if (!id || (typeof o.type === 'string' && o.type !== 'video')) continue
+    out.push({
+      id,
+      url: `https://www.youtube.com/watch?v=${id}`,
+      title: typeof o.title === 'string' ? o.title : '',
+      durationSec: parseDurationValue(o.lengthSeconds ?? o.durationSeconds ?? o.duration),
+      channel: (o.channel as { name?: string } | undefined)?.name ?? null
+    })
+  }
+  return out
+}
+
 /** Extrait l'ID d'une vidéo depuis une URL YouTube (watch, youtu.be, shorts, embed…). */
 export function extractVideoId(input: string): string | null {
   try {

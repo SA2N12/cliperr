@@ -1312,8 +1312,10 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
         )}
         {type === 'clip' && (
           <>
-            <input className="input-full" value={subject} placeholder="URL YouTube de la rediffusion / du reportage" onChange={(e) => setSubject(e.target.value)} style={{ marginBottom: 4 }} />
-            <div className="muted small" style={{ marginBottom: 10 }}>L'IA télécharge la vidéo, repère les meilleurs moments et publie le meilleur clip 9:16 sous-titré. Réutilise la même URL sur plusieurs blocs : chacun publiera le clip suivant.</div>
+            <input className="input-full" value={subject} placeholder="URL YouTube — ou laisse vide : l'IA choisit la vidéo" onChange={(e) => setSubject(e.target.value)} style={{ marginBottom: 4 }} />
+            <div className="muted small" style={{ marginBottom: 10 }}>
+              URL vide = l'IA cherche elle-même une rediff/un reportage (niche + chaînes préférées du compte, jamais deux fois la même vidéo). L'analyse extrait 3 clips ; chaque bloc publie le meilleur suivant.
+            </div>
           </>
         )}
         <div className="muted small" style={{ marginBottom: 14 }}>L'heure choisie est prioritaire sur la répartition automatique (valable aujourd'hui uniquement).</div>
@@ -1322,7 +1324,7 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
           <button className="btn" disabled={busy} onClick={() => void removeSlot()} style={{ color: 'var(--bad)', marginRight: 'auto' }} title="Retire cette vidéo (baisse la cadence du compte)">🗑 Supprimer</button>
           {(slot.pinned || slot.type) && <button className="btn" disabled={busy} onClick={() => void apply(true)}>Réinitialiser</button>}
           <button className="btn" disabled={busy} onClick={onClose}>Annuler</button>
-          <button className="btn primary" disabled={busy || ((type === 'custom' || type === 'clip') && !subject.trim())} onClick={() => void apply(false)}>
+          <button className="btn primary" disabled={busy || (type === 'custom' && !subject.trim())} onClick={() => void apply(false)}>
             {busy ? 'Enregistrement…' : 'Enregistrer'}
           </button>
         </div>
@@ -1358,6 +1360,7 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
   const [perDay, setPerDay] = useState(1)
   const [niche, setNiche] = useState('')
   const [cta, setCta] = useState('')
+  const [clipChannels, setClipChannels] = useState('')
   const [serie, setSerie] = useState<SeriesCfg>({ enabled: false, title: '', universe: '', episode: 1 })
   const [tab, setTab] = useState<'general' | 'niche' | 'serie' | 'clips'>('general')
   const [busy, setBusy] = useState(false)
@@ -1370,6 +1373,7 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
       setPerDay(p.perDay)
       setNiche(p.niche)
       setCta(p.cta)
+      setClipChannels(p.clipChannels)
       setSerie(p.series)
     }).catch(() => undefined)
   }, [user])
@@ -1381,6 +1385,7 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
         user,
         niche,
         cta,
+        clipChannels,
         // Plus de toggle : la série est « prête » dès que titre + univers sont remplis.
         series: { enabled: !!(serie.title.trim() && serie.universe.trim()), title: serie.title, universe: serie.universe }
       })
@@ -1459,15 +1464,18 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
           <>
             <div className="small" style={{ fontWeight: 600, marginBottom: 6 }}>Clips depuis une rediff de live ou un reportage YouTube</div>
             <div className="muted small" style={{ marginBottom: 10 }}>
-              L’IA télécharge la vidéo, transcrit, repère les <b>meilleurs moments</b>, recadre en 9:16 et incruste les sous-titres — puis publie le clip sur ce compte avec titre et hashtags générés.
+              L’IA télécharge la vidéo, repère les <b>meilleurs moments</b>, recadre en 9:16 avec sous-titres, et publie le clip sur ce compte. Sur un bloc : type <b>« Clip »</b> + URL YouTube — ou <b>URL vide = l’IA choisit la vidéo elle-même</b> (recherche selon la niche et tes sources ci-dessous).
             </div>
-            <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--panel-2)', border: '1px solid var(--border)' }}>
-              <div className="small" style={{ fontWeight: 600 }}>Comment l’utiliser</div>
-              <div className="muted small">
-                Sur le planning : <b>+</b> (ou clic sur un bloc) → type <b>« Clip »</b> → colle l’URL YouTube de la rediffusion/du reportage.
-                Une même URL peut alimenter plusieurs blocs : l’analyse extrait 3 clips, chaque bloc publie le meilleur suivant (sans retélécharger).
-              </div>
-            </div>
+            <label className="muted small" style={{ display: 'block', marginBottom: 4 }}>Chaînes / sources préférées (optionnel — une par ligne)</label>
+            <textarea
+              className="input-full"
+              rows={3}
+              value={clipChannels}
+              placeholder={'ex.\nSqueezie\nHugoDécrypte\nZack en roue libre'}
+              onChange={(e) => setClipChannels(e.target.value)}
+              style={{ marginBottom: 4 }}
+            />
+            <div className="muted small">En mode choix auto, l’IA privilégie ces chaînes/émissions pour trouver des rediffs et reportages à cliper. Une même vidéo n’est jamais utilisée deux fois ; chaque analyse extrait 3 clips publiés au fil des blocs.</div>
           </>
         )}
 
@@ -2083,7 +2091,7 @@ function Sparkline({ data }: { data: number[] }): JSX.Element | null {
 
 // ── Pilote automatique : contenu quotidien autonome par compte ──
 type SeriesCfg = { enabled: boolean; title: string; universe: string; episode: number }
-type AutopilotProfile = { username: string; handle: string | null; avatarUrl: string | null; niche: string; cta: string; perDay: number; series: SeriesCfg; doneToday: number }
+type AutopilotProfile = { username: string; handle: string | null; avatarUrl: string | null; niche: string; cta: string; clipChannels: string; perDay: number; series: SeriesCfg; doneToday: number }
 type AutopilotState = { enabled: boolean; perDay: number; busy: boolean; profiles: AutopilotProfile[] }
 
 function Autopilot({ toast, ideaVideo }: { toast: (m: string) => void; ideaVideo: IdeaVideoMap }): JSX.Element {

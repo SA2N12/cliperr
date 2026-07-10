@@ -32,7 +32,7 @@ import { runPipeline, type ReframeFocus } from '../src/main/pipeline/orchestrato
 import { transcribeSource, transcribeWithGroq, type Word } from '../src/main/pipeline/transcribe'
 import { detectFaceCenterX } from '../src/main/pipeline/face'
 import { isLocalFile } from '../src/main/pipeline/ingest'
-import { downloadViaApi, isYouTubeUrl, type SourceMetaApi } from './ytdl-api'
+import { downloadViaApi, isYouTubeUrl, searchYouTubeVideos, type SourceMetaApi } from './ytdl-api'
 import { listUploadPostProfiles, type UploadPostProfile } from '../src/main/publish/uploadpost'
 import { generateViralIdeas, generateEpisodeIdea, fetchTikTokTrends, type SeriesState } from './ideas'
 import type { PipelineContext } from '../src/main/pipeline/context'
@@ -484,6 +484,83 @@ function autopilotSeries(): Record<string, SeriesState> {
   }
   return {}
 }
+// ── Chaînes/sources préférées pour la catégorie Clip : clip_channels = { [user]: texte } ──
+function clipChannelsMap(): Record<string, string> {
+  try {
+    const raw = repo.getSetting('clip_channels')
+    if (raw) {
+      const o = JSON.parse(raw) as unknown
+      if (o && typeof o === 'object') return o as Record<string, string>
+    }
+  } catch {
+    /* JSON invalide → vide */
+  }
+  return {}
+}
+
+/**
+ * Choix AUTOMATIQUE d'une vidéo à cliper : Claude génère une requête de
+ * recherche (niche + chaînes préférées), on cherche sur YouTube, on filtre
+ * (15-120 min, jamais deux fois la même vidéo) et on renvoie l'URL.
+ */
+async function autoPickClipUrl(user: string, niche: string): Promise<string | null> {
+  const rapidKey = getEncrypted('rapidapi_key')
+  if (!rapidKey) {
+    emitLog('Pilote auto : clé RapidAPI manquante — impossible de chercher une vidéo à cliper.')
+    return null
+  }
+  const channels = (clipChannelsMap()[user] ?? '').trim()
+  let query = channels ? `${channels.split(/\r?\n/)[0]} rediffusion` : `${niche} documentaire`
+  try {
+    const anthropicKey = getApiKey()
+    if (anthropicKey) {
+      const client = new Anthropic({ apiKey: anthropicKey })
+      const tool = {
+        name: 'search_query',
+        description: 'Requête de recherche YouTube.',
+        input_schema: {
+          type: 'object',
+          properties: { query: { type: 'string', description: 'Requête de recherche YouTube courte (3 à 6 mots)' } },
+          required: ['query']
+        }
+      } as Anthropic.Tool
+      const model = scriptModel()
+      const msg = await client.messages.create({
+        model,
+        max_tokens: 120,
+        tools: [tool],
+        tool_choice: { type: 'tool', name: 'search_query' },
+        messages: [{
+          role: 'user',
+          content: `Génère UNE requête de recherche YouTube pour trouver une vidéo LONGUE (15 à 90 min : rediffusion de live, documentaire, reportage, podcast) idéale à découper en clips TikTok pour la niche « ${niche} ».${channels ? `\nChaînes/sources préférées (privilégie-les dans la requête) :\n${channels}` : ''}\nRéponds uniquement via l'outil search_query.`
+        }]
+      })
+      if (msg.usage) addSpend(model, { input_tokens: msg.usage.input_tokens, output_tokens: msg.usage.output_tokens })
+      const block = msg.content.find((b) => b.type === 'tool_use')
+      if (block && block.type === 'tool_use') {
+        const q = (block.input as { query?: string }).query
+        if (q && q.trim()) query = q.trim()
+      }
+    }
+  } catch {
+    /* échec Claude → requête heuristique */
+  }
+  emitLog(`Pilote auto : recherche YouTube « ${query} »…`)
+  try {
+    const used = new Set(repo.listSources().map((s) => s.url))
+    const results = await searchYouTubeVideos(rapidKey, query)
+    const pick = results.find(
+      (r) => r.durationSec != null && r.durationSec >= 15 * 60 && r.durationSec <= 120 * 60 && !used.has(r.url)
+    )
+    if (!pick) return null
+    emitLog(`Pilote auto : vidéo choisie — « ${pick.title} » (${pick.channel ?? 'chaîne inconnue'}).`)
+    return pick.url
+  } catch (e) {
+    emitLog(`Pilote auto : recherche YouTube échouée — ${e instanceof Error ? e.message : String(e)}`)
+    return null
+  }
+}
+
 // ── Créneaux personnalisés du jour : heure et/ou type choisis PAR VIDÉO.
 // autopilot_slot_overrides = { [YYYY-MM-DD]: { "<user>:<ordinal>": { hm?, type?, subject? } } }
 // (on ne conserve que le jour courant ; type: 'niche' | 'serie' | 'custom')
@@ -647,22 +724,46 @@ async function runAutopilotTick(force = false): Promise<void> {
     const subject = (slotOv.subject ?? '').trim()
 
     // ── Type « clip » : découpe les meilleurs moments d'une rediff de live /
-    // d'un reportage YouTube (URL renseignée sur le bloc) et publie le meilleur.
+    // d'un reportage YouTube et publie le meilleur. URL du bloc, ou CHOIX AUTO
+    // par l'IA (recherche selon la niche + chaînes préférées) si URL vide.
     if (slotOv.type === 'clip') {
-      if (!/^https?:\/\//i.test(subject)) {
-        emitLog(`Pilote auto : le créneau « clip » de « ${user} » n'a pas d'URL — clique le bloc et colle l'URL YouTube.`)
-        return
+      const publishBest = async (candidates: import('../src/shared/types').ClipDTO[]): Promise<boolean> => {
+        const clip = candidates.sort((a, b) => (b.score ?? 0) - (a.score ?? 0))[0]
+        if (!clip) return false
+        repo.setClipReview(clip.id, 'approved')
+        await publishClipById(clip.id, paths, emitLog, { uploadPostUser: user })
+        repo.setSetting(countKey, String(done + 1))
+        emitLog(`Pilote auto : clip publié sur « ${user} » (${done + 1}/${perDayFor(user)} aujourd'hui).`)
+        return true
       }
+
+      let clipUrl = /^https?:\/\//i.test(subject) ? subject : null
+      if (!clipUrl) {
+        // Mode auto : d'abord écouler les clips déjà extraits pour ce compte…
+        const leftovers = repo
+          .listSources()
+          .filter((s) => s.status === 'done' && /^https?:\/\//i.test(s.url))
+          .flatMap((s) => repo.listClips(s.id))
+          .filter((c) => c.profile === user && c.publishStatus !== 'published')
+        if (leftovers.length && (await publishBest(leftovers))) return
+        // …sinon l'IA choisit une nouvelle vidéo.
+        clipUrl = await autoPickClipUrl(user, niche)
+        if (!clipUrl) {
+          emitLog(`Pilote auto : aucune vidéo trouvée à cliper pour « ${user} » — réessai au prochain cycle.`)
+          return
+        }
+      }
+
       // Réutilise une source déjà analysée pour cette URL (clips restants) ;
       // sinon pipeline complet : téléchargement → analyse IA → 3 clips 9:16.
       let candidates = repo
         .listSources()
-        .filter((s) => s.url === subject && s.status === 'done')
+        .filter((s) => s.url === clipUrl && s.status === 'done')
         .flatMap((s) => repo.listClips(s.id))
         .filter((c) => c.publishStatus !== 'published')
       if (!candidates.length) {
-        emitLog(`Pilote auto : extraction de clips depuis ${subject} pour « ${user} » (téléchargement + analyse)…`)
-        const created = repo.createSource(subject)
+        emitLog(`Pilote auto : extraction de clips depuis ${clipUrl} pour « ${user} » (téléchargement + analyse)…`)
+        const created = repo.createSource(clipUrl)
         const job = pipelineChain.then(() => runForSource(created.id, 3, user))
         pipelineChain = job.then(() => undefined, () => undefined)
         await job
@@ -673,15 +774,9 @@ async function runAutopilotTick(force = false): Promise<void> {
         }
         candidates = repo.listClips(created.id).filter((c) => c.publishStatus !== 'published')
       }
-      const clip = candidates.sort((a, b) => (b.score ?? 0) - (a.score ?? 0))[0]
-      if (!clip) {
-        emitLog(`Pilote auto : aucun clip exploitable dans ${subject}.`)
-        return
+      if (!(await publishBest(candidates))) {
+        emitLog(`Pilote auto : aucun clip exploitable dans ${clipUrl}.`)
       }
-      repo.setClipReview(clip.id, 'approved')
-      await publishClipById(clip.id, paths, emitLog, { uploadPostUser: user })
-      repo.setSetting(countKey, String(done + 1))
-      emitLog(`Pilote auto : clip publié sur « ${user} » (${done + 1}/${perDayFor(user)} aujourd'hui).`)
       return
     }
 
@@ -1212,6 +1307,7 @@ app.get('/api/autopilot', wrap(async (_req, res) => {
         avatarUrl: meta.get(u)?.avatarUrl ?? null,
         niche: (niches[u] ?? '').trim() || nicheForProfile(u),
         cta: (ctas[u] ?? '').trim(),
+        clipChannels: (clipChannelsMap()[u] ?? '').trim(),
         perDay: pdMap[u] == null ? globalPerDay : Math.max(0, Math.min(5, Math.round(Number(pdMap[u])) || 0)),
         series: {
           enabled: !!s?.enabled,
@@ -1388,7 +1484,7 @@ app.get('/api/autopilot/plan', wrap(async (_req, res) => {
     // Libellé selon le type du créneau (niche par défaut).
     let label: string
     if (ov?.type === 'custom' && (ov.subject ?? '').trim()) label = `Sujet : ${(ov.subject ?? '').trim()}`
-    else if (ov?.type === 'clip') label = `Clip : ${(ov.subject ?? '').trim().replace(/^https?:\/\/(www\.)?/, '').slice(0, 50) || 'URL à renseigner'}`
+    else if (ov?.type === 'clip') label = `Clip : ${(ov.subject ?? '').trim().replace(/^https?:\/\/(www\.)?/, '').slice(0, 50) || 'choix auto (IA)'}`
     else if (ov?.type === 'serie' && confSerie) label = `Série : ${confSerie.title} — Ép. ${confSerie.episode}`
     else label = nicheForProfile(best)
     const etaHm = ov?.hm != null ? ov.hm : winStart + step * i
@@ -1416,7 +1512,7 @@ app.get('/api/autopilot/plan', wrap(async (_req, res) => {
 // Réglages d'UN SEUL compte (fusion dans les maps existantes — pas de remplacement
 // global) : utilisé par la fenêtre ⚙️ des lignes du planning.
 app.post('/api/autopilot/account', wrap((req, res) => {
-  const b = (req.body ?? {}) as { user?: unknown; perDay?: unknown; niche?: unknown; cta?: unknown; series?: unknown }
+  const b = (req.body ?? {}) as { user?: unknown; perDay?: unknown; niche?: unknown; cta?: unknown; clipChannels?: unknown; series?: unknown }
   const user = String(b.user ?? '').trim()
   if (!user || !uploadPostProfiles().includes(user)) return res.status(400).json({ error: 'Compte inconnu' })
   if (b.perDay != null) {
@@ -1435,6 +1531,12 @@ app.post('/api/autopilot/account', wrap((req, res) => {
     if (b.cta.trim()) m[user] = b.cta.trim().slice(0, 220)
     else delete m[user]
     repo.setSetting('profile_ctas', JSON.stringify(m))
+  }
+  if (typeof b.clipChannels === 'string') {
+    const m = clipChannelsMap()
+    if (b.clipChannels.trim()) m[user] = b.clipChannels.trim().slice(0, 500)
+    else delete m[user]
+    repo.setSetting('clip_channels', JSON.stringify(m))
   }
   if (b.series && typeof b.series === 'object') {
     const s = b.series as { enabled?: unknown; title?: unknown; universe?: unknown }
