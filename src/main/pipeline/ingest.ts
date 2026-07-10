@@ -45,6 +45,17 @@ function pluginArgs(binDir: string): string[] {
   return args
 }
 
+/**
+ * Proxy optionnel pour yt-dlp (variable `DOWNLOAD_PROXY`, ex. http://user:pass@ip:port).
+ * Vide par défaut : on télécharge depuis l'IP du VPS. Utile si YouTube se met à
+ * rate-limiter (HTTP 429) ou bloquer cette IP — on bascule alors sur un proxy
+ * résidentiel/ISP sans toucher au code.
+ */
+function proxyArgs(): string[] {
+  const p = process.env.DOWNLOAD_PROXY
+  return p ? ['--proxy', p] : []
+}
+
 /** Diagnostic verbeux : formats + chargement des plugins + tentatives de PO token. */
 function listFormats(
   ctx: PipelineContext,
@@ -55,7 +66,7 @@ function listFormats(
   return new Promise((resolve) => {
     const child = spawn(
       ctx.bin.ytDlp,
-      ['-F', '-v', '--no-playlist', ...cookieArgs(browser, file), ...pluginArgs(ctx.dirs.bin), url],
+      ['-F', '-v', '--no-playlist', ...cookieArgs(browser, file), ...pluginArgs(ctx.dirs.bin), ...proxyArgs(), url],
       { windowsHide: true }
     )
     let out = ''
@@ -98,6 +109,7 @@ export async function fetchMetadata(
       '--no-playlist',
       ...cookieArgs(cookiesFromBrowser, cookiesFile),
       ...pluginArgs(ctx.dirs.bin),
+      ...proxyArgs(),
       url
     ])
   } catch (e) {
@@ -150,6 +162,7 @@ export async function downloadVideo(
         '--no-playlist',
         ...cookieArgs(cookiesFromBrowser, cookiesFile),
         ...pluginArgs(ctx.dirs.bin),
+        ...proxyArgs(),
         '--ffmpeg-location',
         ctx.bin.ffmpeg,
         // Préfère ≤1080, mais retombe sur n'importe quel meilleur format dispo.

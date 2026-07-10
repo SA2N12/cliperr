@@ -42,7 +42,9 @@ export function ytDlpFilename(): string {
 }
 
 function ytDlpUrl(): string {
-  return `https://github.com/yt-dlp/yt-dlp/releases/latest/download/${ytDlpFilename()}`
+  // Nightly : YouTube casse yt-dlp très régulièrement, la version stable est
+  // souvent trop datée (« No video formats found »). On aligne sur updateYtDlp.
+  return `https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/latest/download/${ytDlpFilename()}`
 }
 
 async function exists(p: string): Promise<boolean> {
@@ -125,15 +127,57 @@ export async function ensureYtDlp(
   return dest
 }
 
+export function denoFilename(): string {
+  return process.platform === 'win32' ? 'deno.exe' : 'deno'
+}
+
+function denoAsset(): string {
+  const arm = process.arch === 'arm64'
+  switch (process.platform) {
+    case 'win32':
+      return 'deno-x86_64-pc-windows-msvc.zip'
+    case 'darwin':
+      return arm ? 'deno-aarch64-apple-darwin.zip' : 'deno-x86_64-apple-darwin.zip'
+    default:
+      return arm ? 'deno-aarch64-unknown-linux-gnu.zip' : 'deno-x86_64-unknown-linux-gnu.zip'
+  }
+}
+
+/**
+ * Télécharge Deno dans binDir s'il est absent. yt-dlp s'en sert comme runtime JS
+ * pour résoudre les défis de signature YouTube (« nsig ») : sans lui, YouTube ne
+ * renvoie que des images (« Only images are available for download »). binDir est
+ * ajouté au PATH au démarrage du serveur, donc yt-dlp le trouve automatiquement.
+ */
+export async function ensureDeno(binDir: string, onLog?: (msg: string) => void): Promise<string> {
+  await mkdir(binDir, { recursive: true })
+  const dest = join(binDir, denoFilename())
+  if (await exists(dest)) return dest
+  onLog?.('Téléchargement de Deno (runtime JS pour yt-dlp)…')
+  const zip = join(binDir, 'deno.zip')
+  await download(`https://github.com/denoland/deno/releases/latest/download/${denoAsset()}`, zip)
+  await extract(zip, { dir: binDir })
+  await rm(zip, { force: true })
+  if (process.platform !== 'win32') await chmod(dest, 0o755)
+  onLog?.('Deno installé.')
+  return dest
+}
+
 /** Résout l'ensemble des binaires nécessaires au pipeline. */
 export async function resolveBinaries(
   binDir: string,
   onLog?: (msg: string) => void
 ): Promise<Binaries> {
+  const ytDlp = await ensureYtDlp(binDir, onLog)
+  // Best-effort : ne bloque pas tout le pipeline si Deno ne s'installe pas
+  // (ex. hors-ligne). Le téléchargement YouTube échouera alors proprement.
+  await ensureDeno(binDir, onLog).catch((e) =>
+    onLog?.(`Deno non installé (${e instanceof Error ? e.message : e}) — le téléchargement YouTube risque d'échouer.`)
+  )
   return {
     ffmpeg: bundledFfmpeg(),
     ffprobe: bundledFfprobe(),
-    ytDlp: await ensureYtDlp(binDir, onLog)
+    ytDlp
   }
 }
 

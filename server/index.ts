@@ -110,6 +110,10 @@ function addSpend(model: string, usage: Usage): void {
 }
 
 const paths: AppPaths = appPaths()
+// yt-dlp cherche son runtime JS (Deno, requis pour résoudre les défis de signature
+// YouTube « nsig » — sans quoi YouTube ne renvoie que des images) dans le PATH. On
+// y ajoute le dossier des binaires, où vivent yt-dlp ET deno (cf. ensureDeno).
+process.env.PATH = `${paths.bin}${process.platform === 'win32' ? ';' : ':'}${process.env.PATH ?? ''}`
 const musicDir = join(paths.data, 'music')
 const AUDIO_RE = /\.(mp3|m4a|aac|wav|ogg|opus)$/i
 function musicTracks(): string[] {
