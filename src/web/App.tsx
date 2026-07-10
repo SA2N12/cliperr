@@ -1230,7 +1230,7 @@ const CRON_LABELS: Record<string, string> = {
   '0 */3 * * *': 'toutes les 3 h'
 }
 
-type AutopilotSlot = { user: string; handle: string | null; avatarUrl: string | null; niche: string; ordinal: number; etaHm: number; eta: string; done: boolean; pinned?: boolean; type?: string; subject?: string; hasSeries?: boolean; seriesOn?: boolean }
+type AutopilotSlot = { user: string; handle: string | null; avatarUrl: string | null; niche: string; ordinal: number; etaHm: number; eta: string; done: boolean; pinned?: boolean; type?: string; subject?: string; hasSeries?: boolean }
 type AutopilotPlan = { enabled: boolean; perDay: number; targetPerDay?: number; window: { start: number; end: number }; nowHm: number; slots: AutopilotSlot[] }
 
 // Fenêtre d'édition d'un créneau du planning : heure + type de contenu.
@@ -1300,12 +1300,12 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
         <input type="time" value={time} onChange={(e) => setTime(e.target.value)} style={{ marginBottom: 12 }} />
 
         <label className="muted small" style={{ display: 'block', marginBottom: 4 }}>Type de vidéo</label>
-        <select className="input-full" value={type} onChange={(e) => setType(e.target.value)} style={{ marginBottom: 10 }}>
-          <option value="auto">Automatique (réglage du compte)</option>
-          <option value="niche">Vidéo de niche</option>
+        <select className="input-full" value={type === 'niche' ? 'auto' : type} onChange={(e) => setType(e.target.value)} style={{ marginBottom: 10 }}>
+          <option value="auto">Vidéo de niche (défaut)</option>
           {slot.hasSeries && <option value="serie">Épisode de série</option>}
           <option value="custom">Sujet personnalisé…</option>
         </select>
+        {!slot.hasSeries && <div className="muted small" style={{ marginTop: -4, marginBottom: 10 }}>Pour proposer « Épisode de série » : configure la série du compte (⚙️ de la ligne → onglet Série).</div>}
         {type === 'custom' && (
           <input className="input-full" value={subject} placeholder="Sujet exact de la vidéo — ex. le mystère du vol MH370" onChange={(e) => setSubject(e.target.value)} style={{ marginBottom: 10 }} />
         )}
@@ -1374,7 +1374,8 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
         user,
         niche,
         cta,
-        series: { enabled: serie.enabled, title: serie.title, universe: serie.universe }
+        // Plus de toggle : la série est « prête » dès que titre + univers sont remplis.
+        series: { enabled: !!(serie.title.trim() && serie.universe.trim()), title: serie.title, universe: serie.universe }
       })
       toast('Réglages du compte enregistrés ✓')
       onSaved()
@@ -1404,7 +1405,7 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
           <button className={`tab ${tab === 'general' ? 'on' : ''}`} onClick={() => setTab('general')}>Général</button>
           <button className={`tab ${tab === 'niche' ? 'on' : ''}`} onClick={() => setTab('niche')}>Vidéos de niche</button>
           <button className={`tab ${tab === 'serie' ? 'on' : ''}`} onClick={() => setTab('serie')}>
-            Série {serie.enabled ? '🟢' : ''}
+            Série {serie.title.trim() && serie.universe.trim() ? '🟢' : ''}
           </button>
         </div>
 
@@ -1412,7 +1413,7 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
           <>
             <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--panel-2)', border: '1px solid var(--border)', marginBottom: 12 }}>
               <div className="small" style={{ fontWeight: 600 }}>
-                Cadence : {serie.enabled ? '1 épisode/jour (série)' : perDay === 0 ? 'en pause' : `${perDay} vidéo${perDay > 1 ? 's' : ''}/jour`}
+                Cadence : {perDay === 0 ? 'en pause' : `${perDay} vidéo${perDay > 1 ? 's' : ''}/jour`}
               </div>
               <div className="muted small">S'ajuste sur le planning : bouton <b>+</b> en bout de ligne pour ajouter, <b>🗑 Supprimer</b> sur un bloc pour retirer. Publication étalée de 9h à 23h.</div>
             </div>
@@ -1427,31 +1428,22 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
             <label className="muted small" style={{ display: 'block', marginBottom: 4 }}>Niche / thème des vidéos classiques</label>
             <input className="input-full" value={niche} placeholder="ex. mystères non résolus, sport, psychologie…" onChange={(e) => setNiche(e.target.value)} style={{ marginBottom: 4 }} />
             <div className="muted small">
-              Chaque vidéo « niche » est une idée originale générée dans ce thème (hook fort, script rétention, images IA, voix off).
-              {serie.enabled ? ' Ce compte est en mode série : la niche ne sert que si tu forces « Vidéo de niche » sur un bloc du planning, ou si tu désactives la série.' : ''}
+              Chaque vidéo « niche » est une idée originale générée dans ce thème (hook fort, script rétention, images IA, voix off). C’est le type par défaut des blocs du planning.
             </div>
           </>
         )}
 
         {tab === 'serie' && (
           <>
-            <label className="switch" style={{ marginBottom: 10 }}>
-              <input type="checkbox" checked={serie.enabled} onChange={(e) => setSerie((s) => ({ ...s, enabled: e.target.checked }))} />
-              <span className="track" />
-              Mode série (feuilleton à épisodes)
-              {serie.enabled && <span className="chip" style={{ marginLeft: 6 }}>Ép. {serie.episode}</span>}
-            </label>
-            {serie.enabled ? (
-              <>
-                <label className="muted small" style={{ display: 'block', marginBottom: 4 }}>Titre de la série</label>
-                <input className="input-full" value={serie.title} placeholder="ex. L’île des fruits skibidi" onChange={(e) => setSerie((s) => ({ ...s, title: e.target.value }))} style={{ marginBottom: 10 }} />
-                <label className="muted small" style={{ display: 'block', marginBottom: 4 }}>Univers (personnages récurrents + style visuel)</label>
-                <textarea className="input-full" rows={4} value={serie.universe} placeholder="Décris les personnages (noms + traits visuels précis) et le style — c’est ce qui garde les personnages identiques d’un épisode à l’autre." onChange={(e) => setSerie((s) => ({ ...s, universe: e.target.value }))} style={{ marginBottom: 4 }} />
-                <div className="muted small">1 épisode/jour · dialogues joués (voix par personnage) · cliffhanger à chaque fin · changer le titre relance à l’épisode 1.</div>
-              </>
-            ) : (
-              <div className="muted small">Active le mode série pour transformer ce compte en feuilleton quotidien : une histoire continue, personnages récurrents, épisode après épisode.</div>
-            )}
+            <div className="row" style={{ marginBottom: 10 }}>
+              <div className="muted small">Configure la série ici, puis choisis <b>« Épisode de série »</b> sur un bloc du planning pour publier l’épisode suivant.</div>
+              {serie.title.trim() && <span className="chip" style={{ flexShrink: 0, marginLeft: 8 }}>Ép. {serie.episode}</span>}
+            </div>
+            <label className="muted small" style={{ display: 'block', marginBottom: 4 }}>Titre de la série</label>
+            <input className="input-full" value={serie.title} placeholder="ex. L’île des fruits skibidi" onChange={(e) => setSerie((s) => ({ ...s, title: e.target.value }))} style={{ marginBottom: 10 }} />
+            <label className="muted small" style={{ display: 'block', marginBottom: 4 }}>Univers (personnages récurrents + style visuel)</label>
+            <textarea className="input-full" rows={4} value={serie.universe} placeholder="Décris les personnages (noms + traits visuels précis) et le style — c’est ce qui garde les personnages identiques d’un épisode à l’autre." onChange={(e) => setSerie((s) => ({ ...s, universe: e.target.value }))} style={{ marginBottom: 4 }} />
+            <div className="muted small">Épisodes en vidéo animée avec dialogues joués (voix par personnage) et cliffhanger. Mémoire de l’histoire conservée. Changer le titre relance à l’épisode 1.</div>
           </>
         )}
 
@@ -1494,14 +1486,18 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
     load()
   }
 
-  // Bouton « + » en bout de ligne : ajoute une vidéo/jour au compte.
+  // Bouton « + » : ajoute une vidéo/jour au compte puis ouvre directement le
+  // choix du type (niche / épisode de série / sujet) et de l'heure.
   const addVideo = async (u: string, current: number): Promise<void> => {
     const next = Math.min(5, current + 1)
     try {
       await api.saveAutopilotAccount({ user: u, perDay: next })
-      toast(`${next} vidéo${next > 1 ? 's' : ''}/jour pour ce compte`)
-      load()
+      const p = await api.autopilotPlan()
+      setPlan(p)
       onConfigSaved?.()
+      const created = p.slots.filter((s) => s.user === u && !s.done).pop()
+      if (created) setEditSlot(created)
+      else toast(`${next} vidéo${next > 1 ? 's' : ''}/jour pour ce compte`)
     } catch (e) {
       toast('Erreur : ' + (e as Error).message)
     }
@@ -1588,32 +1584,15 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, flex: 1, alignItems: 'stretch' }}>
                   {userSlots.map((s) => renderBlock(s, { hideAvatar: true }))}
-                  {(() => {
-                    const seriesOn = userSlots.some((s) => s.seriesOn)
-                    const maxed = userSlots.length >= 5
-                    if (seriesOn || maxed) {
-                      return (
-                        <button
-                          disabled
-                          className="btn"
-                          title={seriesOn ? 'Compte en mode série : 1 épisode/jour maximum' : 'Maximum atteint (5 vidéos/jour)'}
-                          style={{ width: 44, borderRadius: 12, justifyContent: 'center', padding: 0, fontSize: 20 }}
-                        >
-                          +
-                        </button>
-                      )
-                    }
-                    return (
-                      <button
-                        className="btn"
-                        onClick={() => void addVideo(u, userSlots.length)}
-                        title="Ajouter une vidéo par jour sur ce compte"
-                        style={{ width: 44, borderRadius: 12, justifyContent: 'center', padding: 0, fontSize: 20 }}
-                      >
-                        +
-                      </button>
-                    )
-                  })()}
+                  <button
+                    className="btn"
+                    disabled={userSlots.length >= 5}
+                    onClick={() => void addVideo(u, userSlots.length)}
+                    title={userSlots.length >= 5 ? 'Maximum atteint (5 vidéos/jour)' : 'Ajouter une vidéo (choix du type et de l’heure)'}
+                    style={{ width: 44, borderRadius: 12, justifyContent: 'center', padding: 0, fontSize: 20 }}
+                  >
+                    +
+                  </button>
                 </div>
               </div>
             )
@@ -2085,7 +2064,6 @@ type AutopilotState = { enabled: boolean; perDay: number; busy: boolean; profile
 
 function Autopilot({ toast, ideaVideo }: { toast: (m: string) => void; ideaVideo: IdeaVideoMap }): JSX.Element {
   const [state, setState] = useState<AutopilotState | null>(null)
-  const [series, setSeries] = useState<Record<string, SeriesCfg>>({})
   const [perDays, setPerDays] = useState<Record<string, number>>({})
   const [enabled, setEnabled] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -2095,10 +2073,8 @@ function Autopilot({ toast, ideaVideo }: { toast: (m: string) => void; ideaVideo
       const s = await api.autopilotState()
       setState(s)
       setEnabled(s.enabled)
-      const sr: Record<string, SeriesCfg> = {}
       const pd: Record<string, number> = {}
-      s.profiles.forEach((p) => { sr[p.username] = p.series; pd[p.username] = p.perDay })
-      setSeries(sr)
+      s.profiles.forEach((p) => { pd[p.username] = p.perDay })
       setPerDays(pd)
     } catch { /* ignore */ }
   }, [])
@@ -2125,11 +2101,7 @@ function Autopilot({ toast, ideaVideo }: { toast: (m: string) => void; ideaVideo
   }
 
   const profiles = state?.profiles ?? []
-  // Total effectif par jour (les séries sont plafonnées à 1 épisode/jour).
-  const totalPerDay = profiles.reduce((s, p) => {
-    const pd = perDays[p.username] ?? p.perDay
-    return s + (series[p.username]?.enabled ? Math.min(pd, 1) : pd)
-  }, 0)
+  const totalPerDay = profiles.reduce((s, p) => s + (perDays[p.username] ?? p.perDay), 0)
 
   return (
     <>

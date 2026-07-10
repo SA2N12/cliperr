@@ -484,11 +484,6 @@ function autopilotSeries(): Record<string, SeriesState> {
   }
   return {}
 }
-function seriesForProfile(user: string): SeriesState | null {
-  const s = autopilotSeries()[user]
-  if (!s || !s.enabled || !(s.title || '').trim() || !(s.universe || '').trim()) return null
-  return { enabled: true, title: s.title.trim(), universe: s.universe.trim(), episode: Math.max(1, Number(s.episode) || 1), recap: (s.recap || '').trim() }
-}
 // ── Créneaux personnalisés du jour : heure et/ou type choisis PAR VIDÉO.
 // autopilot_slot_overrides = { [YYYY-MM-DD]: { "<user>:<ordinal>": { hm?, type?, subject? } } }
 // (on ne conserve que le jour courant ; type: 'niche' | 'serie' | 'custom')
@@ -535,8 +530,7 @@ function perDayMap(): Record<string, number> {
 function perDayForProfile(user: string): number {
   const globalPerDay = Math.max(1, Number(repo.getSetting('autopilot_per_day')) || 1)
   const raw = perDayMap()[user]
-  const base = raw == null ? globalPerDay : Math.max(0, Math.min(5, Math.round(Number(raw)) || 0))
-  return seriesForProfile(user) ? Math.min(base, 1) : base
+  return raw == null ? globalPerDay : Math.max(0, Math.min(5, Math.round(Number(raw)) || 0))
 }
 
 /** Après un épisode publié : incrémente le compteur et enregistre la mémoire de l'histoire. */
@@ -650,13 +644,10 @@ async function runAutopilotTick(force = false): Promise<void> {
     // Tendances TikTok du moment (si l'API est configurée) → scénarios ancrés sur l'actu.
     const trends = await getTrendsCached()
 
-    // Type du créneau : auto (série si activée, sinon niche) / niche forcée /
-    // épisode de série forcé / sujet libre choisi sur le bloc du planning.
+    // Type du créneau : par défaut vidéo de niche ; « Épisode de série » ou
+    // « Sujet libre » se choisissent explicitement sur le bloc du planning.
     const subject = (slotOv.subject ?? '').trim()
-    let series: SeriesState | null
-    if (slotOv.type === 'serie') series = seriesConfiguredFor(user)
-    else if (slotOv.type === 'niche' || (slotOv.type === 'custom' && subject)) series = null
-    else series = seriesForProfile(user)
+    const series: SeriesState | null = slotOv.type === 'serie' ? seriesConfiguredFor(user) : null
 
     let idea: import('./ideas').ViralIdea
     let ideaLabel = niche
@@ -1289,8 +1280,6 @@ app.get('/api/autopilot/plan', wrap(async (_req, res) => {
     type?: string
     subject?: string
     hasSeries?: boolean
-    /** Série ACTIVÉE sur ce compte (cadence plafonnée à 1/jour). */
-    seriesOn?: boolean
   }
   const slots: Slot[] = []
   const ovToday = slotOverrides()[today] ?? {}
@@ -1310,13 +1299,11 @@ app.get('/api/autopilot/plan', wrap(async (_req, res) => {
   profiles.forEach((user) => {
     const done = Number(repo.getSetting(`autopilot_count_${user}_${today}`)) || 0
     const m = meta.get(user)
-    const serie = seriesForProfile(user)
     const info = {
       user,
       handle: m?.tiktokHandle ?? null,
       avatarUrl: m?.avatarUrl ?? null,
-      niche: serie ? `Série : ${serie.title}` : nicheForProfile(user),
-      seriesOn: !!serie
+      niche: nicheForProfile(user)
     }
     const times = doneTimes.get(user) ?? []
     for (let j = 1; j <= done; j++) {
@@ -1357,14 +1344,12 @@ app.get('/api/autopilot/plan', wrap(async (_req, res) => {
     const m = meta.get(best)
     const ordinal = nextOrdinal.get(best) ?? 1
     const ov = ovToday[`${best}:${ordinal}`]
-    const bestSerie = seriesForProfile(best)
     const confSerie = seriesConfiguredFor(best)
-    // Libellé selon le type effectif du créneau (personnalisé ou auto).
+    // Libellé selon le type du créneau (niche par défaut).
     let label: string
     if (ov?.type === 'custom' && (ov.subject ?? '').trim()) label = `Sujet : ${(ov.subject ?? '').trim()}`
-    else if (ov?.type === 'niche') label = nicheForProfile(best)
     else if (ov?.type === 'serie' && confSerie) label = `Série : ${confSerie.title} — Ép. ${confSerie.episode}`
-    else label = bestSerie ? `Série : ${bestSerie.title} — Ép. ${bestSerie.episode}` : nicheForProfile(best)
+    else label = nicheForProfile(best)
     const etaHm = ov?.hm != null ? ov.hm : winStart + step * i
     slots.push({
       user: best,
@@ -1378,8 +1363,7 @@ app.get('/api/autopilot/plan', wrap(async (_req, res) => {
       pinned: ov?.hm != null,
       type: ov?.type,
       subject: ov?.subject,
-      hasSeries: !!confSerie,
-      seriesOn: !!bestSerie
+      hasSeries: !!confSerie
     })
     nextOrdinal.set(best, ordinal + 1)
   }
