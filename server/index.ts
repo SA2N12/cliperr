@@ -1384,6 +1384,53 @@ app.get('/api/autopilot/plan', wrap(async (_req, res) => {
   const targetPerDay = profiles.reduce((s, u) => s + perDayForProfile(u), 0)
   res.json({ enabled, perDay, targetPerDay, window: win, nowHm, today, slots })
 }))
+// Réglages d'UN SEUL compte (fusion dans les maps existantes — pas de remplacement
+// global) : utilisé par la fenêtre ⚙️ des lignes du planning.
+app.post('/api/autopilot/account', wrap((req, res) => {
+  const b = (req.body ?? {}) as { user?: unknown; perDay?: unknown; niche?: unknown; cta?: unknown; series?: unknown }
+  const user = String(b.user ?? '').trim()
+  if (!user || !uploadPostProfiles().includes(user)) return res.status(400).json({ error: 'Compte inconnu' })
+  if (b.perDay != null) {
+    const m = perDayMap()
+    m[user] = Math.max(0, Math.min(5, Math.round(Number(b.perDay)) || 0))
+    repo.setSetting('autopilot_per_day_map', JSON.stringify(m))
+  }
+  if (typeof b.niche === 'string') {
+    const m = autopilotNiches()
+    if (b.niche.trim()) m[user] = b.niche.trim()
+    else delete m[user]
+    repo.setSetting('autopilot_niches', JSON.stringify(m))
+  }
+  if (typeof b.cta === 'string') {
+    const m = profileCtas()
+    if (b.cta.trim()) m[user] = b.cta.trim().slice(0, 220)
+    else delete m[user]
+    repo.setSetting('profile_ctas', JSON.stringify(m))
+  }
+  if (b.series && typeof b.series === 'object') {
+    const s = b.series as { enabled?: unknown; title?: unknown; universe?: unknown }
+    const map = autopilotSeries()
+    const title = typeof s.title === 'string' ? s.title.trim().slice(0, 120) : ''
+    const universe = typeof s.universe === 'string' ? s.universe.trim().slice(0, 600) : ''
+    const enabled = s.enabled === true
+    if (!title && !universe && !enabled) {
+      delete map[user]
+    } else {
+      const prev = map[user]
+      const isNewStory = !prev || prev.title !== title
+      map[user] = {
+        enabled,
+        title,
+        universe,
+        episode: isNewStory ? 1 : Math.max(1, Number(prev.episode) || 1),
+        recap: isNewStory ? '' : prev.recap || ''
+      }
+    }
+    repo.setSetting('autopilot_series', JSON.stringify(map))
+  }
+  res.json({ ok: true })
+}))
+
 // Personnalise un créneau du jour (heure et/ou type) — clic sur un bloc du planning.
 app.post('/api/autopilot/slot', wrap((req, res) => {
   const b = (req.body ?? {}) as { user?: unknown; ordinal?: unknown; hm?: unknown; type?: unknown; subject?: unknown; reset?: unknown }

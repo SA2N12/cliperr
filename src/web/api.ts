@@ -145,6 +145,8 @@ export const api = {
     }>('/api/autopilot/plan'),
   saveAutopilotSlot: (slot: { user: string; ordinal: number; hm?: number | null; type?: string | null; subject?: string | null; reset?: boolean }) =>
     post<{ ok: boolean }>('/api/autopilot/slot', slot),
+  saveAutopilotAccount: (cfg: { user: string; perDay?: number; niche?: string; cta?: string; series?: { enabled: boolean; title: string; universe: string } }) =>
+    post<{ ok: boolean }>('/api/autopilot/account', cfg),
 
   // Idées virales + tendances
   generateIdeas: (niche: string, count: number, trends: string[]) =>

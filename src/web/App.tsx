@@ -1327,13 +1327,105 @@ function genPct(msg: string): number {
   return 5
 }
 
+// Fenêtre ⚙️ d'une ligne du planning : tous les réglages du compte
+// (cadence, niche, CTA, mode série) — enregistrés pour CE compte uniquement.
+function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; onClose: () => void; onSaved: () => void; toast: (m: string) => void }): JSX.Element {
+  const [profile, setProfile] = useState<AutopilotProfile | null>(null)
+  const [perDay, setPerDay] = useState(1)
+  const [niche, setNiche] = useState('')
+  const [cta, setCta] = useState('')
+  const [serie, setSerie] = useState<SeriesCfg>({ enabled: false, title: '', universe: '', episode: 1 })
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    api.autopilotState().then((s) => {
+      const p = s.profiles.find((x) => x.username === user)
+      if (!p) return
+      setProfile(p)
+      setPerDay(p.perDay)
+      setNiche(p.niche)
+      setCta(p.cta)
+      setSerie(p.series)
+    }).catch(() => undefined)
+  }, [user])
+
+  const save = async (): Promise<void> => {
+    setBusy(true)
+    try {
+      await api.saveAutopilotAccount({
+        user,
+        perDay,
+        niche,
+        cta,
+        series: { enabled: serie.enabled, title: serie.title, universe: serie.universe }
+      })
+      toast('Réglages du compte enregistrés ✓')
+      onSaved()
+      onClose()
+    } catch (e) {
+      toast('Erreur : ' + (e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={() => !busy && onClose()}>
+      <div className="card" style={{ width: 560, maxWidth: '94vw', maxHeight: '90vh', overflow: 'auto' }} onClick={(e) => e.stopPropagation()}>
+        <div className="row" style={{ marginBottom: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Avatar url={profile?.avatarUrl ?? null} name={user} size={34} />
+            <div>
+              <div style={{ fontWeight: 700 }}>{profile?.handle ? '@' + profile.handle : user}</div>
+              <div className="muted small">Réglages du compte</div>
+            </div>
+          </div>
+          {serie.enabled && <span className="chip">Ép. {serie.episode}</span>}
+        </div>
+
+        <label className="muted small" style={{ display: 'block', marginBottom: 4 }}>Vidéos / jour</label>
+        <select value={perDay} onChange={(e) => setPerDay(Number(e.target.value))} style={{ marginBottom: 12 }}>
+          <option value={0}>0 — en pause</option>
+          {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}
+        </select>
+        {serie.enabled && perDay > 1 && <div className="muted small" style={{ marginTop: -8, marginBottom: 12 }}>Série active : plafonné à 1 épisode/jour.</div>}
+
+        <label className="muted small" style={{ display: 'block', marginBottom: 4 }}>Niche</label>
+        <input className="input-full" value={niche} placeholder="ex. mystères non résolus…" onChange={(e) => setNiche(e.target.value)} style={{ marginBottom: 12 }} />
+
+        <label className="muted small" style={{ display: 'block', marginBottom: 4 }}>CTA (ajouté à chaque légende)</label>
+        <input className="input-full" value={cta} placeholder="ex. 🔗 Mon guide gratuit est dans la bio" onChange={(e) => setCta(e.target.value)} style={{ marginBottom: 12 }} />
+
+        <label className="switch" style={{ marginBottom: 10 }}>
+          <input type="checkbox" checked={serie.enabled} onChange={(e) => setSerie((s) => ({ ...s, enabled: e.target.checked }))} />
+          <span className="track" />
+          Mode série (feuilleton à épisodes)
+        </label>
+        {serie.enabled && (
+          <>
+            <input className="input-full" value={serie.title} placeholder="Titre de la série — ex. L’île des fruits skibidi" onChange={(e) => setSerie((s) => ({ ...s, title: e.target.value }))} style={{ marginBottom: 8 }} />
+            <textarea className="input-full" rows={3} value={serie.universe} placeholder="Univers : personnages récurrents + style visuel" onChange={(e) => setSerie((s) => ({ ...s, universe: e.target.value }))} style={{ marginBottom: 8 }} />
+            <div className="muted small" style={{ marginBottom: 8 }}>Changer le titre relance une histoire à l’épisode 1.</div>
+          </>
+        )}
+
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 10 }}>
+          <button className="btn" disabled={busy} onClick={onClose}>Annuler</button>
+          <button className="btn primary" disabled={busy || !profile} onClick={() => void save()}>{busy ? 'Enregistrement…' : 'Enregistrer'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // Planning du jour du pilote : blocs cliquables (heure + type par créneau).
 // `groupByAccount` : une ligne de blocs par compte (page Pilote auto) ;
 // sinon grille chronologique unique (File d'attente).
-function TodayPlan({ ideaVideo, toast, scope, groupByAccount }: { ideaVideo: IdeaVideoMap; toast: (m: string) => void; scope?: string; groupByAccount?: boolean }): JSX.Element | null {
+function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: { ideaVideo: IdeaVideoMap; toast: (m: string) => void; scope?: string; groupByAccount?: boolean; onConfigSaved?: () => void }): JSX.Element | null {
   const [plan, setPlan] = useState<AutopilotPlan | null>(null)
   const [paused, setPaused] = useState(false)
   const [editSlot, setEditSlot] = useState<AutopilotSlot | null>(null)
+  const [cfgUser, setCfgUser] = useState<string | null>(null)
   const load = useCallback((): void => {
     api.autopilotPlan().then(setPlan).catch(() => undefined)
     api.schedulerStatus().then((s) => setPaused(s.paused)).catch(() => undefined)
@@ -1425,12 +1517,15 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount }: { ideaVideo: Ide
             const uDone = userSlots.filter((s) => s.done).length
             return (
               <div key={u} style={{ display: 'flex', alignItems: 'center', gap: 12, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
-                <div style={{ width: 148, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ width: 176, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Avatar url={first.avatarUrl} name={u} size={32} />
-                  <div style={{ minWidth: 0 }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
                     <div className="small" style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{first.handle ? '@' + first.handle : u}</div>
                     <div className="muted small">{uDone}/{userSlots.length} publiée{uDone > 1 ? 's' : ''}</div>
                   </div>
+                  <button className="btn icon-btn" title="Réglages du compte (cadence, niche, CTA, série)" onClick={() => setCfgUser(u)} style={{ width: 30, height: 30, flexShrink: 0 }}>
+                    <Icon name="settings" size={14} />
+                  </button>
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, flex: 1 }}>
                   {userSlots.map((s) => renderBlock(s, { hideAvatar: true }))}
@@ -1451,6 +1546,17 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount }: { ideaVideo: Ide
         </div>
       )}
       {editSlot && <SlotModal slot={editSlot} onClose={() => setEditSlot(null)} onSaved={load} toast={toast} />}
+      {cfgUser && (
+        <AccountConfigModal
+          user={cfgUser}
+          onClose={() => setCfgUser(null)}
+          onSaved={() => {
+            load()
+            onConfigSaved?.()
+          }}
+          toast={toast}
+        />
+      )}
     </div>
   )
 }
@@ -1953,7 +2059,7 @@ function Autopilot({ toast, ideaVideo }: { toast: (m: string) => void; ideaVideo
         <button className={`btn ${enabled ? '' : 'primary'}`} disabled={saving} onClick={toggle}>{enabled ? 'Désactiver' : 'Activer'}</button>
       </div>
 
-      <TodayPlan ideaVideo={ideaVideo} toast={toast} groupByAccount />
+      <TodayPlan ideaVideo={ideaVideo} toast={toast} groupByAccount onConfigSaved={() => void load()} />
 
       <div className="card">
         <div style={{ fontWeight: 600, marginBottom: 4 }}>Cadence, niche &amp; CTA par compte</div>
