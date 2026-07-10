@@ -1230,7 +1230,7 @@ const CRON_LABELS: Record<string, string> = {
   '0 */3 * * *': 'toutes les 3 h'
 }
 
-type AutopilotSlot = { user: string; handle: string | null; avatarUrl: string | null; niche: string; ordinal: number; etaHm: number; eta: string; done: boolean; pinned?: boolean; type?: string; subject?: string; hasSeries?: boolean }
+type AutopilotSlot = { user: string; handle: string | null; avatarUrl: string | null; niche: string; ordinal: number; etaHm: number; eta: string; done: boolean; pinned?: boolean; type?: string; subject?: string; hasSeries?: boolean; credits?: number }
 type AutopilotPlan = { enabled: boolean; perDay: number; targetPerDay?: number; window: { start: number; end: number }; nowHm: number; slots: AutopilotSlot[] }
 
 // Fenêtre d'édition d'un créneau du planning : heure + type de contenu.
@@ -1583,6 +1583,7 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
 
   const slots = (plan?.slots ?? []).filter((s) => !scope || scope === ALL_SCOPE || s.user === scope)
   const doneCount = slots.filter((s) => s.done).length
+  const totalCredits = slots.reduce((sum, s) => sum + (s.credits ?? 0), 0)
   const nextIdx = slots.findIndex((s) => !s.done)
   const nextKey = nextIdx >= 0 ? `${slots[nextIdx].user}-${slots[nextIdx].ordinal}` : null
   if (!plan?.enabled || slots.length === 0) return null
@@ -1620,6 +1621,14 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
         <div className="small" style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>
           {s.done ? '✓ publiée' : generating ? '⚙️ création…' : s.niche.split(' (')[0]}
         </div>
+        {s.credits != null && (
+          <div
+            title="Coût estimé de cette vidéo (aperçu — aucun débit pour l’instant)"
+            style={{ fontSize: 11, fontWeight: 700, fontVariantNumeric: 'tabular-nums', padding: '1px 7px', borderRadius: 999, background: 'var(--panel-2)', border: '1px solid var(--border)', color: 'var(--muted)' }}
+          >
+            ≈ {s.credits} cr
+          </div>
+        )}
       </button>
     )
   }
@@ -1634,7 +1643,12 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
           <strong>Aujourd’hui</strong>
           <div className="muted small">{doneCount}/{slots.length} publiée{slots.length > 1 ? 's' : ''} · clique un bloc « à venir » pour choisir son heure et son type de vidéo</div>
         </div>
-        <span className="pill-badge"><span className="dot" /> {plan.targetPerDay ?? plan.perDay} vidéo{(plan.targetPerDay ?? plan.perDay) > 1 ? 's' : ''}/jour</span>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {totalCredits > 0 && (
+            <span className="pill-badge" title="Coût estimé total du jour (aperçu — aucun débit pour l’instant)" style={{ fontVariantNumeric: 'tabular-nums' }}>≈ {totalCredits} cr/jour</span>
+          )}
+          <span className="pill-badge"><span className="dot" /> {plan.targetPerDay ?? plan.perDay} vidéo{(plan.targetPerDay ?? plan.perDay) > 1 ? 's' : ''}/jour</span>
+        </div>
       </div>
       {paused && (
         <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 10, background: '#fef3c7', color: '#b45309', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
@@ -1648,13 +1662,14 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
             const userSlots = slots.filter((s) => s.user === u)
             const first = userSlots[0]
             const uDone = userSlots.filter((s) => s.done).length
+            const uCredits = userSlots.reduce((sum, s) => sum + (s.credits ?? 0), 0)
             return (
               <div key={u} style={{ display: 'flex', alignItems: 'center', gap: 12, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
                 <div style={{ width: 176, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Avatar url={first.avatarUrl} name={u} size={32} />
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div className="small" style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{first.handle ? '@' + first.handle : u}</div>
-                    <div className="muted small">{uDone}/{userSlots.length} publiée{uDone > 1 ? 's' : ''}</div>
+                    <div className="muted small">{uDone}/{userSlots.length} publiée{uDone > 1 ? 's' : ''}{uCredits > 0 ? ` · ≈ ${uCredits} cr` : ''}</div>
                   </div>
                   <button className="btn icon-btn" title="Réglages du compte (cadence, niche, CTA, série)" onClick={() => setCfgUser(u)} style={{ width: 30, height: 30, flexShrink: 0 }}>
                     <Icon name="settings" size={14} />

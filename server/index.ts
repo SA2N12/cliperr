@@ -84,6 +84,18 @@ function scriptModel(): string {
   return MODEL_MAP[pick] ?? MODEL_MAP.haiku
 }
 
+/**
+ * Coût estimé d'une vidéo en « crédits » fictifs (~ centimes de $). Sert d'aperçu
+ * visuel dans le planning — AUCUN débit réel. Reflète l'ordre de grandeur : un clip
+ * (transcription + analyse) < une vidéo simple (images + voix + script) < un épisode
+ * de série animée (Nano Banana + fal + Veo).
+ */
+function estimateCredits(type: string | undefined): number {
+  if (type === 'clip') return 15
+  if (type === 'serie') return getEncrypted('fal_key') ? 140 : 70 // fal/Veo, ou repli Ken Burns
+  return scriptModel().includes('opus') ? 50 : 45 // vidéo simple (niche / sujet)
+}
+
 // Tendances TikTok (RapidAPI) mises en cache 6 h — vide si l'API n'est pas configurée.
 let trendsCache: { at: number; tags: string[] } | null = null
 async function getTrendsCached(): Promise<string[]> {
@@ -1491,6 +1503,7 @@ app.get('/api/autopilot/plan', wrap(async (_req, res) => {
     type?: string
     subject?: string
     hasSeries?: boolean
+    credits?: number
   }
   const slots: Slot[] = []
   const ovToday = slotOverrides()[today] ?? {}
@@ -1528,7 +1541,8 @@ app.get('/api/autopilot/plan', wrap(async (_req, res) => {
         ordinal: j,
         etaHm: pp ? pp.hm : 0,
         eta: pp ? pp.label : '—',
-        done: true
+        done: true,
+        credits: estimateCredits(ovToday[`${user}:${j}`]?.type)
       })
     }
     // Quota individuel par compte (séries plafonnées à 1 épisode/jour).
@@ -1591,7 +1605,8 @@ app.get('/api/autopilot/plan', wrap(async (_req, res) => {
       pinned: ov?.hm != null,
       type: ov?.type,
       subject: ov?.subject,
-      hasSeries: !!confSerie
+      hasSeries: !!confSerie,
+      credits: estimateCredits(ov?.type)
     })
   }
 

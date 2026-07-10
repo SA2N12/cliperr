@@ -142,6 +142,7 @@ export const api = {
         type?: string
         subject?: string
         hasSeries?: boolean
+        credits?: number
       }[]
     }>('/api/autopilot/plan'),
   saveAutopilotSlot: (slot: { user: string; ordinal: number; hm?: number | null; type?: string | null; subject?: string | null; reset?: boolean }) =>
