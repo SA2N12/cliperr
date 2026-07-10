@@ -417,12 +417,12 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
       <main className="main">
         <TopBar state={pub} onChange={changeScope} />
         {page === 'dashboard' && <Dashboard log={log} go={setPage} onRefresh={refresh} scope={scope} />}
-        {page === 'autopilot' && isAll && <Autopilot toast={showToast} />}
+        {page === 'autopilot' && isAll && <Autopilot toast={showToast} ideaVideo={ideaVideo} />}
         {page === 'generate' && <Generate sources={sources} progress={progress} onRefresh={refresh} toast={showToast} goHistory={() => setPage('history')} />}
         {page === 'ideas' && <Ideas toast={showToast} go={setPage} />}
         {page === 'history' && <History sources={sources} clips={clips} progress={progress} onRefresh={refresh} toast={showToast} goClips={() => setPage('clips')} />}
         {page === 'clips' && <Clips clips={clips} sources={sources} onRefresh={refresh} toast={showToast} ttProfile={ttProfile} scope={scope} />}
-        {page === 'queue' && <Queue clips={clips} go={setPage} scope={scope} ideaVideo={ideaVideo} toast={showToast} />}
+        {page === 'queue' && <Queue clips={clips} go={setPage} />}
         {page === 'published' && <Published clips={clips} go={setPage} scope={scope} />}
         {page === 'settings' && <Settings toast={showToast} onTtProfile={setTtProfile} />}
       </main>
@@ -1327,14 +1327,106 @@ function genPct(msg: string): number {
   return 5
 }
 
-function Queue({ clips, go, scope, ideaVideo, toast }: { clips: ClipDTO[]; go: (p: Page) => void; scope: string; ideaVideo: IdeaVideoMap; toast: (m: string) => void }): JSX.Element {
-  const [status, setStatus] = useState<{ enabled: boolean; paused: boolean; cron: string; nextRunAt: number | null; intervalSec: number | null; lastRunAt: number | null } | null>(null)
+// Planning du jour du pilote : blocs cliquables (heure + type par créneau).
+// Composant autonome, affiché sur la page Pilote auto.
+function TodayPlan({ ideaVideo, toast, scope }: { ideaVideo: IdeaVideoMap; toast: (m: string) => void; scope?: string }): JSX.Element | null {
   const [plan, setPlan] = useState<AutopilotPlan | null>(null)
+  const [paused, setPaused] = useState(false)
   const [editSlot, setEditSlot] = useState<AutopilotSlot | null>(null)
+  const load = useCallback((): void => {
+    api.autopilotPlan().then(setPlan).catch(() => undefined)
+    api.schedulerStatus().then((s) => setPaused(s.paused)).catch(() => undefined)
+  }, [])
+  useEffect(() => {
+    load()
+    const t = window.setInterval(load, 20000)
+    return () => window.clearInterval(t)
+  }, [load])
+
+  // Génération en cours (pilote) : la dernière entrée « running » des événements SSE.
+  const running = Object.values(ideaVideo).filter((v) => v.status === 'running')
+  const activeGen = running.length ? running[running.length - 1] : null
+  // Recharge le planning quand une génération démarre ou se termine (états à jour).
+  const genKey = activeGen ? activeGen.message : (Object.keys(ideaVideo).length ? 'idle' : 'none')
+  useEffect(() => { if (genKey === 'idle') load() }, [genKey, load])
+
+  const resume = async (): Promise<void> => {
+    await api.setFlag('queue_paused', '0')
+    load()
+  }
+
+  const slots = (plan?.slots ?? []).filter((s) => !scope || scope === ALL_SCOPE || s.user === scope)
+  const doneCount = slots.filter((s) => s.done).length
+  const nextIdx = slots.findIndex((s) => !s.done)
+  if (!plan?.enabled || slots.length === 0) return null
+
+  return (
+    <div className="card" style={{ marginBottom: 16 }}>
+      <div className="row" style={{ marginBottom: 4 }}>
+        <div>
+          <strong>Aujourd’hui</strong>
+          <div className="muted small">{doneCount}/{slots.length} publiée{slots.length > 1 ? 's' : ''} · clique un bloc « à venir » pour choisir son heure et son type de vidéo</div>
+        </div>
+        <span className="pill-badge"><span className="dot" /> {plan.targetPerDay ?? plan.perDay} vidéo{(plan.targetPerDay ?? plan.perDay) > 1 ? 's' : ''}/jour</span>
+      </div>
+      {paused && (
+        <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 10, background: '#fef3c7', color: '#b45309', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+          <div className="small"><b>⏸ En pause</b> — aucune vidéo n’est produite ni publiée tant que c’est en pause.</div>
+          <button className="btn small" onClick={() => void resume()}>Reprendre</button>
+        </div>
+      )}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 14 }}>
+        {slots.map((s, i) => {
+          const generating = i === nextIdx && !!activeGen
+          return (
+            <button
+              key={`${s.user}-${s.ordinal}`}
+              onClick={() => !s.done && setEditSlot(s)}
+              title={s.done ? s.niche : `${s.niche} — clique pour personnaliser (heure, type)`}
+              style={{
+                width: 112,
+                padding: '10px 8px',
+                borderRadius: 12,
+                background: s.done ? 'var(--panel-2)' : '#fff',
+                border: s.done ? '1px solid var(--border)' : `2px dashed ${generating ? 'var(--accent)' : s.pinned || s.type ? 'var(--accent-strong)' : '#c9c9cf'}`,
+                cursor: s.done ? 'default' : 'pointer',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 6,
+                fontFamily: 'inherit'
+              }}
+            >
+              <div style={{ fontWeight: 700, fontSize: 13, fontVariantNumeric: 'tabular-nums', color: s.done ? 'var(--muted)' : 'var(--accent-strong)' }}>
+                {s.done ? s.eta : `≈ ${s.eta}`}{(s.pinned || s.type) && !s.done ? ' 📌' : ''}
+              </div>
+              <Avatar url={s.avatarUrl} name={s.user} size={30} />
+              <div className="muted small" style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {s.handle ? '@' + s.handle : s.user}
+              </div>
+              <div className="small" style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>
+                {s.done ? '✓ publiée' : generating ? '⚙️ création…' : s.niche.split(' (')[0]}
+              </div>
+            </button>
+          )
+        })}
+      </div>
+      {activeGen && (
+        <div style={{ marginTop: 12 }}>
+          <div className="bar"><div style={{ width: `${genPct(activeGen.message)}%`, transition: 'width 0.4s ease' }} /></div>
+          <div className="muted small" style={{ marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activeGen.message}</div>
+        </div>
+      )}
+      {editSlot && <SlotModal slot={editSlot} onClose={() => setEditSlot(null)} onSaved={load} toast={toast} />}
+    </div>
+  )
+}
+
+function Queue({ clips, go }: { clips: ClipDTO[]; go: (p: Page) => void }): JSX.Element {
+  const [status, setStatus] = useState<{ enabled: boolean; paused: boolean; cron: string; nextRunAt: number | null; intervalSec: number | null; lastRunAt: number | null } | null>(null)
   const [now, setNow] = useState(Date.now())
   const load = useCallback((): void => {
     api.schedulerStatus().then(setStatus).catch(() => undefined)
-    api.autopilotPlan().then(setPlan).catch(() => undefined)
   }, [])
   useEffect(() => {
     load()
@@ -1345,17 +1437,6 @@ function Queue({ clips, go, scope, ideaVideo, toast }: { clips: ClipDTO[]; go: (
       window.clearInterval(tick)
     }
   }, [load])
-
-  // Génération en cours (pilote) : la dernière entrée « running » des événements SSE.
-  const running = Object.values(ideaVideo).filter((v) => v.status === 'running')
-  const activeGen = running.length ? running[running.length - 1] : null
-  // Recharge le planning quand une génération démarre ou se termine (états à jour).
-  const genKey = activeGen ? activeGen.message : (Object.keys(ideaVideo).length ? 'idle' : 'none')
-  useEffect(() => { if (genKey === 'idle') load() }, [genKey, load])
-
-  const slots = (plan?.slots ?? []).filter((s) => scope === ALL_SCOPE || s.user === scope)
-  const doneCount = slots.filter((s) => s.done).length
-  const nextIdx = slots.findIndex((s) => !s.done)
 
   const togglePause = async (): Promise<void> => {
     const paused = !status?.paused
@@ -1384,67 +1465,6 @@ function Queue({ clips, go, scope, ideaVideo, toast }: { clips: ClipDTO[]; go: (
           </button>
         )}
       </div>
-
-      {plan?.enabled && slots.length > 0 && (
-        <div className="card" style={{ marginBottom: 16 }}>
-          <div className="row" style={{ marginBottom: 4 }}>
-            <div>
-              <strong>Pilote auto — aujourd’hui</strong>
-              <div className="muted small">{doneCount}/{slots.length} publiée{slots.length > 1 ? 's' : ''} · heures réelles pour les publiées, estimations (≈) pour les suivantes jusqu’à {plan.window.end}h</div>
-            </div>
-            <span className="pill-badge"><span className="dot" /> {plan.targetPerDay ?? plan.perDay} vidéo{(plan.targetPerDay ?? plan.perDay) > 1 ? 's' : ''}/jour</span>
-          </div>
-          {status?.paused && (
-            <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 10, background: '#fef3c7', color: '#b45309', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-              <div className="small"><b>⏸ En pause</b> — aucune vidéo n’est produite ni publiée tant que c’est en pause.</div>
-              <button className="btn small" onClick={togglePause}>Reprendre</button>
-            </div>
-          )}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 14 }}>
-            {slots.map((s, i) => {
-              const generating = i === nextIdx && !!activeGen
-              return (
-                <button
-                  key={`${s.user}-${s.ordinal}`}
-                  onClick={() => !s.done && setEditSlot(s)}
-                  title={s.done ? s.niche : `${s.niche} — clique pour personnaliser (heure, type)`}
-                  style={{
-                    width: 112,
-                    padding: '10px 8px',
-                    borderRadius: 12,
-                    background: s.done ? 'var(--panel-2)' : '#fff',
-                    border: s.done ? '1px solid var(--border)' : `2px dashed ${generating ? 'var(--accent)' : s.pinned || s.type ? 'var(--accent-strong)' : '#c9c9cf'}`,
-                    cursor: s.done ? 'default' : 'pointer',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: 6,
-                    fontFamily: 'inherit'
-                  }}
-                >
-                  <div style={{ fontWeight: 700, fontSize: 13, fontVariantNumeric: 'tabular-nums', color: s.done ? 'var(--muted)' : 'var(--accent-strong)' }}>
-                    {s.done ? s.eta : `≈ ${s.eta}`}{(s.pinned || s.type) && !s.done ? ' 📌' : ''}
-                  </div>
-                  <Avatar url={s.avatarUrl} name={s.user} size={30} />
-                  <div className="muted small" style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {s.handle ? '@' + s.handle : s.user}
-                  </div>
-                  <div className="small" style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>
-                    {s.done ? '✓ publiée' : generating ? '⚙️ création…' : s.niche.split(' (')[0]}
-                  </div>
-                </button>
-              )
-            })}
-          </div>
-          {activeGen && (
-            <div style={{ marginTop: 12 }}>
-              <div className="bar"><div style={{ width: `${genPct(activeGen.message)}%`, transition: 'width 0.4s ease' }} /></div>
-              <div className="muted small" style={{ marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activeGen.message}</div>
-            </div>
-          )}
-        </div>
-      )}
-      {editSlot && <SlotModal slot={editSlot} onClose={() => setEditSlot(null)} onSaved={load} toast={toast} />}
 
       {!status?.enabled ? (
         <div className="card" style={{ textAlign: 'center', padding: 36 }}>
@@ -1826,7 +1846,7 @@ type SeriesCfg = { enabled: boolean; title: string; universe: string; episode: n
 type AutopilotProfile = { username: string; handle: string | null; avatarUrl: string | null; niche: string; cta: string; perDay: number; series: SeriesCfg; doneToday: number }
 type AutopilotState = { enabled: boolean; perDay: number; busy: boolean; profiles: AutopilotProfile[] }
 
-function Autopilot({ toast }: { toast: (m: string) => void }): JSX.Element {
+function Autopilot({ toast, ideaVideo }: { toast: (m: string) => void; ideaVideo: IdeaVideoMap }): JSX.Element {
   const [state, setState] = useState<AutopilotState | null>(null)
   const [niches, setNiches] = useState<Record<string, string>>({})
   const [ctas, setCtas] = useState<Record<string, string>>({})
@@ -1897,6 +1917,8 @@ function Autopilot({ toast }: { toast: (m: string) => void }): JSX.Element {
         </div>
         <button className={`btn ${enabled ? '' : 'primary'}`} disabled={saving} onClick={toggle}>{enabled ? 'Désactiver' : 'Activer'}</button>
       </div>
+
+      <TodayPlan ideaVideo={ideaVideo} toast={toast} />
 
       <div className="card">
         <div style={{ fontWeight: 600, marginBottom: 4 }}>Cadence, niche &amp; CTA par compte</div>
