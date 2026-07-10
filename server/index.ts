@@ -489,6 +489,35 @@ function seriesForProfile(user: string): SeriesState | null {
   if (!s || !s.enabled || !(s.title || '').trim() || !(s.universe || '').trim()) return null
   return { enabled: true, title: s.title.trim(), universe: s.universe.trim(), episode: Math.max(1, Number(s.episode) || 1), recap: (s.recap || '').trim() }
 }
+// ── Créneaux personnalisés du jour : heure et/ou type choisis PAR VIDÉO.
+// autopilot_slot_overrides = { [YYYY-MM-DD]: { "<user>:<ordinal>": { hm?, type?, subject? } } }
+// (on ne conserve que le jour courant ; type: 'niche' | 'serie' | 'custom')
+type SlotOverride = { hm?: number; type?: string; subject?: string }
+function slotOverrides(): Record<string, Record<string, SlotOverride>> {
+  try {
+    const raw = repo.getSetting('autopilot_slot_overrides')
+    if (raw) {
+      const o = JSON.parse(raw) as unknown
+      if (o && typeof o === 'object') return o as Record<string, Record<string, SlotOverride>>
+    }
+  } catch {
+    /* JSON invalide → vide */
+  }
+  return {}
+}
+/** Série CONFIGURÉE (titre + univers remplis), même si le toggle est désactivé — pour forcer un épisode sur un créneau. */
+function seriesConfiguredFor(user: string): SeriesState | null {
+  const s = autopilotSeries()[user]
+  if (!s || !(s.title || '').trim() || !(s.universe || '').trim()) return null
+  return {
+    enabled: !!s.enabled,
+    title: s.title.trim(),
+    universe: s.universe.trim(),
+    episode: Math.max(1, Number(s.episode) || 1),
+    recap: (s.recap || '').trim()
+  }
+}
+
 // ── Cadence par compte : autopilot_per_day_map = { [user]: 0..5 } (0 = en pause).
 // Repli sur le réglage global `autopilot_per_day` ; les séries sont plafonnées à 1/jour.
 function perDayMap(): Record<string, number> {
@@ -553,40 +582,63 @@ async function runAutopilotTick(force = false): Promise<void> {
   if (!profiles.length) return
   // Quota du jour PAR COMPTE (réglable individuellement ; séries plafonnées à 1/jour).
   const perDayFor = perDayForProfile
+  const ovToday = slotOverrides()[today] ?? {}
+  const { hm: nowHm } = parisClock()
+  const quotaOk = (u: string): boolean => {
+    const ts = Number(repo.getSetting(`quota_reached_${u}`)) || 0
+    return !(ts && Date.now() - ts < 6 * 60 * 60 * 1000)
+  }
+  const doneOf = (u: string): number => Number(repo.getSetting(`autopilot_count_${u}_${today}`)) || 0
 
-  // ── Lissage horaire (ignoré en mode test « force ») ──
-  // On ne poste que dans la fenêtre Paris, et on étale : à un instant t, on
-  // n'a le droit d'avoir produit que « part de la fenêtre écoulée × objectif ».
-  // Résultat : les vidéos sont réparties régulièrement de 9h à 23h, plus la nuit.
+  // ── Créneau ÉPINGLÉ arrivé à échéance ? (heure choisie à la main sur un bloc
+  // du planning — prioritaire sur le lissage, et valable même hors fenêtre 9h-23h)
+  let picked: { user: string; done: number } | null = null
   if (!force) {
-    const { hm } = parisClock()
-    if (hm < PUB_START_HOUR || hm >= PUB_END_HOUR) return
-    const windowLen = PUB_END_HOUR - PUB_START_HOUR
-    const target = profiles.reduce((s, u) => s + perDayFor(u), 0)
-    const producedToday = profiles.reduce(
-      (s, u) => s + (Number(repo.getSetting(`autopilot_count_${u}_${today}`)) || 0),
-      0
-    )
-    const expected = Math.ceil(((hm - PUB_START_HOUR) / windowLen) * target)
-    if (producedToday >= expected) return // en avance sur le planning → on attend
+    let bestHm = Infinity
+    for (const u of profiles) {
+      if (!quotaOk(u)) continue
+      const d = doneOf(u)
+      if (d >= perDayFor(u)) continue
+      const o = ovToday[`${u}:${d + 1}`]
+      if (o?.hm != null && o.hm <= nowHm && o.hm < bestHm) {
+        picked = { user: u, done: d }
+        bestHm = o.hm
+      }
+    }
   }
 
-  // Comptes éligibles (pas saturés, pas encore à leur quota du jour).
-  const eligible: { user: string; done: number }[] = []
-  for (const user of profiles) {
-    const quotaTs = Number(repo.getSetting(`quota_reached_${user}`)) || 0
-    if (quotaTs && Date.now() - quotaTs < 6 * 60 * 60 * 1000) continue // saturé récemment
-    const done = Number(repo.getSetting(`autopilot_count_${user}_${today}`)) || 0
-    if (done >= perDayFor(user)) continue
-    eligible.push({ user, done })
-  }
-  if (!eligible.length) return
+  if (!picked) {
+    // ── Lissage horaire (ignoré en mode test « force ») ──
+    // On ne poste que dans la fenêtre Paris, et on étale : à un instant t, on
+    // n'a le droit d'avoir produit que « part de la fenêtre écoulée × objectif ».
+    if (!force) {
+      if (nowHm < PUB_START_HOUR || nowHm >= PUB_END_HOUR) return
+      const windowLen = PUB_END_HOUR - PUB_START_HOUR
+      const target = profiles.reduce((s, u) => s + perDayFor(u), 0)
+      const producedToday = profiles.reduce((s, u) => s + doneOf(u), 0)
+      const expected = Math.ceil(((nowHm - PUB_START_HOUR) / windowLen) * target)
+      if (producedToday >= expected) return // en avance sur le planning → on attend
+    }
 
-  // Round-robin : on sert d'abord le compte qui a le MOINS publié aujourd'hui
-  // (à égalité, l'ordre des comptes). Ainsi chaque compte reçoit sa 1re vidéo
-  // avant qu'un compte n'en reçoive une 2e — jamais de rafale sur un seul compte.
-  eligible.sort((a, b) => a.done - b.done)
-  const { user, done } = eligible[0]
+    // Comptes éligibles (pas saturés, pas au quota, pas épinglés pour plus tard).
+    const eligible: { user: string; done: number }[] = []
+    for (const user of profiles) {
+      if (!quotaOk(user)) continue
+      const done = doneOf(user)
+      if (done >= perDayFor(user)) continue
+      // Le prochain créneau de ce compte a une heure choisie plus tard → on attend.
+      const o = ovToday[`${user}:${done + 1}`]
+      if (!force && o?.hm != null && o.hm > nowHm) continue
+      eligible.push({ user, done })
+    }
+    if (!eligible.length) return
+    // Round-robin : on sert d'abord le compte qui a le MOINS publié aujourd'hui.
+    eligible.sort((a, b) => a.done - b.done)
+    picked = eligible[0]
+  }
+
+  const { user, done } = picked
+  const slotOv = ovToday[`${user}:${done + 1}`] ?? {}
   const niche = nicheForProfile(user)
   const countKey = `autopilot_count_${user}_${today}`
 
@@ -598,8 +650,14 @@ async function runAutopilotTick(force = false): Promise<void> {
     // Tendances TikTok du moment (si l'API est configurée) → scénarios ancrés sur l'actu.
     const trends = await getTrendsCached()
 
-    // Mode série (feuilleton) : épisode suivant de l'histoire ; sinon idée de niche.
-    const series = seriesForProfile(user)
+    // Type du créneau : auto (série si activée, sinon niche) / niche forcée /
+    // épisode de série forcé / sujet libre choisi sur le bloc du planning.
+    const subject = (slotOv.subject ?? '').trim()
+    let series: SeriesState | null
+    if (slotOv.type === 'serie') series = seriesConfiguredFor(user)
+    else if (slotOv.type === 'niche' || (slotOv.type === 'custom' && subject)) series = null
+    else series = seriesForProfile(user)
+
     let idea: import('./ideas').ViralIdea
     let ideaLabel = niche
     let nextRecap: string | null = null
@@ -614,11 +672,13 @@ async function runAutopilotTick(force = false): Promise<void> {
       const geminiKey = getEncrypted('gemini_key')
       if (geminiKey) refPath = await ensureSeriesRef(user, series, geminiKey)
     } else {
-      emitLog(`Pilote auto : génération pour « ${user} » (niche : ${niche})…`)
-      const { ideas, usage } = await generateViralIdeas({ apiKey: anthropicKey, model, niche, count: 1, trends })
+      const topic = slotOv.type === 'custom' && subject ? subject : niche
+      emitLog(`Pilote auto : génération pour « ${user} » (${slotOv.type === 'custom' && subject ? 'sujet : ' : 'niche : '}${topic})…`)
+      const { ideas, usage } = await generateViralIdeas({ apiKey: anthropicKey, model, niche: topic, count: 1, trends })
       if (usage) addSpend(model, usage)
       if (!ideas.length) { emitLog(`Pilote auto : aucune idée générée pour « ${user} ».`); return }
       idea = ideas[0]
+      if (slotOv.type === 'custom' && subject) ideaLabel = subject
     }
 
     const saved = repo.createIdea(ideaLabel, idea)
@@ -1216,8 +1276,22 @@ app.get('/api/autopilot/plan', wrap(async (_req, res) => {
     if (mm === 60) { hh += 1; mm = 0 }
     return `${String(hh).padStart(2, '0')}:${String(Math.max(0, mm)).padStart(2, '0')}`
   }
-  type Slot = { user: string; handle: string | null; avatarUrl: string | null; niche: string; ordinal: number; etaHm: number; eta: string; done: boolean }
+  type Slot = {
+    user: string
+    handle: string | null
+    avatarUrl: string | null
+    niche: string
+    ordinal: number
+    etaHm: number
+    eta: string
+    done: boolean
+    pinned?: boolean
+    type?: string
+    subject?: string
+    hasSeries?: boolean
+  }
   const slots: Slot[] = []
+  const ovToday = slotOverrides()[today] ?? {}
 
   // Heures RÉELLES + titres des vidéos publiées aujourd'hui, par compte.
   const doneTimes = new Map<string, { at: number; title: string | null }[]>()
@@ -1278,24 +1352,76 @@ app.get('/api/autopilot/plan', wrap(async (_req, res) => {
     if (!best) break
     remaining.set(best, (remaining.get(best) ?? 0) - 1)
     const m = meta.get(best)
-    const etaHm = winStart + step * i
+    const ordinal = nextOrdinal.get(best) ?? 1
+    const ov = ovToday[`${best}:${ordinal}`]
     const bestSerie = seriesForProfile(best)
+    const confSerie = seriesConfiguredFor(best)
+    // Libellé selon le type effectif du créneau (personnalisé ou auto).
+    let label: string
+    if (ov?.type === 'custom' && (ov.subject ?? '').trim()) label = `Sujet : ${(ov.subject ?? '').trim()}`
+    else if (ov?.type === 'niche') label = nicheForProfile(best)
+    else if (ov?.type === 'serie' && confSerie) label = `Série : ${confSerie.title} — Ép. ${confSerie.episode}`
+    else label = bestSerie ? `Série : ${bestSerie.title} — Ép. ${bestSerie.episode}` : nicheForProfile(best)
+    const etaHm = ov?.hm != null ? ov.hm : winStart + step * i
     slots.push({
       user: best,
       handle: m?.tiktokHandle ?? null,
       avatarUrl: m?.avatarUrl ?? null,
-      niche: bestSerie ? `Série : ${bestSerie.title} — Ép. ${bestSerie.episode}` : nicheForProfile(best),
-      ordinal: nextOrdinal.get(best) ?? 1,
+      niche: label,
+      ordinal,
       etaHm,
       eta: fmt(etaHm),
-      done: false
+      done: false,
+      pinned: ov?.hm != null,
+      type: ov?.type,
+      subject: ov?.subject,
+      hasSeries: !!confSerie
     })
-    nextOrdinal.set(best, (nextOrdinal.get(best) ?? 1) + 1)
+    nextOrdinal.set(best, ordinal + 1)
   }
 
   slots.sort((a, b) => a.etaHm - b.etaHm)
   const targetPerDay = profiles.reduce((s, u) => s + perDayForProfile(u), 0)
   res.json({ enabled, perDay, targetPerDay, window: win, nowHm, today, slots })
+}))
+// Personnalise un créneau du jour (heure et/ou type) — clic sur un bloc du planning.
+app.post('/api/autopilot/slot', wrap((req, res) => {
+  const b = (req.body ?? {}) as { user?: unknown; ordinal?: unknown; hm?: unknown; type?: unknown; subject?: unknown; reset?: unknown }
+  const user = String(b.user ?? '').trim()
+  const ordinal = Math.max(1, Math.round(Number(b.ordinal)) || 1)
+  if (!user || !uploadPostProfiles().includes(user)) return res.status(400).json({ error: 'Compte inconnu' })
+  const today = dayKey()
+  const map = slotOverrides()[today] ?? {}
+  const key = `${user}:${ordinal}`
+  if (b.reset === true) {
+    delete map[key]
+  } else {
+    const o: SlotOverride = { ...map[key] }
+    if (b.hm !== undefined) {
+      const hm = Number(b.hm)
+      if (b.hm === null || !Number.isFinite(hm)) delete o.hm
+      else o.hm = Math.max(0, Math.min(23.98, hm))
+    }
+    if (b.type !== undefined) {
+      const t = String(b.type ?? '')
+      if (!t || t === 'auto') {
+        delete o.type
+        delete o.subject
+      } else if (['niche', 'serie', 'custom'].includes(t)) {
+        o.type = t
+      }
+    }
+    if (b.subject !== undefined) {
+      const s = String(b.subject ?? '').trim().slice(0, 200)
+      if (s) o.subject = s
+      else delete o.subject
+    }
+    if (o.hm == null && !o.type) delete map[key]
+    else map[key] = o
+  }
+  // On ne conserve que le jour courant (les personnalisations sont journalières).
+  repo.setSetting('autopilot_slot_overrides', JSON.stringify({ [today]: map }))
+  res.json({ ok: true })
 }))
 
 // TikTok

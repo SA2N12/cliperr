@@ -128,8 +128,23 @@ export const api = {
       targetPerDay?: number
       window: { start: number; end: number }
       nowHm: number
-      slots: { user: string; handle: string | null; avatarUrl: string | null; niche: string; ordinal: number; etaHm: number; eta: string; done: boolean }[]
+      slots: {
+        user: string
+        handle: string | null
+        avatarUrl: string | null
+        niche: string
+        ordinal: number
+        etaHm: number
+        eta: string
+        done: boolean
+        pinned?: boolean
+        type?: string
+        subject?: string
+        hasSeries?: boolean
+      }[]
     }>('/api/autopilot/plan'),
+  saveAutopilotSlot: (slot: { user: string; ordinal: number; hm?: number | null; type?: string | null; subject?: string | null; reset?: boolean }) =>
+    post<{ ok: boolean }>('/api/autopilot/slot', slot),
 
   // Idées virales + tendances
   generateIdeas: (niche: string, count: number, trends: string[]) =>

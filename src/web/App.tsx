@@ -422,7 +422,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
         {page === 'ideas' && <Ideas toast={showToast} go={setPage} />}
         {page === 'history' && <History sources={sources} clips={clips} progress={progress} onRefresh={refresh} toast={showToast} goClips={() => setPage('clips')} />}
         {page === 'clips' && <Clips clips={clips} sources={sources} onRefresh={refresh} toast={showToast} ttProfile={ttProfile} scope={scope} />}
-        {page === 'queue' && <Queue clips={clips} go={setPage} scope={scope} ideaVideo={ideaVideo} />}
+        {page === 'queue' && <Queue clips={clips} go={setPage} scope={scope} ideaVideo={ideaVideo} toast={showToast} />}
         {page === 'published' && <Published clips={clips} go={setPage} scope={scope} />}
         {page === 'settings' && <Settings toast={showToast} onTtProfile={setTtProfile} />}
       </main>
@@ -1230,8 +1230,82 @@ const CRON_LABELS: Record<string, string> = {
   '0 */3 * * *': 'toutes les 3 h'
 }
 
-type AutopilotSlot = { user: string; handle: string | null; avatarUrl: string | null; niche: string; ordinal: number; etaHm: number; eta: string; done: boolean }
-type AutopilotPlan = { enabled: boolean; perDay: number; window: { start: number; end: number }; nowHm: number; slots: AutopilotSlot[] }
+type AutopilotSlot = { user: string; handle: string | null; avatarUrl: string | null; niche: string; ordinal: number; etaHm: number; eta: string; done: boolean; pinned?: boolean; type?: string; subject?: string; hasSeries?: boolean }
+type AutopilotPlan = { enabled: boolean; perDay: number; targetPerDay?: number; window: { start: number; end: number }; nowHm: number; slots: AutopilotSlot[] }
+
+// Fenêtre d'édition d'un créneau du planning : heure + type de contenu.
+function SlotModal({ slot, onClose, onSaved, toast }: { slot: AutopilotSlot; onClose: () => void; onSaved: () => void; toast: (m: string) => void }): JSX.Element {
+  const [time, setTime] = useState(slot.eta.match(/^\d{2}:\d{2}$/) ? slot.eta : '12:00')
+  const [type, setType] = useState(slot.type ?? 'auto')
+  const [subject, setSubject] = useState(slot.subject ?? '')
+  const [busy, setBusy] = useState(false)
+
+  const apply = async (reset: boolean): Promise<void> => {
+    setBusy(true)
+    try {
+      if (reset) {
+        await api.saveAutopilotSlot({ user: slot.user, ordinal: slot.ordinal, reset: true })
+        toast('Créneau remis en automatique')
+      } else {
+        const [h, m] = time.split(':').map(Number)
+        await api.saveAutopilotSlot({
+          user: slot.user,
+          ordinal: slot.ordinal,
+          hm: Number.isFinite(h) && Number.isFinite(m) ? h + m / 60 : null,
+          type: type === 'auto' ? null : type,
+          subject: type === 'custom' ? subject : null
+        })
+        toast('Créneau personnalisé ✓')
+      }
+      onSaved()
+      onClose()
+    } catch (e) {
+      toast('Erreur : ' + (e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={() => !busy && onClose()}>
+      <div className="card" style={{ width: 440, maxWidth: '92vw' }} onClick={(e) => e.stopPropagation()}>
+        <div className="row" style={{ marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Avatar url={slot.avatarUrl} name={slot.user} size={32} />
+            <div>
+              <div style={{ fontWeight: 700 }}>{slot.handle ? '@' + slot.handle : slot.user}</div>
+              <div className="muted small">Vidéo n°{slot.ordinal} du jour</div>
+            </div>
+          </div>
+          <span className="chip">≈ {slot.eta}</span>
+        </div>
+
+        <label className="muted small" style={{ display: 'block', marginBottom: 4 }}>Heure de publication</label>
+        <input type="time" value={time} onChange={(e) => setTime(e.target.value)} style={{ marginBottom: 12 }} />
+
+        <label className="muted small" style={{ display: 'block', marginBottom: 4 }}>Type de vidéo</label>
+        <select className="input-full" value={type} onChange={(e) => setType(e.target.value)} style={{ marginBottom: 10 }}>
+          <option value="auto">Automatique (réglage du compte)</option>
+          <option value="niche">Vidéo de niche</option>
+          {slot.hasSeries && <option value="serie">Épisode de série</option>}
+          <option value="custom">Sujet personnalisé…</option>
+        </select>
+        {type === 'custom' && (
+          <input className="input-full" value={subject} placeholder="Sujet exact de la vidéo — ex. le mystère du vol MH370" onChange={(e) => setSubject(e.target.value)} style={{ marginBottom: 10 }} />
+        )}
+        <div className="muted small" style={{ marginBottom: 14 }}>L'heure choisie est prioritaire sur la répartition automatique (valable aujourd'hui uniquement).</div>
+
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          {(slot.pinned || slot.type) && <button className="btn" disabled={busy} onClick={() => void apply(true)}>Réinitialiser</button>}
+          <button className="btn" disabled={busy} onClick={onClose}>Annuler</button>
+          <button className="btn primary" disabled={busy || (type === 'custom' && !subject.trim())} onClick={() => void apply(false)}>
+            {busy ? 'Enregistrement…' : 'Enregistrer'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 type IdeaVideoMap = Record<number, { status: 'running' | 'done' | 'error'; message: string }>
 
 // Avancement d'une génération de vidéo, de la création jusqu'au post (0→100).
@@ -1253,9 +1327,10 @@ function genPct(msg: string): number {
   return 5
 }
 
-function Queue({ clips, go, scope, ideaVideo }: { clips: ClipDTO[]; go: (p: Page) => void; scope: string; ideaVideo: IdeaVideoMap }): JSX.Element {
+function Queue({ clips, go, scope, ideaVideo, toast }: { clips: ClipDTO[]; go: (p: Page) => void; scope: string; ideaVideo: IdeaVideoMap; toast: (m: string) => void }): JSX.Element {
   const [status, setStatus] = useState<{ enabled: boolean; paused: boolean; cron: string; nextRunAt: number | null; intervalSec: number | null; lastRunAt: number | null } | null>(null)
   const [plan, setPlan] = useState<AutopilotPlan | null>(null)
+  const [editSlot, setEditSlot] = useState<AutopilotSlot | null>(null)
   const [now, setNow] = useState(Date.now())
   const load = useCallback((): void => {
     api.schedulerStatus().then(setStatus).catch(() => undefined)
@@ -1325,40 +1400,51 @@ function Queue({ clips, go, scope, ideaVideo }: { clips: ClipDTO[]; go: (p: Page
               <button className="btn small" onClick={togglePause}>Reprendre</button>
             </div>
           )}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 14 }}>
             {slots.map((s, i) => {
               const generating = i === nextIdx && !!activeGen
               return (
-                <div key={`${s.user}-${s.ordinal}`}>
-                  <div className="row" style={{ gap: 12 }}>
-                    <div style={{ width: 58, flexShrink: 0, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: s.done ? 'var(--muted)' : 'var(--accent-strong)' }}>{s.done ? s.eta : `≈ ${s.eta}`}</div>
-                    <Avatar url={s.avatarUrl} name={s.user} size={30} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.handle ? '@' + s.handle : s.user}</div>
-                      <div className="muted small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.niche.split(' (')[0]}</div>
-                    </div>
-                    {s.done ? (
-                      <span className="chip" style={{ background: '#dcfce7', color: 'var(--good)' }}>✓ publiée</span>
-                    ) : generating ? (
-                      <span className="chip" style={{ background: 'var(--accent-soft-2)' }}>⚙️ en création</span>
-                    ) : i === nextIdx ? (
-                      <span className="chip">⏳ prochaine</span>
-                    ) : (
-                      <span className="muted small">à venir</span>
-                    )}
+                <button
+                  key={`${s.user}-${s.ordinal}`}
+                  onClick={() => !s.done && setEditSlot(s)}
+                  title={s.done ? s.niche : `${s.niche} — clique pour personnaliser (heure, type)`}
+                  style={{
+                    width: 112,
+                    padding: '10px 8px',
+                    borderRadius: 12,
+                    background: s.done ? 'var(--panel-2)' : '#fff',
+                    border: s.done ? '1px solid var(--border)' : `2px dashed ${generating ? 'var(--accent)' : s.pinned || s.type ? 'var(--accent-strong)' : '#c9c9cf'}`,
+                    cursor: s.done ? 'default' : 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: 6,
+                    fontFamily: 'inherit'
+                  }}
+                >
+                  <div style={{ fontWeight: 700, fontSize: 13, fontVariantNumeric: 'tabular-nums', color: s.done ? 'var(--muted)' : 'var(--accent-strong)' }}>
+                    {s.done ? s.eta : `≈ ${s.eta}`}{(s.pinned || s.type) && !s.done ? ' 📌' : ''}
                   </div>
-                  {generating && activeGen && (
-                    <div style={{ marginTop: 8, marginLeft: 70 }}>
-                      <div className="bar"><div style={{ width: `${genPct(activeGen.message)}%`, transition: 'width 0.4s ease' }} /></div>
-                      <div className="muted small" style={{ marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activeGen.message}</div>
-                    </div>
-                  )}
-                </div>
+                  <Avatar url={s.avatarUrl} name={s.user} size={30} />
+                  <div className="muted small" style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {s.handle ? '@' + s.handle : s.user}
+                  </div>
+                  <div className="small" style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>
+                    {s.done ? '✓ publiée' : generating ? '⚙️ création…' : s.niche.split(' (')[0]}
+                  </div>
+                </button>
               )
             })}
           </div>
+          {activeGen && (
+            <div style={{ marginTop: 12 }}>
+              <div className="bar"><div style={{ width: `${genPct(activeGen.message)}%`, transition: 'width 0.4s ease' }} /></div>
+              <div className="muted small" style={{ marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activeGen.message}</div>
+            </div>
+          )}
         </div>
       )}
+      {editSlot && <SlotModal slot={editSlot} onClose={() => setEditSlot(null)} onSaved={load} toast={toast} />}
 
       {!status?.enabled ? (
         <div className="card" style={{ textAlign: 'center', padding: 36 }}>
