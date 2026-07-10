@@ -25,6 +25,8 @@ export interface GenerateIdeasOptions {
   niche: string
   count: number
   trends?: string[]
+  /** Titres des vidéos déjà publiées sur ce compte — pour éviter de répéter les mêmes sujets. */
+  recentTitles?: string[]
 }
 
 function normTag(t: string): string {
@@ -57,7 +59,8 @@ export async function generateViralIdeas(
               script: {
                 type: 'array',
                 items: { type: 'string' },
-                description: 'Déroulé plan par plan, 4 à 8 étapes courtes et concrètes'
+                description:
+                  'Déroulé plan par plan, 4 à 8 étapes courtes et concrètes. La DERNIÈRE étape doit être une question directe ou une affirmation clivante adressée au spectateur pour déclencher des commentaires (ex. « Et toi, tu aurais fait quoi ? », « Je suis le seul à penser ça ? »).'
               },
               format: { type: 'string', description: 'Format conseillé : durée, style de montage, sous-titres…' },
               hashtags: { type: 'array', items: { type: 'string' }, description: '5 à 8 hashtags pertinents, sans espace' }
@@ -78,9 +81,23 @@ export async function generateViralIdeas(
           .join('\n')}`
       : ''
 
-  const prompt = `Tu es un stratège de contenu TikTok expert en viralité. Propose ${count} idées de vidéos verticales ORIGINALES et à fort potentiel viral pour la niche/thème : « ${opts.niche} ».${trendsBlock}
+  const avoidBlock =
+    opts.recentTitles && opts.recentTitles.length
+      ? `\n\n⛔ SUJETS DÉJÀ TRAITÉS RÉCEMMENT SUR CE COMPTE — n'y reviens PAS et ne les reformule pas ; trouve des sujets ET des angles VRAIMENT différents :\n${opts.recentTitles
+          .slice(0, 30)
+          .map((t) => `- ${t}`)
+          .join('\n')}`
+      : ''
 
-Pour chaque idée : un titre accrocheur, un hook (3 premières secondes), l'angle qui la rend virale, un script plan par plan (4 à 8 étapes courtes et concrètes), un format conseillé (durée, style, sous-titres) et 5 à 8 hashtags. Sois concret et actionnable. Réponds en français, uniquement via l'outil propose_ideas.`
+  const prompt = `Tu es un stratège de contenu TikTok expert en viralité. Propose ${count} idées de vidéos verticales ORIGINALES et à fort potentiel viral pour la niche/thème : « ${opts.niche} ».${trendsBlock}${avoidBlock}
+
+Pour chaque idée : un titre accrocheur, un hook (3 premières secondes), l'angle qui la rend virale, un script plan par plan (4 à 8 étapes courtes et concrètes), un format conseillé (durée, style, sous-titres) et 5 à 8 hashtags.
+
+RÈGLES IMPORTANTES :
+- Chaque idée doit être NETTEMENT différente des sujets déjà traités (autre sujet, autre angle, autre accroche). VARIE les formats d'accroche (question, chiffre choc, POV, storytelling, mythe à casser, révélation…) — n'emploie pas toujours la même tournure.
+- La DERNIÈRE étape du script doit être une question directe ou une affirmation clivante adressée au spectateur, pour déclencher des COMMENTAIRES.
+
+Sois concret et actionnable. Réponds en français, uniquement via l'outil propose_ideas.`
 
   const msg = await client.messages.create({
     model,

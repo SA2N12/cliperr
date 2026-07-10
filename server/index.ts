@@ -852,7 +852,15 @@ async function runAutopilotTick(force = false): Promise<void> {
     } else {
       const topic = slotOv.type === 'custom' && subject ? subject : niche
       emitLog(`Pilote auto : génération pour « ${user} » (${slotOv.type === 'custom' && subject ? 'sujet : ' : 'niche : '}${topic})…`)
-      const { ideas, usage } = await generateViralIdeas({ apiKey: anthropicKey, model, niche: topic, count: 1, trends })
+      // Anti-répétition : on transmet à l'IA les titres récents du compte pour qu'elle
+      // évite de refaire les mêmes sujets (cause n°1 du plafonnement des vues).
+      const recentTitles = repo
+        .listClips()
+        .filter((c) => c.profile === user && !!c.title)
+        .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
+        .slice(0, 30)
+        .map((c) => c.title as string)
+      const { ideas, usage } = await generateViralIdeas({ apiKey: anthropicKey, model, niche: topic, count: 1, trends, recentTitles })
       if (usage) addSpend(model, usage)
       if (!ideas.length) { emitLog(`Pilote auto : aucune idée générée pour « ${user} ».`); return }
       idea = ideas[0]
