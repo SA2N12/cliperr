@@ -36,12 +36,14 @@ export function emitProgress(ev: unknown): void {
   broadcastRaw('progress', ev)
 }
 
-/** Ligne de journal (publication, planification, etc.). */
+/** Ligne de journal (publication, planification, etc.). Aussi en console (docker logs). */
 export function emitLog(message: string): void {
+  console.log(`[log] ${message}`)
   broadcastRaw('log', { message })
 }
 
-/** Progression de la génération d'une vidéo depuis une idée. */
+/** Progression de la génération d'une vidéo depuis une idée. Aussi en console (docker logs). */
 export function emitIdeaVideo(ev: { ideaId: number; status: 'running' | 'done' | 'error'; message: string }): void {
+  console.log(`[video ${ev.ideaId}] ${ev.status} — ${ev.message}`)
   broadcastRaw('ideavideo', ev)
 }

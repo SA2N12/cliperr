@@ -489,6 +489,27 @@ function seriesForProfile(user: string): SeriesState | null {
   if (!s || !s.enabled || !(s.title || '').trim() || !(s.universe || '').trim()) return null
   return { enabled: true, title: s.title.trim(), universe: s.universe.trim(), episode: Math.max(1, Number(s.episode) || 1), recap: (s.recap || '').trim() }
 }
+// ── Cadence par compte : autopilot_per_day_map = { [user]: 0..5 } (0 = en pause).
+// Repli sur le réglage global `autopilot_per_day` ; les séries sont plafonnées à 1/jour.
+function perDayMap(): Record<string, number> {
+  try {
+    const raw = repo.getSetting('autopilot_per_day_map')
+    if (raw) {
+      const o = JSON.parse(raw) as unknown
+      if (o && typeof o === 'object') return o as Record<string, number>
+    }
+  } catch {
+    /* JSON invalide → vide */
+  }
+  return {}
+}
+function perDayForProfile(user: string): number {
+  const globalPerDay = Math.max(1, Number(repo.getSetting('autopilot_per_day')) || 1)
+  const raw = perDayMap()[user]
+  const base = raw == null ? globalPerDay : Math.max(0, Math.min(5, Math.round(Number(raw)) || 0))
+  return seriesForProfile(user) ? Math.min(base, 1) : base
+}
+
 /** Après un épisode publié : incrémente le compteur et enregistre la mémoire de l'histoire. */
 function advanceSeries(user: string, recap: string): void {
   const map = autopilotSeries()
@@ -527,13 +548,11 @@ async function runAutopilotTick(force = false): Promise<void> {
   if (!force && repo.getSetting('autopilot_enabled') !== '1') return
   if (autopilotBusy) return
   if (repo.getSetting('queue_paused') === '1') return
-  const perDay = Math.max(1, Number(repo.getSetting('autopilot_per_day')) || 1)
   const today = dayKey()
   const profiles = uploadPostProfiles()
   if (!profiles.length) return
-  // Quota du jour par compte : les comptes en mode série sont plafonnés à
-  // 1 épisode/jour (rythme feuilleton + coût de l'animation vidéo).
-  const perDayFor = (u: string): number => (seriesForProfile(u) ? 1 : perDay)
+  // Quota du jour PAR COMPTE (réglable individuellement ; séries plafonnées à 1/jour).
+  const perDayFor = perDayForProfile
 
   // ── Lissage horaire (ignoré en mode test « force ») ──
   // On ne poste que dans la fenêtre Paris, et on étale : à un instant t, on
@@ -1088,9 +1107,11 @@ app.get('/api/autopilot', wrap(async (_req, res) => {
   const niches = autopilotNiches()
   const ctas = profileCtas()
   const seriesMap = autopilotSeries()
+  const globalPerDay = Math.max(1, Number(repo.getSetting('autopilot_per_day')) || 1)
+  const pdMap = perDayMap()
   res.json({
     enabled: repo.getSetting('autopilot_enabled') === '1',
-    perDay: Math.max(1, Number(repo.getSetting('autopilot_per_day')) || 1),
+    perDay: globalPerDay,
     busy: autopilotBusy,
     profiles: profiles.map((u) => {
       const s = seriesMap[u]
@@ -1100,6 +1121,7 @@ app.get('/api/autopilot', wrap(async (_req, res) => {
         avatarUrl: meta.get(u)?.avatarUrl ?? null,
         niche: (niches[u] ?? '').trim() || nicheForProfile(u),
         cta: (ctas[u] ?? '').trim(),
+        perDay: pdMap[u] == null ? globalPerDay : Math.max(0, Math.min(5, Math.round(Number(pdMap[u])) || 0)),
         series: {
           enabled: !!s?.enabled,
           title: (s?.title ?? '').trim(),
@@ -1112,10 +1134,18 @@ app.get('/api/autopilot', wrap(async (_req, res) => {
   })
 }))
 app.post('/api/autopilot', wrap((req, res) => {
-  const b = (req.body ?? {}) as { enabled?: unknown; perDay?: unknown; niches?: unknown; ctas?: unknown; series?: unknown }
+  const b = (req.body ?? {}) as { enabled?: unknown; perDay?: unknown; perDays?: unknown; niches?: unknown; ctas?: unknown; series?: unknown }
   const wasEnabled = repo.getSetting('autopilot_enabled') === '1'
   if (typeof b.enabled === 'boolean') repo.setSetting('autopilot_enabled', b.enabled ? '1' : '0')
   if (b.perDay != null) repo.setSetting('autopilot_per_day', String(Math.max(1, Math.min(5, Math.round(Number(b.perDay)) || 1))))
+  if (b.perDays && typeof b.perDays === 'object') {
+    const clean: Record<string, number> = {}
+    for (const [k, v] of Object.entries(b.perDays as Record<string, unknown>)) {
+      const n = Math.round(Number(v))
+      if (Number.isFinite(n)) clean[k] = Math.max(0, Math.min(5, n))
+    }
+    repo.setSetting('autopilot_per_day_map', JSON.stringify(clean))
+  }
   if (b.niches && typeof b.niches === 'object') {
     const clean: Record<string, string> = {}
     for (const [k, v] of Object.entries(b.niches as Record<string, unknown>)) {
@@ -1226,8 +1256,8 @@ app.get('/api/autopilot/plan', wrap(async (_req, res) => {
         done: true
       })
     }
-    // Les comptes en mode série sont plafonnés à 1 épisode/jour.
-    remaining.set(user, Math.max(0, (serie ? 1 : perDay) - done))
+    // Quota individuel par compte (séries plafonnées à 1 épisode/jour).
+    remaining.set(user, Math.max(0, perDayForProfile(user) - done))
   })
 
   // À venir : étalées régulièrement de maintenant → fin de fenêtre, en servant
@@ -1264,7 +1294,8 @@ app.get('/api/autopilot/plan', wrap(async (_req, res) => {
   }
 
   slots.sort((a, b) => a.etaHm - b.etaHm)
-  res.json({ enabled, perDay, window: win, nowHm, today, slots })
+  const targetPerDay = profiles.reduce((s, u) => s + perDayForProfile(u), 0)
+  res.json({ enabled, perDay, targetPerDay, window: win, nowHm, today, slots })
 }))
 
 // TikTok

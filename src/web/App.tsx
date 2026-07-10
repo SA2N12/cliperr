@@ -1317,7 +1317,7 @@ function Queue({ clips, go, scope, ideaVideo }: { clips: ClipDTO[]; go: (p: Page
               <strong>Pilote auto — aujourd’hui</strong>
               <div className="muted small">{doneCount}/{slots.length} publiée{slots.length > 1 ? 's' : ''} · heures réelles pour les publiées, estimations (≈) pour les suivantes jusqu’à {plan.window.end}h</div>
             </div>
-            <span className="pill-badge"><span className="dot" /> {plan.perDay}/jour/compte</span>
+            <span className="pill-badge"><span className="dot" /> {plan.targetPerDay ?? plan.perDay} vidéo{(plan.targetPerDay ?? plan.perDay) > 1 ? 's' : ''}/jour</span>
           </div>
           {status?.paused && (
             <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 10, background: '#fef3c7', color: '#b45309', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
@@ -1737,7 +1737,7 @@ function Sparkline({ data }: { data: number[] }): JSX.Element | null {
 
 // ── Pilote automatique : contenu quotidien autonome par compte ──
 type SeriesCfg = { enabled: boolean; title: string; universe: string; episode: number }
-type AutopilotProfile = { username: string; handle: string | null; avatarUrl: string | null; niche: string; cta: string; series: SeriesCfg; doneToday: number }
+type AutopilotProfile = { username: string; handle: string | null; avatarUrl: string | null; niche: string; cta: string; perDay: number; series: SeriesCfg; doneToday: number }
 type AutopilotState = { enabled: boolean; perDay: number; busy: boolean; profiles: AutopilotProfile[] }
 
 function Autopilot({ toast }: { toast: (m: string) => void }): JSX.Element {
@@ -1745,8 +1745,8 @@ function Autopilot({ toast }: { toast: (m: string) => void }): JSX.Element {
   const [niches, setNiches] = useState<Record<string, string>>({})
   const [ctas, setCtas] = useState<Record<string, string>>({})
   const [series, setSeries] = useState<Record<string, SeriesCfg>>({})
+  const [perDays, setPerDays] = useState<Record<string, number>>({})
   const [enabled, setEnabled] = useState(false)
-  const [perDay, setPerDay] = useState(1)
   const [saving, setSaving] = useState(false)
 
   const load = useCallback(async (): Promise<void> => {
@@ -1754,14 +1754,15 @@ function Autopilot({ toast }: { toast: (m: string) => void }): JSX.Element {
       const s = await api.autopilotState()
       setState(s)
       setEnabled(s.enabled)
-      setPerDay(s.perDay)
       const n: Record<string, string> = {}
       const c: Record<string, string> = {}
       const sr: Record<string, SeriesCfg> = {}
-      s.profiles.forEach((p) => { n[p.username] = p.niche; c[p.username] = p.cta; sr[p.username] = p.series })
+      const pd: Record<string, number> = {}
+      s.profiles.forEach((p) => { n[p.username] = p.niche; c[p.username] = p.cta; sr[p.username] = p.series; pd[p.username] = p.perDay })
       setNiches(n)
       setCtas(c)
       setSeries(sr)
+      setPerDays(pd)
     } catch { /* ignore */ }
   }, [])
   useEffect(() => { void load() }, [load])
@@ -1774,7 +1775,7 @@ function Autopilot({ toast }: { toast: (m: string) => void }): JSX.Element {
     try {
       const seriesOut: Record<string, { enabled: boolean; title: string; universe: string }> = {}
       for (const [u, s] of Object.entries(series)) seriesOut[u] = { enabled: s.enabled, title: s.title, universe: s.universe }
-      await api.saveAutopilot({ enabled: over?.enabled ?? enabled, perDay, niches, ctas, series: seriesOut })
+      await api.saveAutopilot({ enabled: over?.enabled ?? enabled, perDays, niches, ctas, series: seriesOut })
       toast('Pilote auto enregistré')
       await load()
     } catch (e) {
@@ -1790,6 +1791,11 @@ function Autopilot({ toast }: { toast: (m: string) => void }): JSX.Element {
   }
 
   const profiles = state?.profiles ?? []
+  // Total effectif par jour (les séries sont plafonnées à 1 épisode/jour).
+  const totalPerDay = profiles.reduce((s, p) => {
+    const pd = perDays[p.username] ?? p.perDay
+    return s + (series[p.username]?.enabled ? Math.min(pd, 1) : pd)
+  }, 0)
 
   return (
     <>
@@ -1801,25 +1807,15 @@ function Autopilot({ toast }: { toast: (m: string) => void }): JSX.Element {
       <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16, borderColor: enabled ? 'var(--accent)' : undefined }}>
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: 700, fontSize: 16 }}>{enabled ? '🟢 Pilote actif' : '⚪ Pilote en pause'}</div>
-          <div className="muted small">{enabled ? `Génère et publie ${perDay} vidéo${perDay > 1 ? 's' : ''}/jour sur chaque compte, tout seul.` : 'Active-le pour lancer la production quotidienne 100% autonome.'}</div>
+          <div className="muted small">{enabled ? `Génère et publie automatiquement selon la cadence de chaque compte — ${totalPerDay} vidéo${totalPerDay > 1 ? 's' : ''}/jour au total.` : 'Active-le pour lancer la production quotidienne 100% autonome.'}</div>
         </div>
         <button className={`btn ${enabled ? '' : 'primary'}`} disabled={saving} onClick={toggle}>{enabled ? 'Désactiver' : 'Activer'}</button>
       </div>
 
-      <div className="card" style={{ marginBottom: 16 }}>
-        <div style={{ fontWeight: 600, marginBottom: 8 }}>Vidéos par jour et par compte</div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {[1, 2, 3, 4, 5].map((n) => (
-            <button key={n} className={`btn ${perDay === n ? 'primary' : ''}`} onClick={() => setPerDay(n)}>{n}/jour</button>
-          ))}
-        </div>
-        <div className="muted small" style={{ marginTop: 8 }}>Publication étalée automatiquement de 9h à 23h (pas la nuit). 1/jour reste le plus sûr côté anti-spam TikTok.</div>
-      </div>
-
       <div className="card">
-        <div style={{ fontWeight: 600, marginBottom: 4 }}>Niche &amp; CTA par compte</div>
+        <div style={{ fontWeight: 600, marginBottom: 4 }}>Cadence, niche &amp; CTA par compte</div>
         <div className="muted small" style={{ marginBottom: 12 }}>
-          Le contenu de chaque compte tourne autour de sa niche. Le <b>CTA</b> (appel à l’action, ex. « lien en bio ») est ajouté automatiquement à la fin de <b>chaque légende</b> publiée sur ce compte — c’est lui qui transforme les vues en clics.
+          Règle le nombre de <b>vidéos/jour</b> compte par compte (0 = compte en pause). La publication est étalée de 9h à 23h. Le <b>CTA</b> est ajouté automatiquement à la fin de <b>chaque légende</b> publiée sur ce compte.
         </div>
         {profiles.length === 0 ? (
           <div className="muted">Aucun compte upload-post connecté. Ajoute-les dans Réglages.</div>
@@ -1833,6 +1829,16 @@ function Autopilot({ toast }: { toast: (m: string) => void }): JSX.Element {
                   <div className="muted small">{p.doneToday} publiée{p.doneToday > 1 ? 's' : ''} auj.</div>
                 </div>
                 <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span className="muted small" style={{ whiteSpace: 'nowrap' }}>Vidéos / jour :</span>
+                    <select value={perDays[p.username] ?? p.perDay} onChange={(e) => setPerDays((m) => ({ ...m, [p.username]: Number(e.target.value) }))}>
+                      <option value={0}>0 — en pause</option>
+                      {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                    {series[p.username]?.enabled && (perDays[p.username] ?? p.perDay) > 1 && (
+                      <span className="muted small">série : plafonné à 1/jour</span>
+                    )}
+                  </div>
                   <input className="input-full" value={niches[p.username] ?? ''} placeholder="Niche — ex. mystères non résolus…" onChange={(e) => setNiches((m) => ({ ...m, [p.username]: e.target.value }))} />
                   <input className="input-full" value={ctas[p.username] ?? ''} placeholder="CTA ajouté aux légendes — ex. 🔗 Mon guide gratuit est dans la bio" onChange={(e) => setCtas((m) => ({ ...m, [p.username]: e.target.value }))} />
                   <label className="switch" style={{ marginTop: 4 }}>

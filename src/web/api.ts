@@ -107,6 +107,7 @@ export const api = {
         avatarUrl: string | null
         niche: string
         cta: string
+        perDay: number
         series: { enabled: boolean; title: string; universe: string; episode: number }
         doneToday: number
       }[]
@@ -114,6 +115,7 @@ export const api = {
   saveAutopilot: (cfg: {
     enabled?: boolean
     perDay?: number
+    perDays?: Record<string, number>
     niches?: Record<string, string>
     ctas?: Record<string, string>
     series?: Record<string, { enabled: boolean; title: string; universe: string }>
@@ -123,6 +125,7 @@ export const api = {
     req<{
       enabled: boolean
       perDay: number
+      targetPerDay?: number
       window: { start: number; end: number }
       nowHm: number
       slots: { user: string; handle: string | null; avatarUrl: string | null; niche: string; ordinal: number; etaHm: number; eta: string; done: boolean }[]
