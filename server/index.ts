@@ -782,11 +782,22 @@ async function runAutopilotTick(force = false): Promise<void> {
       const publishBest = async (candidates: import('../src/shared/types').ClipDTO[]): Promise<boolean> => {
         const clip = candidates.sort((a, b) => (b.score ?? 0) - (a.score ?? 0))[0]
         if (!clip) return false
-        repo.setClipReview(clip.id, 'approved')
-        await publishClipById(clip.id, paths, emitLog, { uploadPostUser: user })
-        markDone(user, ordinal)
-        emitLog(`Pilote auto : clip publié sur « ${user} » (${done + 1}/${perDayFor(user)} aujourd'hui).`)
-        return true
+        try {
+          // Publication en DIRECT par le pilote (publishClipById marque 'published' en
+          // cas de succès → le planificateur l'ignore ensuite).
+          await publishClipById(clip.id, paths, emitLog, { uploadPostUser: user })
+          markDone(user, ordinal)
+          emitLog(`Pilote auto : clip publié sur « ${user} » (${done + 1}/${perDayFor(user)} aujourd'hui).`)
+          return true
+        } catch (e) {
+          // Échec : on RETIRE le clip de la file de republication automatique
+          // (nextApprovedUnpublished repêche les clips 'approved' non publiés). Comme
+          // les uploads TikTok sont asynchrones, un clip marqué 'failed' mais en réalité
+          // posté serait re-publié par le planificateur → DOUBLON (ex. le scanner ×3).
+          // On préfère regénérer une nouvelle vidéo au cycle suivant.
+          repo.setClipReview(clip.id, 'pending')
+          throw e
+        }
       }
 
       let clipUrl = /^https?:\/\//i.test(subject) ? subject : null
