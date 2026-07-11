@@ -289,57 +289,17 @@ function cronNext(expr: string, from: Date): Date | null {
 }
 
 // ── Scheduler ──
+// Planificateur de publication RETIRÉ : le pilote auto est désormais le SEUL moteur de
+// publication (il publie chaque vidéo en direct, sans re-publication d'une file → plus
+// de doublons). Le compte à rebours / la pause / la file de la page « File d'attente »
+// reflètent le pilote (cron autopilot */15 + lissage 9h-23h, cf. /api/autopilot/plan),
+// et non plus ce planificateur.
 let task: ScheduledTask | null = null
 function reloadScheduler(): void {
   if (task) {
     task.stop()
     task = null
   }
-  if (repo.getSetting('schedule_enabled') !== '1') return
-  const expr = repo.getSetting('schedule_cron') || '*/30 * * * *'
-  if (!cron.validate(expr)) {
-    emitLog(`Planification : expression cron invalide « ${expr} ».`)
-    return
-  }
-  task = cron.schedule(expr, () => {
-    void (async () => {
-      if (repo.getSetting('queue_paused') === '1') {
-        emitLog('Planification : file en pause, publication ignorée.')
-        return
-      }
-      const cooldownUntil = Number(repo.getSetting('uploadpost_cooldown_until')) || 0
-      if (Date.now() < cooldownUntil) {
-        emitLog(`Planification : upload-post limite les requêtes → pause jusqu'à ${new Date(cooldownUntil).toLocaleTimeString()}.`)
-        return
-      }
-      // Profil actif (choisi en haut à droite). Si son quota journalier a été
-      // atteint récemment, on ne retente qu'après ~30 min (auto-détection de reprise).
-      const target = activeProfile()
-      const quotaTs = Number(repo.getSetting(`quota_reached_${target}`)) || 0
-      if (quotaTs && Date.now() - quotaTs < 30 * 60 * 1000) {
-        emitLog(`Planification : quota atteint pour « ${target} » — prochaine tentative dans ~30 min.`)
-        return
-      }
-      const clip = repo.nextApprovedUnpublished()
-      if (!clip) {
-        emitLog('Planification : aucun clip validé en attente.')
-        return
-      }
-      try {
-        await publishClipById(clip.id, paths, emitLog)
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e)
-        if (/\b429\b|too many requests/i.test(msg)) {
-          // upload-post limite le nombre de requêtes → pause courte, ça se rétablit vite.
-          repo.setSetting('uploadpost_cooldown_until', String(Date.now() + 8 * 60 * 1000))
-          emitLog('Planification : upload-post limite les requêtes (429) → pause 8 min.')
-        }
-        // spam_risk : publishClipById a déjà posé le « quota atteint » du profil →
-        // la bannière s'affiche et le scheduler retentera dans ~30 min (voir plus haut).
-      }
-    })()
-  })
-  emitLog(`Planification activée (cron « ${expr} »).`)
 }
 
 // ── Génération de vidéo « faceless » depuis une idée (une à la fois) ──
@@ -1490,12 +1450,13 @@ app.post('/api/autopilot/run-now', wrap((_req, res) => {
 // maintenant jusqu'à la fin de la fenêtre, dans l'ordre round-robin du pilote).
 app.get('/api/autopilot/plan', wrap(async (_req, res) => {
   const enabled = repo.getSetting('autopilot_enabled') === '1'
+  const paused = repo.getSetting('queue_paused') === '1'
   const perDay = Math.max(1, Number(repo.getSetting('autopilot_per_day')) || 1)
   const profiles = uploadPostProfiles()
   const n = profiles.length
   const { hm: nowHm } = parisClock()
   const win = { start: PUB_START_HOUR, end: PUB_END_HOUR }
-  if (!n) return res.json({ enabled, perDay, window: win, nowHm, slots: [] })
+  if (!n) return res.json({ enabled, paused, perDay, window: win, nowHm, slots: [] })
   const meta = new Map((await cachedUploadPostProfiles()).map((p) => [p.username, p]))
   const today = dayKey()
   const fmt = (h: number): string => {
@@ -1626,7 +1587,7 @@ app.get('/api/autopilot/plan', wrap(async (_req, res) => {
 
   slots.sort((a, b) => a.etaHm - b.etaHm)
   const targetPerDay = profiles.reduce((s, u) => s + perDayForProfile(u), 0)
-  res.json({ enabled, perDay, targetPerDay, window: win, nowHm, today, slots })
+  res.json({ enabled, paused, perDay, targetPerDay, window: win, nowHm, today, slots })
 }))
 // Réglages d'UN SEUL compte (fusion dans les maps existantes — pas de remplacement
 // global) : utilisé par la fenêtre ⚙️ des lignes du planning.

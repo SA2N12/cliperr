@@ -125,6 +125,7 @@ export const api = {
   autopilotPlan: () =>
     req<{
       enabled: boolean
+      paused?: boolean
       perDay: number
       targetPerDay?: number
       window: { start: number; end: number }

@@ -422,7 +422,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
         {page === 'ideas' && <Ideas toast={showToast} go={setPage} />}
         {page === 'history' && <History sources={sources} clips={clips} progress={progress} onRefresh={refresh} toast={showToast} goClips={() => setPage('clips')} />}
         {page === 'clips' && <Clips clips={clips} sources={sources} onRefresh={refresh} toast={showToast} ttProfile={ttProfile} scope={scope} />}
-        {page === 'queue' && <Queue clips={clips} go={setPage} scope={scope} ideaVideo={ideaVideo} toast={showToast} />}
+        {page === 'queue' && <Queue go={setPage} scope={scope} ideaVideo={ideaVideo} toast={showToast} />}
         {page === 'published' && <Published clips={clips} go={setPage} scope={scope} />}
         {page === 'settings' && <Settings toast={showToast} onTtProfile={setTtProfile} />}
       </main>
@@ -1231,7 +1231,7 @@ const CRON_LABELS: Record<string, string> = {
 }
 
 type AutopilotSlot = { user: string; handle: string | null; avatarUrl: string | null; niche: string; ordinal: number; etaHm: number; eta: string; done: boolean; pinned?: boolean; type?: string; subject?: string; hasSeries?: boolean; credits?: number }
-type AutopilotPlan = { enabled: boolean; perDay: number; targetPerDay?: number; window: { start: number; end: number }; nowHm: number; slots: AutopilotSlot[] }
+type AutopilotPlan = { enabled: boolean; paused?: boolean; perDay: number; targetPerDay?: number; window: { start: number; end: number }; nowHm: number; slots: AutopilotSlot[] }
 
 // Fenêtre d'édition d'un créneau du planning : heure + type de contenu.
 // `quota` = nb de vidéos/jour actuel du compte (pour le bouton Supprimer).
@@ -1729,11 +1729,11 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
   )
 }
 
-function Queue({ clips, go, scope, ideaVideo, toast }: { clips: ClipDTO[]; go: (p: Page) => void; scope: string; ideaVideo: IdeaVideoMap; toast: (m: string) => void }): JSX.Element {
-  const [status, setStatus] = useState<{ enabled: boolean; paused: boolean; cron: string; nextRunAt: number | null; intervalSec: number | null; lastRunAt: number | null } | null>(null)
+function Queue({ go, scope, ideaVideo, toast }: { go: (p: Page) => void; scope: string; ideaVideo: IdeaVideoMap; toast: (m: string) => void }): JSX.Element {
+  const [plan, setPlan] = useState<AutopilotPlan | null>(null)
   const [now, setNow] = useState(Date.now())
   const load = useCallback((): void => {
-    api.schedulerStatus().then(setStatus).catch(() => undefined)
+    api.autopilotPlan().then(setPlan).catch(() => undefined)
   }, [])
   useEffect(() => {
     load()
@@ -1745,93 +1745,65 @@ function Queue({ clips, go, scope, ideaVideo, toast }: { clips: ClipDTO[]; go: (
     }
   }, [load])
 
+  const enabled = !!plan?.enabled
+  const paused = !!plan?.paused
   const togglePause = async (): Promise<void> => {
-    const paused = !status?.paused
-    await api.setFlag('queue_paused', paused ? '1' : '0')
+    await api.setFlag('queue_paused', paused ? '0' : '1')
     load()
   }
 
-  const queue = clips
-    .filter((c) => c.reviewStatus === 'approved' && c.publishStatus !== 'published')
-    .sort((a, b) => a.createdAt - b.createdAt)
-  const interval = (status?.intervalSec ?? 1800) * 1000
-  const next = status?.nextRunAt ?? null
-  const remaining = next ? next - now : 0
+  // La « file » = les vidéos que le pilote va produire+publier aujourd'hui (non encore faites).
+  const upcoming = (plan?.slots ?? []).filter((s) => !s.done && (!scope || scope === ALL_SCOPE || s.user === scope))
+  const nextSlot = upcoming[0]
+  // Le pilote passe toutes les 15 min (cron */15) : compte à rebours jusqu'au prochain passage.
+  const remaining = Math.ceil((now + 1) / (15 * 60 * 1000)) * (15 * 60 * 1000) - now
 
   return (
     <>
       <div className="page-head">
         <div>
           <h1>File d’attente</h1>
-          <p>Les clips validés sont publiés automatiquement, un par un, selon ta planification.</p>
+          <p>Le pilote auto crée et publie tes vidéos automatiquement, une par une, selon le planning du jour.</p>
         </div>
-        {status?.enabled && (
-          <button className={`btn${status.paused ? ' primary' : ''}`} onClick={togglePause}>
-            <Icon name={status.paused ? 'play' : 'pause'} size={16} />
-            {status.paused ? 'Reprendre' : 'Mettre en pause'}
+        {enabled && (
+          <button className={`btn${paused ? ' primary' : ''}`} onClick={togglePause}>
+            <Icon name={paused ? 'play' : 'pause'} size={16} />
+            {paused ? 'Reprendre' : 'Mettre en pause'}
           </button>
         )}
       </div>
 
       <TodayPlan ideaVideo={ideaVideo} toast={toast} scope={scope} />
 
-      {!status?.enabled ? (
+      {!enabled ? (
         <div className="card" style={{ textAlign: 'center', padding: 36 }}>
           <div className="dz-icon" style={{ margin: '0 auto 12px' }}><Icon name="clock" size={24} /></div>
-          <div style={{ fontWeight: 600 }}>Planification désactivée</div>
-          <p className="muted small">Active la publication automatique dans les Réglages pour mettre les clips en file.</p>
-          <button className="btn primary" style={{ marginTop: 6 }} onClick={() => go('settings')}>Aller aux Réglages</button>
+          <div style={{ fontWeight: 600 }}>Pilote auto désactivé</div>
+          <p className="muted small">Active le pilote auto pour qu’il crée et publie tes vidéos automatiquement.</p>
+          <button className="btn primary" style={{ marginTop: 6 }} onClick={() => go('autopilot')}>Aller au Pilote auto</button>
         </div>
       ) : (
         <div className="card" style={{ marginBottom: 16 }}>
           <div className="row">
             <div>
-              <div className="muted small">{status.paused ? 'Publication automatique' : 'Prochaine publication dans'}</div>
-              <div style={{ fontSize: 40, fontWeight: 700, letterSpacing: '-0.5px', color: status.paused ? 'var(--muted)' : 'var(--accent-strong)' }}>
-                {status.paused ? 'En pause' : queue.length ? fmtCountdown(remaining) : '—'}
+              <div className="muted small">{paused || !upcoming.length ? 'Pilote auto' : 'Prochaine publication dans'}</div>
+              <div style={{ fontSize: 40, fontWeight: 700, letterSpacing: '-0.5px', color: paused || !upcoming.length ? 'var(--muted)' : 'var(--accent-strong)' }}>
+                {paused ? 'En pause' : upcoming.length ? fmtCountdown(remaining) : 'Terminé ✓'}
               </div>
               <div className="muted small">
-                {status.paused
-                  ? `${queue.length} clip${queue.length > 1 ? 's' : ''} en attente · reprend quand tu veux`
-                  : queue.length
-                    ? `${queue.length} clip${queue.length > 1 ? 's' : ''} en attente · ${CRON_LABELS[status.cron] ?? status.cron}`
-                    : `Aucun clip en attente · vérifie ${CRON_LABELS[status.cron] ?? status.cron}`}
+                {paused
+                  ? `${upcoming.length} vidéo${upcoming.length > 1 ? 's' : ''} en attente · reprend quand tu veux`
+                  : upcoming.length
+                    ? `${upcoming.length} vidéo${upcoming.length > 1 ? 's' : ''} en attente · prochaine ≈ ${nextSlot?.eta ?? '—'} · le pilote passe toutes les 15 min`
+                    : `Toutes les vidéos prévues aujourd’hui sont publiées ✓`}
               </div>
             </div>
-            {status.paused
+            {paused
               ? <span className="chip">⏸ En pause</span>
-              : <span className="pill-badge"><span className="dot" /> Planif active</span>}
+              : <span className="pill-badge"><span className="dot" /> Pilote actif</span>}
           </div>
         </div>
       )}
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {status?.enabled && queue.length === 0 && (
-          <div className="card muted">Aucun clip validé en attente. Valide des clips dans l’onglet Clips pour les mettre en file.</div>
-        )}
-        {queue.map((c, i) => {
-          const eta = next ? next + i * interval : null
-          return (
-            <div key={c.id} className="card">
-              <div className="row" style={{ gap: 12 }}>
-                <div style={{ width: 54, flexShrink: 0 }}>
-                  {c.filePath && (
-                    <video src={clipUrl(c.filePath)} muted preload="metadata" style={{ width: 54, borderRadius: 8, background: '#000', aspectRatio: '9 / 16' }} />
-                  )}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title || `Clip ${Math.round(c.startSec)}s`}</div>
-                  <div className="muted small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.hashtags || c.description || '—'}</div>
-                </div>
-                <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                  {i === 0 ? <span className="chip">Prochain</span> : <span className="muted" style={{ fontWeight: 600 }}>#{i + 1}</span>}
-                  {eta && <div className="muted small" style={{ marginTop: 4 }}>≈ {new Date(eta).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>}
-                </div>
-              </div>
-            </div>
-          )
-        })}
-      </div>
     </>
   )
 }
@@ -2262,7 +2234,7 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
     setFlags((f) => ({ ...f, [k]: r.value ?? '' }))
   }, [])
   useEffect(() => {
-    ;['publish_mode', 'highlights_model', 'script_model', 'transcribe_enabled', 'transcribe_backend', 'reframe_focus', 'tiktok_privacy', 'tiktok_client_key', 'tiktok_redirect', 'schedule_enabled', 'schedule_cron', 'uploadpost_user', 'uploadpost_users', 'uploadpost_fallback'].forEach((k) => loadFlag(k).catch(() => undefined))
+    ;['publish_mode', 'highlights_model', 'script_model', 'transcribe_enabled', 'transcribe_backend', 'reframe_focus', 'tiktok_privacy', 'tiktok_client_key', 'tiktok_redirect', 'uploadpost_user', 'uploadpost_users', 'uploadpost_fallback'].forEach((k) => loadFlag(k).catch(() => undefined))
     api.apiKeyStatus().then(setKeyStatus).catch(() => undefined)
     api.groqStatus().then((r) => setGroqHas(r.has)).catch(() => undefined)
     api.rapidApiStatus().then((r) => setRapidHas(r.has)).catch(() => undefined)
@@ -2279,7 +2251,6 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
   const setFlag = async (k: string, v: string): Promise<void> => {
     setFlags((f) => ({ ...f, [k]: v }))
     await api.setFlag(k, v)
-    if (k === 'schedule_enabled' || k === 'schedule_cron') await api.reloadScheduler()
   }
 
   // Synchronise la sélection de comptes avec ce qui est enregistré (uploadpost_users, sinon l'ancien champ unique)
@@ -2581,21 +2552,6 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
         </Field>
       </div>
 
-      <div className="card">
-        <h3 style={{ marginTop: 0 }}>Planification</h3>
-        <Field label="Publication automatique des clips validés">
-          <label className="small"><input type="checkbox" checked={flags.schedule_enabled === '1'} onChange={(e) => setFlag('schedule_enabled', e.target.checked ? '1' : '0')} /> Activer</label>
-        </Field>
-        <Field label="Fréquence">
-          <select value={flags.schedule_cron || '*/30 * * * *'} onChange={(e) => setFlag('schedule_cron', e.target.value)} disabled={flags.schedule_enabled !== '1'}>
-            <option value="*/5 * * * *">Toutes les 5 min</option>
-            <option value="*/15 * * * *">Toutes les 15 min</option>
-            <option value="*/30 * * * *">Toutes les 30 min</option>
-            <option value="0 * * * *">Toutes les heures</option>
-            <option value="0 */3 * * *">Toutes les 3 h</option>
-          </select>
-        </Field>
-      </div>
     </>
   )
 }
