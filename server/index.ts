@@ -791,14 +791,9 @@ async function runAutopilotTick(force = false): Promise<void> {
 
       let clipUrl = /^https?:\/\//i.test(subject) ? subject : null
       if (!clipUrl) {
-        // Mode auto : d'abord écouler les clips déjà extraits pour ce compte…
-        const leftovers = repo
-          .listSources()
-          .filter((s) => s.status === 'done' && /^https?:\/\//i.test(s.url))
-          .flatMap((s) => repo.listClips(s.id))
-          .filter((c) => c.profile === user && c.publishStatus !== 'published')
-        if (leftovers.length && (await publishBest(leftovers))) return
-        // …sinon l'IA choisit une nouvelle vidéo.
+        // L'IA choisit une NOUVELLE vidéo (jamais déjà utilisée). On ne recycle plus
+        // les extraits restants d'une même source : 1 publication = 1 vidéo différente
+        // (sinon on postait 3 clips du même Squeezie → effet doublon).
         clipUrl = await autoPickClipUrl(user, niche)
         if (!clipUrl) {
           emitLog(`Pilote auto : aucune vidéo trouvée à cliper pour « ${user} » — réessai au prochain cycle.`)
@@ -806,8 +801,8 @@ async function runAutopilotTick(force = false): Promise<void> {
         }
       }
 
-      // Réutilise une source déjà analysée pour cette URL (clips restants) ;
-      // sinon pipeline complet : téléchargement → analyse IA → 3 clips 9:16.
+      // Réutilise une source déjà analysée pour cette URL (clip restant) ;
+      // sinon pipeline complet : téléchargement → analyse IA → 1 clip 9:16 (meilleur moment).
       let candidates = repo
         .listSources()
         .filter((s) => s.url === clipUrl && s.status === 'done')
@@ -816,7 +811,7 @@ async function runAutopilotTick(force = false): Promise<void> {
       if (!candidates.length) {
         emitLog(`Pilote auto : extraction de clips depuis ${clipUrl} pour « ${user} » (téléchargement + analyse)…`)
         const created = repo.createSource(clipUrl)
-        const job = pipelineChain.then(() => runForSource(created.id, 3, user))
+        const job = pipelineChain.then(() => runForSource(created.id, 1, user))
         pipelineChain = job.then(() => undefined, () => undefined)
         await job
         const after = repo.getSource(created.id)
