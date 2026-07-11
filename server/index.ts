@@ -540,17 +540,28 @@ async function autoPickClipUrl(user: string, niche: string): Promise<string | nu
   }
 }
 
-// ── Créneaux personnalisés du jour : heure et/ou type choisis PAR VIDÉO.
-// autopilot_slot_overrides = { [YYYY-MM-DD]: { "<user>:<ordinal>": { hm?, type?, subject? } } }
-// (on ne conserve que le jour courant ; type: 'niche' | 'serie' | 'custom')
+// ── Créneaux personnalisés PERSISTANTS (modèle) : heure et/ou type choisis PAR
+// VIDÉO, appliqués CHAQUE jour tant que l'utilisateur ne les change pas (les
+// compteurs, eux, se réinitialisent quotidiennement). Clé « <user>:<ordinal> ».
+// autopilot_slot_overrides = { "<user>:<ordinal>": { hm?, type?, subject? } }
+// (type: 'niche' | 'serie' | 'custom' | 'clip')
 type SlotOverride = { hm?: number; type?: string; subject?: string }
-function slotOverrides(): Record<string, Record<string, SlotOverride>> {
+function slotOverrides(): Record<string, SlotOverride> {
   try {
     const raw = repo.getSetting('autopilot_slot_overrides')
-    if (raw) {
-      const o = JSON.parse(raw) as unknown
-      if (o && typeof o === 'object') return o as Record<string, Record<string, SlotOverride>>
+    if (!raw) return {}
+    const o = JSON.parse(raw) as Record<string, unknown>
+    if (!o || typeof o !== 'object') return {}
+    // Migration de l'ancien format par-date { "YYYY-MM-DD": { "user:ord": {...} } } :
+    // on adopte comme modèle le dernier jour NON VIDE qui avait été configuré.
+    const dateKeys = Object.keys(o).filter((k) => /^\d{4}-\d{2}-\d{2}$/.test(k))
+    if (dateKeys.length) {
+      const nonEmpty = dateKeys
+        .filter((k) => o[k] && typeof o[k] === 'object' && Object.keys(o[k] as object).length > 0)
+        .sort()
+      return nonEmpty.length ? (o[nonEmpty[nonEmpty.length - 1]] as Record<string, SlotOverride>) : {}
     }
+    return o as Record<string, SlotOverride>
   } catch {
     /* JSON invalide → vide */
   }
@@ -632,7 +643,7 @@ async function runAutopilotTick(force = false): Promise<void> {
   if (!profiles.length) return
   // Quota du jour PAR COMPTE (réglable individuellement ; séries plafonnées à 1/jour).
   const perDayFor = perDayForProfile
-  const ovToday = slotOverrides()[today] ?? {}
+  const ovToday = slotOverrides()
   const { hm: nowHm } = parisClock()
   const quotaOk = (u: string): boolean => {
     const ts = Number(repo.getSetting(`quota_reached_${u}`)) || 0
@@ -1481,7 +1492,7 @@ app.get('/api/autopilot/plan', wrap(async (_req, res) => {
     credits?: number
   }
   const slots: Slot[] = []
-  const ovToday = slotOverrides()[today] ?? {}
+  const ovToday = slotOverrides()
 
   // Heures RÉELLES + titres des vidéos publiées aujourd'hui, par compte.
   const doneTimes = new Map<string, { at: number; title: string | null }[]>()
@@ -1687,8 +1698,7 @@ app.post('/api/autopilot/slot', wrap((req, res) => {
   const user = String(b.user ?? '').trim()
   const ordinal = Math.max(1, Math.round(Number(b.ordinal)) || 1)
   if (!user || !uploadPostProfiles().includes(user)) return res.status(400).json({ error: 'Compte inconnu' })
-  const today = dayKey()
-  const map = slotOverrides()[today] ?? {}
+  const map = slotOverrides()
   const key = `${user}:${ordinal}`
   if (b.reset === true) {
     delete map[key]
@@ -1716,8 +1726,8 @@ app.post('/api/autopilot/slot', wrap((req, res) => {
     if (o.hm == null && !o.type) delete map[key]
     else map[key] = o
   }
-  // On ne conserve que le jour courant (les personnalisations sont journalières).
-  repo.setSetting('autopilot_slot_overrides', JSON.stringify({ [today]: map }))
+  // Modèle persistant : appliqué chaque jour tant qu'il n'est pas modifié.
+  repo.setSetting('autopilot_slot_overrides', JSON.stringify(map))
   res.json({ ok: true })
 }))
 
