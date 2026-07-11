@@ -581,7 +581,8 @@ function seriesConfiguredFor(user: string): SeriesState | null {
 }
 
 // ── Cadence par compte : autopilot_per_day_map = { [user]: 0..5 } (0 = en pause).
-// Repli sur le réglage global `autopilot_per_day` ; les séries sont plafonnées à 1/jour.
+// Repli sur le réglage global `autopilot_per_day`. (Aucun plafond spécifique aux
+// séries : un compte peut produire plusieurs épisodes/jour si sa cadence le permet.)
 function perDayMap(): Record<string, number> {
   try {
     const raw = repo.getSetting('autopilot_per_day_map')
@@ -641,7 +642,7 @@ async function runAutopilotTick(force = false): Promise<void> {
   const today = dayKey()
   const profiles = uploadPostProfiles()
   if (!profiles.length) return
-  // Quota du jour PAR COMPTE (réglable individuellement ; séries plafonnées à 1/jour).
+  // Quota du jour PAR COMPTE (réglable individuellement de 0 à 5).
   const perDayFor = perDayForProfile
   const ovToday = slotOverrides()
   const { hm: nowHm } = parisClock()
@@ -1531,7 +1532,7 @@ app.get('/api/autopilot/plan', wrap(async (_req, res) => {
         credits: estimateCredits(ovToday[`${user}:${j}`]?.type)
       })
     }
-    // Quota individuel par compte (séries plafonnées à 1 épisode/jour).
+    // Quota individuel par compte (0 à 5 vidéos/jour, séries incluses).
     remaining.set(user, Math.max(0, perDayForProfile(user) - done))
   })
 
