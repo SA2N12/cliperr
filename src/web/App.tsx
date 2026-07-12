@@ -1230,7 +1230,7 @@ const CRON_LABELS: Record<string, string> = {
   '0 */3 * * *': 'toutes les 3 h'
 }
 
-type AutopilotSlot = { user: string; handle: string | null; avatarUrl: string | null; niche: string; ordinal: number; etaHm: number; eta: string; done: boolean; pinned?: boolean; type?: string; subject?: string; hasSeries?: boolean; credits?: number }
+type AutopilotSlot = { user: string; handle: string | null; avatarUrl: string | null; niche: string; ordinal: number; etaHm: number; eta: string; done: boolean; pinned?: boolean; type?: string; subject?: string; hasSeries?: boolean; credits?: number; failed?: boolean; error?: string }
 type AutopilotPlan = { enabled: boolean; paused?: boolean; perDay: number; targetPerDay?: number; window: { start: number; end: number }; nowHm: number; slots: AutopilotSlot[] }
 
 // Fenêtre d'édition d'un créneau du planning : heure + type de contenu.
@@ -1594,13 +1594,13 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
       <button
         key={`${s.user}-${s.ordinal}`}
         onClick={() => !s.done && setEditSlot(s)}
-        title={s.done ? s.niche : `${s.niche} — clique pour personnaliser (heure, type)`}
+        title={s.failed ? `Échec : ${s.error ?? ''} — clique pour changer / retenter` : s.done ? s.niche : `${s.niche} — clique pour personnaliser (heure, type)`}
         style={{
           width: opts?.hideAvatar ? 100 : 112,
           padding: '10px 8px',
           borderRadius: 12,
-          background: s.done ? 'var(--panel-2)' : '#fff',
-          border: s.done ? '1px solid var(--border)' : `2px dashed ${generating ? 'var(--accent)' : s.pinned || s.type ? 'var(--accent-strong)' : '#c9c9cf'}`,
+          background: s.failed ? 'rgba(220,38,38,0.06)' : s.done ? 'var(--panel-2)' : '#fff',
+          border: s.failed ? '2px solid var(--bad)' : s.done ? '1px solid var(--border)' : `2px dashed ${generating ? 'var(--accent)' : s.pinned || s.type ? 'var(--accent-strong)' : '#c9c9cf'}`,
           cursor: s.done ? 'default' : 'pointer',
           display: 'flex',
           flexDirection: 'column',
@@ -1609,8 +1609,8 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
           fontFamily: 'inherit'
         }}
       >
-        <div style={{ fontWeight: 700, fontSize: 13, fontVariantNumeric: 'tabular-nums', color: s.done ? 'var(--muted)' : 'var(--accent-strong)' }}>
-          {s.done ? s.eta : `≈ ${s.eta}`}{(s.pinned || s.type) && !s.done ? ' 📌' : ''}
+        <div style={{ fontWeight: 700, fontSize: 13, fontVariantNumeric: 'tabular-nums', color: s.failed ? 'var(--bad)' : s.done ? 'var(--muted)' : 'var(--accent-strong)' }}>
+          {s.done ? s.eta : `≈ ${s.eta}`}{s.failed ? ' ⚠' : (s.pinned || s.type) && !s.done ? ' 📌' : ''}
         </div>
         {!opts?.hideAvatar && <Avatar url={s.avatarUrl} name={s.user} size={30} />}
         {!opts?.hideAvatar && (
@@ -1618,17 +1618,21 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
             {s.handle ? '@' + s.handle : s.user}
           </div>
         )}
-        <div className="small" style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>
-          {s.done ? '✓ publiée' : generating ? '⚙️ création…' : s.niche.split(' (')[0]}
+        <div className="small" style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600, color: s.failed ? 'var(--bad)' : undefined }}>
+          {s.done ? '✓ publiée' : s.failed ? '⚠ Échec' : generating ? '⚙️ création…' : s.niche.split(' (')[0]}
         </div>
-        {s.credits != null && (
+        {s.failed && s.error ? (
+          <div title={s.error} style={{ fontSize: 10, color: 'var(--bad)', maxWidth: '100%', whiteSpace: 'normal', lineHeight: 1.2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+            {s.error}
+          </div>
+        ) : s.credits != null ? (
           <div
             title="Coût estimé de cette vidéo (aperçu — aucun débit pour l’instant)"
             style={{ fontSize: 11, fontWeight: 700, fontVariantNumeric: 'tabular-nums', padding: '1px 7px', borderRadius: 999, background: 'var(--panel-2)', border: '1px solid var(--border)', color: 'var(--muted)' }}
           >
             ≈ {s.credits} cr
           </div>
-        )}
+        ) : null}
       </button>
     )
   }

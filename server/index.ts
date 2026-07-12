@@ -673,6 +673,26 @@ async function runAutopilotTick(force = false): Promise<void> {
     repo.setSetting(`autopilot_doneord_${u}_${today}`, JSON.stringify([...set].sort((a, b) => a - b)))
     repo.setSetting(`autopilot_count_${u}_${today}`, String(set.size))
   }
+  // Créneaux EN ÉCHEC aujourd'hui (ordinal → message d'erreur). Un créneau qui échoue
+  // est ÉCARTÉ de la sélection (sinon re-choisi en boucle → bloque les suivants), et son
+  // erreur est exposée dans le planning (affichée sur le bloc). Retenté le lendemain.
+  const failedMapOf = (u: string): Record<string, string> => {
+    try {
+      const o = JSON.parse(repo.getSetting(`autopilot_failed_${u}_${today}`) || '{}')
+      if (o && typeof o === 'object') return o as Record<string, string>
+    } catch {
+      /* ignore */
+    }
+    return {}
+  }
+  const markFailed = (u: string, ord: number, error: string): void => {
+    const m = failedMapOf(u)
+    m[String(ord)] = (error || 'échec').slice(0, 200)
+    repo.setSetting(`autopilot_failed_${u}_${today}`, JSON.stringify(m))
+  }
+  // Ordinaux à SAUTER dans la sélection : déjà produits OU en échec aujourd'hui.
+  const skipOrdOf = (u: string): Set<number> =>
+    new Set<number>([...doneOrdOf(u), ...Object.keys(failedMapOf(u)).map(Number)])
 
   // ── Créneau ÉPINGLÉ arrivé à échéance ? (heure choisie à la main sur un bloc du
   // planning — prioritaire sur le lissage, respectée à SON heure quel que soit son
@@ -683,9 +703,9 @@ async function runAutopilotTick(force = false): Promise<void> {
     for (const u of profiles) {
       if (!quotaOk(u)) continue
       if (doneOf(u) >= perDayFor(u)) continue
-      const doneSet = doneOrdOf(u)
+      const skip = skipOrdOf(u)
       for (let j = 1; j <= perDayFor(u); j++) {
-        if (doneSet.has(j)) continue
+        if (skip.has(j)) continue
         const o = ovToday[`${u}:${j}`]
         if (o?.hm != null && o.hm <= nowHm && o.hm < bestHm) {
           picked = { user: u, ordinal: j }
@@ -715,10 +735,10 @@ async function runAutopilotTick(force = false): Promise<void> {
       if (!quotaOk(user)) continue
       const done = doneOf(user)
       if (done >= perDayFor(user)) continue
-      const doneSet = doneOrdOf(user)
+      const skip = skipOrdOf(user)
       let ord: number | null = null
       for (let j = 1; j <= perDayFor(user); j++) {
-        if (doneSet.has(j)) continue
+        if (skip.has(j)) continue
         if (!force && ovToday[`${user}:${j}`]?.hm != null) continue // épinglé → géré à son heure
         ord = j
         break
@@ -737,10 +757,14 @@ async function runAutopilotTick(force = false): Promise<void> {
   const slotOv = ovToday[`${user}:${ordinal}`] ?? {}
   const niche = nicheForProfile(user)
 
+  // Suivi du résultat de ce créneau : si rien n'est produit (échec), on l'écarte pour
+  // la journée AVEC son erreur (markFailed dans le finally) → le planning continue.
+  let produced = false
+  let failReason = ''
   autopilotBusy = true
   try {
     const anthropicKey = getApiKey()
-    if (!anthropicKey) { emitLog('Pilote auto : clé Claude manquante.'); return }
+    if (!anthropicKey) { failReason = 'clé Claude manquante'; emitLog('Pilote auto : clé Claude manquante.'); return }
     const model = scriptModel()
     // Tendances TikTok du moment (si l'API est configurée) → scénarios ancrés sur l'actu.
     const trends = await getTrendsCached()
@@ -759,6 +783,7 @@ async function runAutopilotTick(force = false): Promise<void> {
           // cas de succès → le planificateur l'ignore ensuite).
           await publishClipById(clip.id, paths, emitLog, { uploadPostUser: user })
           markDone(user, ordinal)
+          produced = true
           emitLog(`Pilote auto : clip publié sur « ${user} » (${done + 1}/${perDayFor(user)} aujourd'hui).`)
           return true
         } catch (e) {
@@ -779,6 +804,7 @@ async function runAutopilotTick(force = false): Promise<void> {
         // (sinon on postait 3 clips du même Squeezie → effet doublon).
         clipUrl = await autoPickClipUrl(user, niche)
         if (!clipUrl) {
+          failReason = 'aucune vidéo à cliper trouvée (recherche YouTube)'
           emitLog(`Pilote auto : aucune vidéo trouvée à cliper pour « ${user} » — réessai au prochain cycle.`)
           return
         }
@@ -799,12 +825,14 @@ async function runAutopilotTick(force = false): Promise<void> {
         await job
         const after = repo.getSource(created.id)
         if (!after || after.status !== 'done') {
+          failReason = `téléchargement échoué : ${after?.error ?? 'erreur inconnue'}`
           emitLog(`Pilote auto : extraction échouée pour « ${user} » — ${after?.error ?? 'erreur inconnue'}.`)
           return
         }
         candidates = repo.listClips(created.id).filter((c) => c.publishStatus !== 'published')
       }
       if (!(await publishBest(candidates))) {
+        failReason = 'aucun clip exploitable dans la vidéo'
         emitLog(`Pilote auto : aucun clip exploitable dans ${clipUrl}.`)
       }
       return
@@ -840,7 +868,7 @@ async function runAutopilotTick(force = false): Promise<void> {
         .map((c) => c.title as string)
       const { ideas, usage } = await generateViralIdeas({ apiKey: anthropicKey, model, niche: topic, count: 1, trends, recentTitles })
       if (usage) addSpend(model, usage)
-      if (!ideas.length) { emitLog(`Pilote auto : aucune idée générée pour « ${user} ».`); return }
+      if (!ideas.length) { failReason = 'aucune idée générée'; emitLog(`Pilote auto : aucune idée générée pour « ${user} ».`); return }
       idea = ideas[0]
       if (slotOv.type === 'custom' && subject) ideaLabel = subject
     }
@@ -862,14 +890,20 @@ async function runAutopilotTick(force = false): Promise<void> {
     const clipId = await job.catch(() => null)
     if (clipId) {
       markDone(user, ordinal)
+      produced = true
       if (series && nextRecap != null) advanceSeries(user, nextRecap) // mémoire + épisode suivant
       emitLog(`Pilote auto : vidéo publiée sur « ${user} » (${done + 1}/${perDayFor(user)} aujourd'hui).`)
     } else {
+      failReason = 'échec de génération / publication de la vidéo'
       emitLog(`Pilote auto : échec pour « ${user} » (voir journaux).`)
     }
   } catch (e) {
-    emitLog(`Pilote auto : erreur pour « ${user} » — ${e instanceof Error ? e.message : String(e)}`)
+    failReason = e instanceof Error ? e.message : String(e)
+    emitLog(`Pilote auto : erreur pour « ${user} » — ${failReason}`)
   } finally {
+    // Rien produit → on écarte ce créneau pour aujourd'hui (avec son erreur) : le
+    // planning CONTINUE sur les suivants au lieu de boucler indéfiniment sur celui-ci.
+    if (!produced) markFailed(user, ordinal, failReason)
     autopilotBusy = false
   }
 }
@@ -1491,6 +1525,8 @@ app.get('/api/autopilot/plan', wrap(async (_req, res) => {
     subject?: string
     hasSeries?: boolean
     credits?: number
+    failed?: boolean
+    error?: string
   }
   const slots: Slot[] = []
   const ovToday = slotOverrides()
@@ -1536,6 +1572,51 @@ app.get('/api/autopilot/plan', wrap(async (_req, res) => {
     remaining.set(user, Math.max(0, perDayForProfile(user) - done))
   })
 
+  // Créneaux EN ÉCHEC aujourd'hui : écartés de la production (retentés demain), mais
+  // AFFICHÉS avec leur erreur — et retirés du « à venir » pour ne pas être recomptés.
+  const failedOf = (u: string): Record<string, string> => {
+    try {
+      const o = JSON.parse(repo.getSetting(`autopilot_failed_${u}_${today}`) || '{}')
+      if (o && typeof o === 'object') return o as Record<string, string>
+    } catch {
+      /* ignore */
+    }
+    return {}
+  }
+  profiles.forEach((user) => {
+    const m = meta.get(user)
+    const confSerie = seriesConfiguredFor(user)
+    let nFailed = 0
+    for (const [ordStr, error] of Object.entries(failedOf(user))) {
+      const ordinal = Number(ordStr)
+      const ov = ovToday[`${user}:${ordinal}`]
+      let label: string
+      if (ov?.type === 'custom' && (ov.subject ?? '').trim()) label = `Sujet : ${(ov.subject ?? '').trim()}`
+      else if (ov?.type === 'clip') label = `Clip : ${(ov.subject ?? '').trim().replace(/^https?:\/\/(www\.)?/, '').slice(0, 50) || 'choix auto (IA)'}`
+      else if (ov?.type === 'serie' && confSerie) label = `Série : ${confSerie.title}`
+      else label = nicheForProfile(user)
+      slots.push({
+        user,
+        handle: m?.tiktokHandle ?? null,
+        avatarUrl: m?.avatarUrl ?? null,
+        niche: label,
+        ordinal,
+        etaHm: ov?.hm != null ? ov.hm : 0,
+        eta: ov?.hm != null ? fmt(ov.hm) : '—',
+        done: false,
+        pinned: ov?.hm != null,
+        type: ov?.type,
+        subject: ov?.subject,
+        hasSeries: !!confSerie,
+        credits: estimateCredits(ov?.type),
+        failed: true,
+        error
+      })
+      nFailed++
+    }
+    remaining.set(user, Math.max(0, (remaining.get(user) ?? 0) - nFailed))
+  })
+
   // À venir : étalées régulièrement de maintenant → fin de fenêtre, en servant
   // à chaque pas le compte le PLUS en retard (même logique que le pilote).
   let remainingTotal = 0
@@ -1556,6 +1637,7 @@ app.get('/api/autopilot/plan', wrap(async (_req, res) => {
     const set = new Set(doneArr)
     const cnt = Number(repo.getSetting(`autopilot_count_${u}_${today}`)) || 0
     for (let j = 1; set.size < cnt && j <= perDayForProfile(u); j++) set.add(j)
+    for (const k of Object.keys(failedOf(u))) set.add(Number(k)) // échecs : ni faits, ni à re-produire aujourd'hui
     const list: number[] = []
     for (let j = 1; j <= perDayForProfile(u); j++) if (!set.has(j)) list.push(j)
     pendingOrd.set(u, list)
@@ -1729,6 +1811,17 @@ app.post('/api/autopilot/slot', wrap((req, res) => {
   }
   // Modèle persistant : appliqué chaque jour tant qu'il n'est pas modifié.
   repo.setSetting('autopilot_slot_overrides', JSON.stringify(map))
+  // Éditer un créneau efface son échec du jour → il peut être RETENTÉ aujourd'hui.
+  try {
+    const fk = `autopilot_failed_${user}_${dayKey()}`
+    const fm = JSON.parse(repo.getSetting(fk) || '{}') as Record<string, unknown>
+    if (fm && typeof fm === 'object' && fm[String(ordinal)] != null) {
+      delete fm[String(ordinal)]
+      repo.setSetting(fk, JSON.stringify(fm))
+    }
+  } catch {
+    /* ignore */
+  }
   res.json({ ok: true })
 }))
 
