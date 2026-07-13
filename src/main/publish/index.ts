@@ -35,6 +35,8 @@ export interface PublishOverrides {
   brandContent?: boolean
   /** upload-post : force un compte précis (sinon rotation auto). */
   uploadPostUser?: string
+  /** Type de la vidéo (niche/serie/custom/clip) → choisit le bon CTA du compte. */
+  videoType?: string
 }
 
 function captionOf(clip: ClipDTO): string {

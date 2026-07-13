@@ -51,7 +51,8 @@ import {
   uploadPostProfiles,
   activeProfile,
   activeScope,
-  profileCtas
+  profileCtas,
+  ctaMapForProfile
 } from './tiktok-service'
 import type { PublishOverrides } from '../src/main/publish/index'
 
@@ -306,7 +307,7 @@ function reloadScheduler(): void {
 let videoChain: Promise<void> = Promise.resolve()
 async function runVideoGen(
   ideaId: number,
-  opts: { profile?: string; autoPublish?: boolean; imageStyle?: string; characterRefPath?: string; animateScenes?: boolean; dialogue?: boolean; noMusic?: boolean } = {}
+  opts: { profile?: string; autoPublish?: boolean; imageStyle?: string; characterRefPath?: string; animateScenes?: boolean; dialogue?: boolean; noMusic?: boolean; videoType?: string } = {}
 ): Promise<number | null> {
   const idea = repo.getIdea(ideaId)
   if (!idea) return null
@@ -371,7 +372,7 @@ async function runVideoGen(
     emitIdeaVideo({ ideaId, status: 'done', message: 'Vidéo prête ✅' })
     if (opts.autoPublish) {
       emitIdeaVideo({ ideaId, status: 'running', message: `Publication sur « ${targetProfile} »…` })
-      await publishClipById(clip.id, paths, emitLog, { uploadPostUser: targetProfile })
+      await publishClipById(clip.id, paths, emitLog, { uploadPostUser: targetProfile, videoType: opts.videoType })
       emitIdeaVideo({ ideaId, status: 'done', message: `Publié sur « ${targetProfile} » ✅` })
     }
     return clip.id
@@ -781,7 +782,7 @@ async function runAutopilotTick(force = false): Promise<void> {
         try {
           // Publication en DIRECT par le pilote (publishClipById marque 'published' en
           // cas de succès → le planificateur l'ignore ensuite).
-          await publishClipById(clip.id, paths, emitLog, { uploadPostUser: user })
+          await publishClipById(clip.id, paths, emitLog, { uploadPostUser: user, videoType: 'clip' })
           markDone(user, ordinal)
           produced = true
           emitLog(`Pilote auto : clip publié sur « ${user} » (${done + 1}/${perDayFor(user)} aujourd'hui).`)
@@ -879,6 +880,7 @@ async function runAutopilotTick(force = false): Promise<void> {
       runVideoGen(saved.id, {
         profile: user,
         autoPublish: true,
+        videoType: series ? 'serie' : slotOv.type === 'custom' ? 'custom' : 'niche',
         imageStyle: series?.universe,
         characterRefPath: refPath,
         animateScenes: !!series, // séries = scènes animées (fal.ai) si la clé est configurée
@@ -1398,7 +1400,6 @@ app.get('/api/autopilot', wrap(async (_req, res) => {
   const meta = new Map((await cachedUploadPostProfiles()).map((p) => [p.username, p]))
   const today = dayKey()
   const niches = autopilotNiches()
-  const ctas = profileCtas()
   const seriesMap = autopilotSeries()
   const globalPerDay = Math.max(1, Number(repo.getSetting('autopilot_per_day')) || 1)
   const pdMap = perDayMap()
@@ -1413,7 +1414,7 @@ app.get('/api/autopilot', wrap(async (_req, res) => {
         handle: meta.get(u)?.tiktokHandle ?? null,
         avatarUrl: meta.get(u)?.avatarUrl ?? null,
         niche: (niches[u] ?? '').trim() || nicheForProfile(u),
-        cta: (ctas[u] ?? '').trim(),
+        ctas: ctaMapForProfile(u),
         clipChannels: (clipChannelsMap()[u] ?? '').trim(),
         perDay: pdMap[u] == null ? globalPerDay : Math.max(0, Math.min(5, Math.round(Number(pdMap[u])) || 0)),
         series: {
@@ -1686,7 +1687,7 @@ app.get('/api/autopilot/plan', wrap(async (_req, res) => {
 // Réglages d'UN SEUL compte (fusion dans les maps existantes — pas de remplacement
 // global) : utilisé par la fenêtre ⚙️ des lignes du planning.
 app.post('/api/autopilot/account', wrap((req, res) => {
-  const b = (req.body ?? {}) as { user?: unknown; perDay?: unknown; niche?: unknown; cta?: unknown; clipChannels?: unknown; series?: unknown }
+  const b = (req.body ?? {}) as { user?: unknown; perDay?: unknown; niche?: unknown; ctas?: unknown; clipChannels?: unknown; series?: unknown }
   const user = String(b.user ?? '').trim()
   if (!user || !uploadPostProfiles().includes(user)) return res.status(400).json({ error: 'Compte inconnu' })
   if (b.perDay != null) {
@@ -1700,9 +1701,14 @@ app.post('/api/autopilot/account', wrap((req, res) => {
     else delete m[user]
     repo.setSetting('autopilot_niches', JSON.stringify(m))
   }
-  if (typeof b.cta === 'string') {
+  if (b.ctas && typeof b.ctas === 'object') {
     const m = profileCtas()
-    if (b.cta.trim()) m[user] = b.cta.trim().slice(0, 220)
+    const map: { niche?: string; serie?: string; custom?: string; clip?: string } = {}
+    for (const t of ['niche', 'serie', 'custom', 'clip'] as const) {
+      const val = (b.ctas as Record<string, unknown>)[t]
+      if (typeof val === 'string' && val.trim()) map[t] = val.trim().slice(0, 220)
+    }
+    if (Object.keys(map).length) m[user] = map
     else delete m[user]
     repo.setSetting('profile_ctas', JSON.stringify(m))
   }

@@ -135,21 +135,40 @@ export function activeProfile(): string {
   return (uploadPostProfiles()[0] || '').trim()
 }
 
-/** CTA (« appel à l'action » + lien en bio) configuré par profil — ajouté aux légendes. */
-export function profileCtas(): Record<string, string> {
+/** CTA (« appel à l'action » + lien en bio) configuré par profil ET par type de vidéo,
+ *  ajouté aux légendes. Ancien format (une seule chaîne par profil) = même CTA partout. */
+export type CtaMap = { niche?: string; serie?: string; custom?: string; clip?: string }
+const CTA_TYPES = ['niche', 'serie', 'custom', 'clip'] as const
+export function profileCtas(): Record<string, string | CtaMap> {
   try {
     const raw = repo.getSetting('profile_ctas')
     if (raw) {
       const o = JSON.parse(raw) as unknown
-      if (o && typeof o === 'object') return o as Record<string, string>
+      if (o && typeof o === 'object') return o as Record<string, string | CtaMap>
     }
   } catch {
     /* JSON invalide → vide */
   }
   return {}
 }
-export function ctaForProfile(user: string): string {
-  return (profileCtas()[user] ?? '').trim()
+/** CTA à utiliser pour une vidéo d'un TYPE donné (niche par défaut). */
+export function ctaForProfile(user: string, type?: string): string {
+  const raw = profileCtas()[user]
+  if (typeof raw === 'string') return raw.trim() // ancien format : même CTA pour tous les types
+  if (raw && typeof raw === 'object') {
+    const t = (type && (CTA_TYPES as readonly string[]).includes(type) ? type : 'niche') as keyof CtaMap
+    return String(raw[t] ?? '').trim()
+  }
+  return ''
+}
+/** Les 4 CTA d'un compte (pour l'UI) — migre l'ancien format string → appliqué à tous. */
+export function ctaMapForProfile(user: string): CtaMap {
+  const raw = profileCtas()[user]
+  if (typeof raw === 'string') { const s = raw.trim(); return { niche: s, serie: s, custom: s, clip: s } }
+  if (raw && typeof raw === 'object') {
+    return { niche: String(raw.niche ?? '').trim(), serie: String(raw.serie ?? '').trim(), custom: String(raw.custom ?? '').trim(), clip: String(raw.clip ?? '').trim() }
+  }
+  return {}
 }
 
 /** Marque le quota journalier « atteint » pour un profil (déclenche la bannière globale). */
@@ -242,9 +261,10 @@ export async function publishClipById(
       const target = overrides?.uploadPostUser?.trim() || activeProfile()
       if (!target) throw new Error('Aucun profil TikTok sélectionné')
       deps.uploadPostUser = target
-      // CTA du compte (« lien en bio »…) ajouté automatiquement à la légende.
+      // CTA du compte, choisi selon le TYPE de la vidéo (niche/série/sujet/clip),
+      // ajouté automatiquement à la légende.
       let effective = overrides
-      const cta = ctaForProfile(target)
+      const cta = ctaForProfile(target, overrides?.videoType)
       if (cta) {
         const manual = overrides?.caption?.trim()
         if (manual) {

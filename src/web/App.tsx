@@ -1359,7 +1359,7 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
   const [profile, setProfile] = useState<AutopilotProfile | null>(null)
   const [perDay, setPerDay] = useState(1)
   const [niche, setNiche] = useState('')
-  const [cta, setCta] = useState('')
+  const [ctas, setCtas] = useState<{ niche?: string; serie?: string; custom?: string; clip?: string }>({})
   const [clipChannels, setClipChannels] = useState('')
   const [serie, setSerie] = useState<SeriesCfg>({ enabled: false, title: '', universe: '', episode: 1 })
   const [tab, setTab] = useState<'general' | 'niche' | 'serie' | 'clips'>('general')
@@ -1402,7 +1402,7 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
       setProfile(p)
       setPerDay(p.perDay)
       setNiche(p.niche)
-      setCta(p.cta)
+      setCtas(p.ctas ?? {})
       setClipChannels(p.clipChannels)
       setSerie(p.series)
     }).catch(() => undefined)
@@ -1414,7 +1414,7 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
       await api.saveAutopilotAccount({
         user,
         niche,
-        cta,
+        ctas,
         clipChannels,
         // Plus de toggle : la série est « prête » dès que titre + univers sont remplis.
         series: { enabled: !!(serie.title.trim() && serie.universe.trim()), title: serie.title, universe: serie.universe }
@@ -1460,9 +1460,14 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
               </div>
               <div className="muted small">S'ajuste sur le planning : bouton <b>+</b> en bout de ligne pour ajouter, <b>🗑 Supprimer</b> sur un bloc pour retirer. Publication étalée de 9h à 23h.</div>
             </div>
-            <label className="muted small" style={{ display: 'block', marginBottom: 4 }}>CTA (ajouté à chaque légende publiée)</label>
-            <input className="input-full" value={cta} placeholder="ex. 🔗 Mon guide gratuit est dans la bio" onChange={(e) => setCta(e.target.value)} style={{ marginBottom: 4 }} />
-            <div className="muted small">C’est lui qui transforme les vues en abonnés/clics — adapte-le au contenu du compte.</div>
+            <label className="muted small" style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>CTA par type de vidéo (ajouté à chaque légende)</label>
+            <div className="muted small" style={{ marginBottom: 8 }}>Le CTA utilisé dépend du <b>type du bloc</b> publié. Laisse vide pour aucun CTA sur ce type.</div>
+            {([['niche', 'Niche', 'ex. 🔗 Mon guide est en bio'], ['serie', 'Série', 'ex. 🔔 Abonne-toi pour la suite !'], ['custom', 'Sujet libre', 'ex. 🔗 Lien en bio'], ['clip', 'Clip', 'ex. 👉 Abonne-toi pour + de clips']] as const).map(([key, label, ph]) => (
+              <div key={key} style={{ marginBottom: 8 }}>
+                <label className="muted small" style={{ display: 'block', marginBottom: 3 }}>{label}</label>
+                <input className="input-full" value={ctas[key] ?? ''} placeholder={ph} onChange={(e) => setCtas((c) => ({ ...c, [key]: e.target.value }))} />
+              </div>
+            ))}
           </>
         )}
 
@@ -2128,7 +2133,7 @@ function Sparkline({ data }: { data: number[] }): JSX.Element | null {
 
 // ── Pilote automatique : contenu quotidien autonome par compte ──
 type SeriesCfg = { enabled: boolean; title: string; universe: string; episode: number }
-type AutopilotProfile = { username: string; handle: string | null; avatarUrl: string | null; niche: string; cta: string; clipChannels: string; perDay: number; series: SeriesCfg; doneToday: number }
+type AutopilotProfile = { username: string; handle: string | null; avatarUrl: string | null; niche: string; ctas: { niche?: string; serie?: string; custom?: string; clip?: string }; clipChannels: string; perDay: number; series: SeriesCfg; doneToday: number }
 type AutopilotState = { enabled: boolean; perDay: number; busy: boolean; profiles: AutopilotProfile[] }
 
 function Autopilot({ toast, ideaVideo }: { toast: (m: string) => void; ideaVideo: IdeaVideoMap }): JSX.Element {
