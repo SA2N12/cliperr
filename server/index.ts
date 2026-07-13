@@ -419,9 +419,10 @@ function parisClock(): { hour: number; hm: number } {
   const minute = Number(parts.find((p) => p.type === 'minute')?.value ?? '0')
   return { hour, hm: hour + minute / 60 }
 }
-/** Date du jour (Europe/Paris, YYYY-MM-DD) → clé des compteurs quotidiens. */
-function dayKey(): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris' }).format(new Date())
+/** Date (Europe/Paris, YYYY-MM-DD) → clé des compteurs quotidiens. offsetDays>0 = jours à venir. */
+function dayKey(offsetDays = 0): string {
+  const d = offsetDays ? new Date(Date.now() + offsetDays * 86_400_000) : new Date()
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris' }).format(d)
 }
 /** Décompose un timestamp en date/heure Paris (pour dater les vidéos déjà publiées). */
 function parisPartsOf(ms: number): { date: string; hm: number; label: string } {
@@ -1503,17 +1504,21 @@ app.post('/api/autopilot/run-now', wrap((_req, res) => {
 }))
 // Planning du jour : vidéos DÉJÀ publiées (heure réelle) + À VENIR (estimées de
 // maintenant jusqu'à la fin de la fenêtre, dans l'ordre round-robin du pilote).
-app.get('/api/autopilot/plan', wrap(async (_req, res) => {
+app.get('/api/autopilot/plan', wrap(async (req, res) => {
   const enabled = repo.getSetting('autopilot_enabled') === '1'
   const paused = repo.getSetting('queue_paused') === '1'
   const perDay = Math.max(1, Number(repo.getSetting('autopilot_per_day')) || 1)
   const profiles = uploadPostProfiles()
   const n = profiles.length
-  const { hm: nowHm } = parisClock()
+  // day=0 (défaut) : aujourd'hui (déjà publiées + à venir). day=1+ : journée VIERGE à venir
+  // (aucune vidéo publiée ce jour-là → compteurs vides → tout est « à venir »).
+  const dayOffset = Math.max(0, Math.min(6, Math.round(Number((req.query as { day?: string }).day) || 0)))
+  const { hm: realNowHm } = parisClock()
+  const nowHm = dayOffset > 0 ? 0 : realNowHm // un jour futur n'a pas d'« heure actuelle »
   const win = { start: PUB_START_HOUR, end: PUB_END_HOUR }
-  if (!n) return res.json({ enabled, paused, perDay, window: win, nowHm, slots: [] })
+  if (!n) return res.json({ enabled, paused, perDay, window: win, nowHm, day: dayOffset, slots: [] })
   const meta = new Map((await cachedUploadPostProfiles()).map((p) => [p.username, p]))
-  const today = dayKey()
+  const today = dayKey(dayOffset)
   const fmt = (h: number): string => {
     let hh = Math.floor(h)
     let mm = Math.round((h - hh) * 60)
@@ -1693,7 +1698,7 @@ app.get('/api/autopilot/plan', wrap(async (_req, res) => {
 
   slots.sort((a, b) => a.etaHm - b.etaHm)
   const targetPerDay = profiles.reduce((s, u) => s + perDayForProfile(u), 0)
-  res.json({ enabled, paused, perDay, targetPerDay, window: win, nowHm, today, slots })
+  res.json({ enabled, paused, perDay, targetPerDay, window: win, nowHm, today, day: dayOffset, slots })
 }))
 // Réglages d'UN SEUL compte (fusion dans les maps existantes — pas de remplacement
 // global) : utilisé par la fenêtre ⚙️ des lignes du planning.

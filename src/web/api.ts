@@ -122,7 +122,7 @@ export const api = {
     series?: Record<string, { enabled: boolean; title: string; universe: string }>
   }) => post<{ ok: boolean }>('/api/autopilot', cfg),
   runAutopilotNow: () => post<{ ok: boolean }>('/api/autopilot/run-now'),
-  autopilotPlan: () =>
+  autopilotPlan: (day?: number) =>
     req<{
       enabled: boolean
       paused?: boolean
@@ -130,6 +130,8 @@ export const api = {
       targetPerDay?: number
       window: { start: number; end: number }
       nowHm: number
+      today?: string
+      day?: number
       slots: {
         user: string
         handle: string | null
@@ -148,7 +150,7 @@ export const api = {
         error?: string
         music?: string
       }[]
-    }>('/api/autopilot/plan'),
+    }>(`/api/autopilot/plan${day ? `?day=${day}` : ''}`),
   saveAutopilotSlot: (slot: { user: string; ordinal: number; hm?: number | null; type?: string | null; subject?: string | null; music?: string | null; reset?: boolean }) =>
     post<{ ok: boolean }>('/api/autopilot/slot', slot),
   saveAutopilotAccount: (cfg: { user: string; perDay?: number; niche?: string; ctas?: { niche?: string; serie?: string; custom?: string; clip?: string }; clipChannels?: string; series?: { enabled: boolean; title: string; universe: string } }) =>

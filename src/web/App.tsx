@@ -1231,7 +1231,7 @@ const CRON_LABELS: Record<string, string> = {
 }
 
 type AutopilotSlot = { user: string; handle: string | null; avatarUrl: string | null; niche: string; ordinal: number; etaHm: number; eta: string; done: boolean; pinned?: boolean; type?: string; subject?: string; hasSeries?: boolean; credits?: number; failed?: boolean; error?: string; music?: string }
-type AutopilotPlan = { enabled: boolean; paused?: boolean; perDay: number; targetPerDay?: number; window: { start: number; end: number }; nowHm: number; slots: AutopilotSlot[] }
+type AutopilotPlan = { enabled: boolean; paused?: boolean; perDay: number; targetPerDay?: number; window: { start: number; end: number }; nowHm: number; day?: number; slots: AutopilotSlot[] }
 
 // Fenêtre d'édition d'un créneau du planning : heure + type de contenu.
 // `quota` = nb de vidéos/jour actuel du compte (pour le bouton Supprimer).
@@ -1609,10 +1609,11 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
   const [paused, setPaused] = useState(false)
   const [editSlot, setEditSlot] = useState<AutopilotSlot | null>(null)
   const [cfgUser, setCfgUser] = useState<string | null>(null)
+  const [day, setDay] = useState(0) // 0 = aujourd'hui, 1 = demain
   const load = useCallback((): void => {
-    api.autopilotPlan().then(setPlan).catch(() => undefined)
+    api.autopilotPlan(day).then(setPlan).catch(() => undefined)
     api.schedulerStatus().then((s) => setPaused(s.paused)).catch(() => undefined)
-  }, [])
+  }, [day])
   useEffect(() => {
     load()
     const t = window.setInterval(load, 20000)
@@ -1637,7 +1638,7 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
     const next = Math.min(5, current + 1)
     try {
       await api.saveAutopilotAccount({ user: u, perDay: next })
-      const p = await api.autopilotPlan()
+      const p = await api.autopilotPlan(day)
       setPlan(p)
       onConfigSaved?.()
       const created = p.slots.filter((s) => s.user === u && !s.done).pop()
@@ -1653,10 +1654,12 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
   const totalCredits = slots.reduce((sum, s) => sum + (s.credits ?? 0), 0)
   const nextIdx = slots.findIndex((s) => !s.done)
   const nextKey = nextIdx >= 0 ? `${slots[nextIdx].user}-${slots[nextIdx].ordinal}` : null
-  if (!plan?.enabled || slots.length === 0) return null
+  // En vue « Demain » on garde la carte (donc le sélecteur) même s'il n'y a aucune
+  // vidéo prévue, pour ne pas coincer l'utilisateur sans moyen de revenir.
+  if (!plan?.enabled || (slots.length === 0 && day === 0)) return null
 
   const renderBlock = (s: AutopilotSlot, opts?: { hideAvatar?: boolean }): JSX.Element => {
-    const generating = !!activeGen && `${s.user}-${s.ordinal}` === nextKey
+    const generating = day === 0 && !!activeGen && `${s.user}-${s.ordinal}` === nextKey
     return (
       <button
         key={`${s.user}-${s.ordinal}`}
@@ -1711,8 +1714,33 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
     <div className="card" style={{ marginBottom: 16 }}>
       <div className="row" style={{ marginBottom: 4 }}>
         <div>
-          <strong>Aujourd’hui</strong>
-          <div className="muted small">{doneCount}/{slots.length} publiée{slots.length > 1 ? 's' : ''} · clique un bloc « à venir » pour choisir son heure et son type de vidéo</div>
+          <div style={{ display: 'inline-flex', gap: 3, background: 'var(--panel-2)', borderRadius: 9, padding: 3, marginBottom: 7 }}>
+            {([[0, 'Aujourd’hui'], [1, 'Demain']] as const).map(([d, lbl]) => (
+              <button
+                key={d}
+                onClick={() => setDay(d)}
+                style={{
+                  border: 'none',
+                  cursor: 'pointer',
+                  borderRadius: 6,
+                  padding: '4px 14px',
+                  fontSize: 13,
+                  fontWeight: day === d ? 700 : 500,
+                  background: day === d ? '#fff' : 'transparent',
+                  boxShadow: day === d ? '0 1px 2px rgba(0,0,0,0.10)' : 'none',
+                  color: day === d ? 'var(--text)' : 'var(--muted)',
+                  fontFamily: 'inherit'
+                }}
+              >
+                {lbl}
+              </button>
+            ))}
+          </div>
+          <div className="muted small">
+            {day === 1
+              ? `Planning de demain · ${slots.length} vidéo${slots.length > 1 ? 's' : ''} prévue${slots.length > 1 ? 's' : ''} · clique un bloc pour l’ajuster (s’applique demain et les jours suivants)`
+              : `${doneCount}/${slots.length} publiée${slots.length > 1 ? 's' : ''} · clique un bloc « à venir » pour choisir son heure et son type de vidéo`}
+          </div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           {totalCredits > 0 && (
@@ -1767,7 +1795,10 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
           {slots.map((s) => renderBlock(s))}
         </div>
       )}
-      {activeGen && (
+      {slots.length === 0 && (
+        <div className="muted small" style={{ marginTop: 14 }}>Aucune vidéo prévue demain — augmente la cadence d’un compte (⚙️) pour en ajouter.</div>
+      )}
+      {day === 0 && activeGen && (
         <div style={{ marginTop: 12 }}>
           <div className="bar"><div style={{ width: `${genPct(activeGen.message)}%`, transition: 'width 0.4s ease' }} /></div>
           <div className="muted small" style={{ marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activeGen.message}</div>
