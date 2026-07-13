@@ -1242,9 +1242,28 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
   const [music, setMusic] = useState(slot.music ?? 'auto')
   const [tracks, setTracks] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
+  const musicInputRef = useRef<HTMLInputElement>(null)
   useEffect(() => { api.musicList().then((r) => setTracks(r.tracks)).catch(() => undefined) }, [])
   // Nom lisible d'un morceau (retire le préfixe technique + l'extension du fichier).
   const trackLabel = (f: string): string => f.replace(/^[a-z]+-\d+-/i, '').replace(/^\d+-/, '').replace(/\.[^.]+$/, '')
+  // Import d'un MP3 depuis le bloc → stocké dans /data/music (partagé), puis auto-sélectionné pour ce bloc.
+  const uploadTrack = async (file: File): Promise<void> => {
+    if (!/\.(mp3|m4a|aac|wav|ogg|opus)$/i.test(file.name)) { toast('Format audio non supporté (mp3, m4a, wav, ogg…)'); return }
+    setUploading(true)
+    try {
+      const r = await api.uploadMusic(file)
+      const list = await api.musicList()
+      setTracks(list.tracks)
+      if (r.name && list.tracks.includes(r.name)) setMusic(r.name)
+      toast('Musique importée ✓')
+    } catch (e) {
+      toast('Erreur : ' + (e as Error).message)
+    } finally {
+      setUploading(false)
+    }
+  }
 
   const removeSlot = async (): Promise<void> => {
     setBusy(true)
@@ -1327,12 +1346,38 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
         {type !== 'clip' && (
           <>
             <label className="muted small" style={{ display: 'block', marginBottom: 4 }}>Musique de fond</label>
-            <select className="input-full" value={music} onChange={(e) => setMusic(e.target.value)} style={{ marginBottom: type === 'serie' && music === 'auto' ? 4 : 10 }}>
+            <select className="input-full" value={music} onChange={(e) => setMusic(e.target.value)} style={{ marginBottom: 8 }}>
               <option value="auto">Choix automatique (IA)</option>
               <option value="none">Aucune musique</option>
               {tracks.map((t) => <option key={t} value={t}>{trackLabel(t)}</option>)}
             </select>
-            {type === 'serie' && music === 'auto' && <div className="muted small" style={{ marginBottom: 10 }}>Les épisodes de série n'ont pas de musique de fond par défaut (dialogues seuls). Choisis une piste ci-dessus pour en ajouter une.</div>}
+            {type === 'serie' && music === 'auto' && <div className="muted small" style={{ marginTop: -2, marginBottom: 8 }}>Les épisodes de série n'ont pas de musique de fond par défaut (dialogues seuls). Choisis une piste ci-dessus pour en ajouter une.</div>}
+            <div
+              onDragOver={(e) => { e.preventDefault(); if (!uploading) setDragOver(true) }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={(e) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files?.[0]; if (f && !uploading) void uploadTrack(f) }}
+              onClick={() => !uploading && musicInputRef.current?.click()}
+              className="muted small"
+              style={{
+                border: `1.5px dashed ${dragOver ? 'var(--accent-strong)' : 'var(--border)'}`,
+                borderRadius: 10,
+                padding: 12,
+                textAlign: 'center',
+                cursor: uploading ? 'default' : 'pointer',
+                background: dragOver ? 'var(--panel-2)' : 'transparent',
+                marginBottom: 10,
+                transition: 'border-color .15s, background .15s'
+              }}
+            >
+              {uploading ? '⏳ Import en cours…' : '⬆️ Importer un MP3 — glisse-dépose un fichier ou clique'}
+              <input
+                ref={musicInputRef}
+                type="file"
+                accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg,.opus"
+                style={{ display: 'none' }}
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadTrack(f); e.currentTarget.value = '' }}
+              />
+            </div>
           </>
         )}
         <div className="muted small" style={{ marginBottom: 14 }}>Ces réglages sont prioritaires sur la répartition automatique et s'appliquent chaque jour jusqu'à modification.</div>

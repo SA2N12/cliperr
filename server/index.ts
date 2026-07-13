@@ -1245,7 +1245,7 @@ app.get('/api/music', wrap((_req, res) => res.json({ tracks: musicTracks() })))
 app.post('/api/music', musicUpload.single('file'), wrap((req, res) => {
   const f = (req as Request & { file?: Express.Multer.File }).file
   if (!f) return res.status(400).json({ error: 'Fichier manquant' })
-  res.json({ ok: true })
+  res.json({ ok: true, name: f.filename }) // nom stocké sur disque → auto-sélection côté client
 }))
 app.delete('/api/music/:name', wrap((req, res) => {
   const p = join(musicDir, basename(req.params.name))

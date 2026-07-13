@@ -172,7 +172,7 @@ export const api = {
   uploadMusic: (file: File) => {
     const fd = new FormData()
     fd.append('file', file)
-    return req<{ ok: boolean }>('/api/music', { method: 'POST', body: fd })
+    return req<{ ok: boolean; name?: string }>('/api/music', { method: 'POST', body: fd })
   },
   deleteMusic: (name: string) => req(`/api/music/${encodeURIComponent(name)}`, { method: 'DELETE' }),
   trends: () => req<{ configured: boolean; hashtags: string[]; error?: string }>('/api/trends'),
