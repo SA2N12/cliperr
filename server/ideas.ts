@@ -95,6 +95,7 @@ Pour chaque idée : un titre accrocheur, un hook (3 premières secondes), l'angl
 
 RÈGLES IMPORTANTES :
 - Chaque idée doit être NETTEMENT différente des sujets déjà traités (autre sujet, autre angle, autre accroche). VARIE les formats d'accroche (question, chiffre choc, POV, storytelling, mythe à casser, révélation…) — n'emploie pas toujours la même tournure.
+- Ancre chaque idée dans du CONCRET : un artefact précis (enregistrement, cassette, lettre, photo, document, objet, étude, match…) et/ou une date ou un chiffre EXACT dans le titre (ex. « La cassette VHS de 1987… », « Les 3 minutes manquantes du vol… », « L'étude de 1971 qui… »). Les titres concrets et datés surperforment très nettement les concepts abstraits — évite les titres vagues sans chiffre ni objet.
 - La DERNIÈRE étape du script doit être une question directe ou une affirmation clivante adressée au spectateur, pour déclencher des COMMENTAIRES.
 
 Sois concret et actionnable. Réponds en français, uniquement via l'outil propose_ideas.`
