@@ -1230,7 +1230,7 @@ const CRON_LABELS: Record<string, string> = {
   '0 */3 * * *': 'toutes les 3 h'
 }
 
-type AutopilotSlot = { user: string; handle: string | null; avatarUrl: string | null; niche: string; ordinal: number; etaHm: number; eta: string; done: boolean; pinned?: boolean; type?: string; subject?: string; hasSeries?: boolean; credits?: number; failed?: boolean; error?: string }
+type AutopilotSlot = { user: string; handle: string | null; avatarUrl: string | null; niche: string; ordinal: number; etaHm: number; eta: string; done: boolean; pinned?: boolean; type?: string; subject?: string; hasSeries?: boolean; credits?: number; failed?: boolean; error?: string; music?: string }
 type AutopilotPlan = { enabled: boolean; paused?: boolean; perDay: number; targetPerDay?: number; window: { start: number; end: number }; nowHm: number; slots: AutopilotSlot[] }
 
 // Fenêtre d'édition d'un créneau du planning : heure + type de contenu.
@@ -1239,7 +1239,12 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
   const [time, setTime] = useState(slot.eta.match(/^\d{2}:\d{2}$/) ? slot.eta : '12:00')
   const [type, setType] = useState(slot.type ?? 'auto')
   const [subject, setSubject] = useState(slot.subject ?? '')
+  const [music, setMusic] = useState(slot.music ?? 'auto')
+  const [tracks, setTracks] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
+  useEffect(() => { api.musicList().then((r) => setTracks(r.tracks)).catch(() => undefined) }, [])
+  // Nom lisible d'un morceau (retire le préfixe technique + l'extension du fichier).
+  const trackLabel = (f: string): string => f.replace(/^[a-z]+-\d+-/i, '').replace(/^\d+-/, '').replace(/\.[^.]+$/, '')
 
   const removeSlot = async (): Promise<void> => {
     setBusy(true)
@@ -1269,7 +1274,8 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
           ordinal: slot.ordinal,
           hm: Number.isFinite(h) && Number.isFinite(m) ? h + m / 60 : null,
           type: type === 'auto' ? null : type,
-          subject: type === 'custom' || type === 'clip' ? subject : null
+          subject: type === 'custom' || type === 'clip' ? subject : null,
+          music
         })
         toast('Créneau personnalisé ✓')
       }
@@ -1318,7 +1324,18 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
             </div>
           </>
         )}
-        <div className="muted small" style={{ marginBottom: 14 }}>L'heure choisie est prioritaire sur la répartition automatique (valable aujourd'hui uniquement).</div>
+        {type !== 'clip' && (
+          <>
+            <label className="muted small" style={{ display: 'block', marginBottom: 4 }}>Musique de fond</label>
+            <select className="input-full" value={music} onChange={(e) => setMusic(e.target.value)} style={{ marginBottom: type === 'serie' && music === 'auto' ? 4 : 10 }}>
+              <option value="auto">Choix automatique (IA)</option>
+              <option value="none">Aucune musique</option>
+              {tracks.map((t) => <option key={t} value={t}>{trackLabel(t)}</option>)}
+            </select>
+            {type === 'serie' && music === 'auto' && <div className="muted small" style={{ marginBottom: 10 }}>Les épisodes de série n'ont pas de musique de fond par défaut (dialogues seuls). Choisis une piste ci-dessus pour en ajouter une.</div>}
+          </>
+        )}
+        <div className="muted small" style={{ marginBottom: 14 }}>Ces réglages sont prioritaires sur la répartition automatique et s'appliquent chaque jour jusqu'à modification.</div>
 
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
           <button className="btn" disabled={busy} onClick={() => void removeSlot()} style={{ color: 'var(--bad)', marginRight: 'auto' }} title="Retire cette vidéo (baisse la cadence du compte)">🗑 Supprimer</button>
@@ -1615,7 +1632,7 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
         }}
       >
         <div style={{ fontWeight: 700, fontSize: 13, fontVariantNumeric: 'tabular-nums', color: s.failed ? 'var(--bad)' : s.done ? 'var(--muted)' : 'var(--accent-strong)' }}>
-          {s.done ? s.eta : `≈ ${s.eta}`}{s.failed ? ' ⚠' : (s.pinned || s.type) && !s.done ? ' 📌' : ''}
+          {s.done ? s.eta : `≈ ${s.eta}`}{s.failed ? ' ⚠' : (s.pinned || s.type) && !s.done ? ' 📌' : ''}{!s.done && !s.failed && s.music && s.music !== 'auto' ? (s.music === 'none' ? ' 🔇' : ' 🎵') : ''}
         </div>
         {!opts?.hideAvatar && <Avatar url={s.avatarUrl} name={s.user} size={30} />}
         {!opts?.hideAvatar && (

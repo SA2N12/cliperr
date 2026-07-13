@@ -307,7 +307,7 @@ function reloadScheduler(): void {
 let videoChain: Promise<void> = Promise.resolve()
 async function runVideoGen(
   ideaId: number,
-  opts: { profile?: string; autoPublish?: boolean; imageStyle?: string; characterRefPath?: string; animateScenes?: boolean; dialogue?: boolean; noMusic?: boolean; videoType?: string } = {}
+  opts: { profile?: string; autoPublish?: boolean; imageStyle?: string; characterRefPath?: string; animateScenes?: boolean; dialogue?: boolean; noMusic?: boolean; videoType?: string; music?: string } = {}
 ): Promise<number | null> {
   const idea = repo.getIdea(ideaId)
   if (!idea) return null
@@ -322,7 +322,14 @@ async function runVideoGen(
     const ctx = await getContext()
     const tracks = musicTracks()
     let musicTrack: string | undefined
-    if (tracks.length && !opts.noMusic) {
+    const cleanName = (f: string): string => f.replace(/^[a-z]+-\d+-/, '').replace(/\.[^.]+$/, '')
+    if (opts.music === 'none') {
+      // Choix explicite du bloc : aucune musique de fond.
+    } else if (opts.music && opts.music !== 'auto' && tracks.includes(opts.music)) {
+      // Choix manuel d'une piste précise pour ce bloc (prioritaire sur l'IA).
+      musicTrack = join(musicDir, opts.music)
+      emitIdeaVideo({ ideaId, status: 'running', message: `Musique : ${cleanName(opts.music)}` })
+    } else if (tracks.length && !opts.noMusic) {
       emitIdeaVideo({ ideaId, status: 'running', message: 'Choix de la musique (IA)…' })
       // Évite de rejouer le dernier morceau utilisé sur ce compte (variété).
       const lastKey = `music_last_${targetProfile}`
@@ -331,7 +338,7 @@ async function runVideoGen(
       if (chosen) {
         musicTrack = join(musicDir, chosen)
         repo.setSetting(lastKey, chosen)
-        emitIdeaVideo({ ideaId, status: 'running', message: `Musique : ${chosen.replace(/^[a-z]+-\d+-/, '').replace(/\.[^.]+$/, '')}` })
+        emitIdeaVideo({ ideaId, status: 'running', message: `Musique : ${cleanName(chosen)}` })
       }
     }
     const { filePath, durationSec, usage } = await generateVideoFromIdea(ctx, {
@@ -544,9 +551,9 @@ async function autoPickClipUrl(user: string, niche: string): Promise<string | nu
 // ── Créneaux personnalisés PERSISTANTS (modèle) : heure et/ou type choisis PAR
 // VIDÉO, appliqués CHAQUE jour tant que l'utilisateur ne les change pas (les
 // compteurs, eux, se réinitialisent quotidiennement). Clé « <user>:<ordinal> ».
-// autopilot_slot_overrides = { "<user>:<ordinal>": { hm?, type?, subject? } }
-// (type: 'niche' | 'serie' | 'custom' | 'clip')
-type SlotOverride = { hm?: number; type?: string; subject?: string }
+// autopilot_slot_overrides = { "<user>:<ordinal>": { hm?, type?, subject?, music? } }
+// (type: 'niche' | 'serie' | 'custom' | 'clip' ; music: nom de fichier | absent = auto IA | 'none')
+type SlotOverride = { hm?: number; type?: string; subject?: string; music?: string }
 function slotOverrides(): Record<string, SlotOverride> {
   try {
     const raw = repo.getSetting('autopilot_slot_overrides')
@@ -885,7 +892,8 @@ async function runAutopilotTick(force = false): Promise<void> {
         characterRefPath: refPath,
         animateScenes: !!series, // séries = scènes animées (fal.ai) si la clé est configurée
         dialogue: !!series, // séries = les personnages parlent (voix par personnage)
-        noMusic: !!series // séries = pas de musique de fond (dialogues seuls)
+        noMusic: !!series, // séries = pas de musique de fond (dialogues seuls)
+        music: slotOv.music // musique choisie sur le bloc (nom de fichier / 'none' / absent = auto IA)
       })
     )
     videoChain = job.then(() => undefined, () => undefined)
@@ -1528,6 +1536,7 @@ app.get('/api/autopilot/plan', wrap(async (_req, res) => {
     credits?: number
     failed?: boolean
     error?: string
+    music?: string
   }
   const slots: Slot[] = []
   const ovToday = slotOverrides()
@@ -1610,6 +1619,7 @@ app.get('/api/autopilot/plan', wrap(async (_req, res) => {
         subject: ov?.subject,
         hasSeries: !!confSerie,
         credits: estimateCredits(ov?.type),
+        music: ov?.music,
         failed: true,
         error
       })
@@ -1676,7 +1686,8 @@ app.get('/api/autopilot/plan', wrap(async (_req, res) => {
       type: ov?.type,
       subject: ov?.subject,
       hasSeries: !!confSerie,
-      credits: estimateCredits(ov?.type)
+      credits: estimateCredits(ov?.type),
+      music: ov?.music
     })
   }
 
@@ -1783,7 +1794,7 @@ app.post('/api/autopilot/clip-channels/test', wrap(async (req, res) => {
 
 // Personnalise un créneau du jour (heure et/ou type) — clic sur un bloc du planning.
 app.post('/api/autopilot/slot', wrap((req, res) => {
-  const b = (req.body ?? {}) as { user?: unknown; ordinal?: unknown; hm?: unknown; type?: unknown; subject?: unknown; reset?: unknown }
+  const b = (req.body ?? {}) as { user?: unknown; ordinal?: unknown; hm?: unknown; type?: unknown; subject?: unknown; music?: unknown; reset?: unknown }
   const user = String(b.user ?? '').trim()
   const ordinal = Math.max(1, Math.round(Number(b.ordinal)) || 1)
   if (!user || !uploadPostProfiles().includes(user)) return res.status(400).json({ error: 'Compte inconnu' })
@@ -1812,7 +1823,12 @@ app.post('/api/autopilot/slot', wrap((req, res) => {
       if (s) o.subject = s
       else delete o.subject
     }
-    if (o.hm == null && !o.type) delete map[key]
+    if (b.music !== undefined) {
+      const mu = String(b.music ?? '').trim()
+      if (mu && mu !== 'auto') o.music = mu.slice(0, 120) // nom de fichier précis, ou 'none'
+      else delete o.music // 'auto' → l'IA choisit la musique
+    }
+    if (o.hm == null && !o.type && !o.music) delete map[key]
     else map[key] = o
   }
   // Modèle persistant : appliqué chaque jour tant qu'il n'est pas modifié.
