@@ -1231,7 +1231,8 @@ const CRON_LABELS: Record<string, string> = {
 }
 
 type AutopilotSlot = { user: string; handle: string | null; avatarUrl: string | null; niche: string; ordinal: number; etaHm: number; eta: string; done: boolean; pinned?: boolean; type?: string; subject?: string; hasSeries?: boolean; credits?: number; failed?: boolean; error?: string; music?: string }
-type AutopilotPlan = { enabled: boolean; paused?: boolean; perDay: number; targetPerDay?: number; window: { start: number; end: number }; nowHm: number; day?: number; slots: AutopilotSlot[] }
+type AutopilotAccount = { user: string; handle: string | null; avatarUrl: string | null }
+type AutopilotPlan = { enabled: boolean; paused?: boolean; perDay: number; targetPerDay?: number; window: { start: number; end: number }; nowHm: number; day?: number; accounts?: AutopilotAccount[]; slots: AutopilotSlot[] }
 
 // Fenêtre d'édition d'un créneau du planning : heure + type de contenu.
 // `quota` = nb de vidéos/jour actuel du compte (pour le bouton Supprimer).
@@ -1654,9 +1655,11 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
   const totalCredits = slots.reduce((sum, s) => sum + (s.credits ?? 0), 0)
   const nextIdx = slots.findIndex((s) => !s.done)
   const nextKey = nextIdx >= 0 ? `${slots[nextIdx].user}-${slots[nextIdx].ordinal}` : null
-  // En vue « Demain » on garde la carte (donc le sélecteur) même s'il n'y a aucune
-  // vidéo prévue, pour ne pas coincer l'utilisateur sans moyen de revenir.
-  if (!plan?.enabled || (slots.length === 0 && day === 0)) return null
+  // Vue par compte : on garde toujours la carte (une ligne par compte, même à 0
+  // vidéo/jour). Vue « File d'attente » : on masque la carte si rien aujourd'hui
+  // (comportement d'origine), mais on la garde en vue « Demain » (sélecteur).
+  if (!plan?.enabled) return null
+  if (!groupByAccount && day === 0 && slots.length === 0) return null
 
   const renderBlock = (s: AutopilotSlot, opts?: { hideAvatar?: boolean }): JSX.Element => {
     const generating = day === 0 && !!activeGen && `${s.user}-${s.ordinal}` === nextKey
@@ -1707,8 +1710,17 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
     )
   }
 
-  // Ordre des lignes (mode par compte) : premier passage de chaque compte.
-  const users = [...new Set(slots.map((s) => s.user))]
+  // Lignes (mode par compte) : TOUS les comptes configurés, même ceux à 0 vidéo/jour,
+  // pour pouvoir en réactiver un qui n'a aucune vidéo prévue. Repli sur les comptes
+  // présents dans les créneaux si le serveur ne renvoie pas la liste.
+  const scopedAcc = (a: AutopilotAccount): boolean => !scope || scope === ALL_SCOPE || a.user === scope
+  const accountList: AutopilotAccount[] = (plan?.accounts?.length
+    ? plan.accounts
+    : [...new Set(slots.map((s) => s.user))].map((u) => {
+        const s = slots.find((x) => x.user === u)
+        return { user: u, handle: s?.handle ?? null, avatarUrl: s?.avatarUrl ?? null }
+      })
+  ).filter(scopedAcc)
 
   return (
     <div className="card" style={{ marginBottom: 16 }}>
@@ -1757,18 +1769,18 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
       )}
       {groupByAccount ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 14 }}>
-          {users.map((u) => {
+          {accountList.map((a) => {
+            const u = a.user
             const userSlots = slots.filter((s) => s.user === u)
-            const first = userSlots[0]
             const uDone = userSlots.filter((s) => s.done).length
             const uCredits = userSlots.reduce((sum, s) => sum + (s.credits ?? 0), 0)
             return (
               <div key={u} style={{ display: 'flex', alignItems: 'center', gap: 12, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
                 <div style={{ width: 176, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Avatar url={first.avatarUrl} name={u} size={32} />
+                  <Avatar url={a.avatarUrl} name={u} size={32} />
                   <div style={{ minWidth: 0, flex: 1 }}>
-                    <div className="small" style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{first.handle ? '@' + first.handle : u}</div>
-                    <div className="muted small">{uDone}/{userSlots.length} publiée{uDone > 1 ? 's' : ''}{uCredits > 0 ? ` · ≈ ${uCredits} cr` : ''}</div>
+                    <div className="small" style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.handle ? '@' + a.handle : u}</div>
+                    <div className="muted small">{userSlots.length === 0 ? 'Aucune vidéo prévue' : `${uDone}/${userSlots.length} publiée${uDone > 1 ? 's' : ''}${uCredits > 0 ? ` · ≈ ${uCredits} cr` : ''}`}</div>
                   </div>
                   <button className="btn icon-btn" title="Réglages du compte (cadence, niche, CTA, série)" onClick={() => setCfgUser(u)} style={{ width: 30, height: 30, flexShrink: 0 }}>
                     <Icon name="settings" size={14} />
@@ -1795,8 +1807,8 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
           {slots.map((s) => renderBlock(s))}
         </div>
       )}
-      {slots.length === 0 && (
-        <div className="muted small" style={{ marginTop: 14 }}>Aucune vidéo prévue demain — augmente la cadence d’un compte (⚙️) pour en ajouter.</div>
+      {!groupByAccount && slots.length === 0 && (
+        <div className="muted small" style={{ marginTop: 14 }}>Aucune vidéo prévue {day === 1 ? 'demain' : "aujourd'hui"}.</div>
       )}
       {day === 0 && activeGen && (
         <div style={{ marginTop: 12 }}>

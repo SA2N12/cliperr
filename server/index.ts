@@ -1516,7 +1516,7 @@ app.get('/api/autopilot/plan', wrap(async (req, res) => {
   const { hm: realNowHm } = parisClock()
   const nowHm = dayOffset > 0 ? 0 : realNowHm // un jour futur n'a pas d'« heure actuelle »
   const win = { start: PUB_START_HOUR, end: PUB_END_HOUR }
-  if (!n) return res.json({ enabled, paused, perDay, window: win, nowHm, day: dayOffset, slots: [] })
+  if (!n) return res.json({ enabled, paused, perDay, window: win, nowHm, day: dayOffset, accounts: [], slots: [] })
   const meta = new Map((await cachedUploadPostProfiles()).map((p) => [p.username, p]))
   const today = dayKey(dayOffset)
   const fmt = (h: number): string => {
@@ -1698,7 +1698,13 @@ app.get('/api/autopilot/plan', wrap(async (req, res) => {
 
   slots.sort((a, b) => a.etaHm - b.etaHm)
   const targetPerDay = profiles.reduce((s, u) => s + perDayForProfile(u), 0)
-  res.json({ enabled, paused, perDay, targetPerDay, window: win, nowHm, today, day: dayOffset, slots })
+  // Tous les comptes configurés, même ceux à 0 vidéo/jour → l'UI affiche une ligne
+  // par compte pour pouvoir en réactiver un qui n'a aucune vidéo prévue.
+  const accounts = profiles.map((user) => {
+    const m = meta.get(user)
+    return { user, handle: m?.tiktokHandle ?? null, avatarUrl: m?.avatarUrl ?? null }
+  })
+  res.json({ enabled, paused, perDay, targetPerDay, window: win, nowHm, today, day: dayOffset, accounts, slots })
 }))
 // Réglages d'UN SEUL compte (fusion dans les maps existantes — pas de remplacement
 // global) : utilisé par la fenêtre ⚙️ des lignes du planning.

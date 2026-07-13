@@ -132,6 +132,7 @@ export const api = {
       nowHm: number
       today?: string
       day?: number
+      accounts?: { user: string; handle: string | null; avatarUrl: string | null }[]
       slots: {
         user: string
         handle: string | null
