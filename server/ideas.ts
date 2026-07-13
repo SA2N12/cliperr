@@ -99,27 +99,32 @@ RÈGLES IMPORTANTES :
 
 Sois concret et actionnable. Réponds en français, uniquement via l'outil propose_ideas.`
 
-  const msg = await client.messages.create({
-    model,
-    max_tokens: 4000,
-    tools: [tool],
-    tool_choice: { type: 'tool', name: 'propose_ideas' },
-    messages: [{ role: 'user', content: prompt }]
-  })
-
-  const usage: Usage | null = msg.usage
-    ? { input_tokens: msg.usage.input_tokens, output_tokens: msg.usage.output_tokens }
-    : null
-
-  const block = msg.content.find((b) => b.type === 'tool_use')
-  if (!block || block.type !== 'tool_use') return { ideas: [], usage }
-  const parsed = IdeasSchema.safeParse(block.input)
-  if (!parsed.success) return { ideas: [], usage }
-
-  return {
-    ideas: parsed.data.ideas.map((i) => ({ ...i, hashtags: i.hashtags.map(normTag).filter(Boolean) })),
-    usage
+  // On retente jusqu'à 3 fois : un résultat vide (refus ponctuel, réponse tronquée
+  // ou hors-schéma) est généralement transitoire → un nouvel essai aboutit.
+  let ideas: ViralIdea[] = []
+  let usageIn = 0
+  let usageOut = 0
+  let hasUsage = false
+  for (let attempt = 0; attempt < 3 && !ideas.length; attempt++) {
+    const msg = await client.messages.create({
+      model,
+      max_tokens: 4000,
+      tools: [tool],
+      tool_choice: { type: 'tool', name: 'propose_ideas' },
+      messages: [{ role: 'user', content: prompt }]
+    })
+    if (msg.usage) {
+      usageIn += msg.usage.input_tokens
+      usageOut += msg.usage.output_tokens
+      hasUsage = true
+    }
+    const block = msg.content.find((b) => b.type === 'tool_use')
+    if (!block || block.type !== 'tool_use') continue
+    const parsed = IdeasSchema.safeParse(block.input)
+    if (!parsed.success) continue
+    ideas = parsed.data.ideas.map((i) => ({ ...i, hashtags: i.hashtags.map(normTag).filter(Boolean) }))
   }
+  return { ideas, usage: hasUsage ? { input_tokens: usageIn, output_tokens: usageOut } : null }
 }
 
 // ── Mode série (feuilleton à épisodes, type « île des fruits skibidi ») ──
