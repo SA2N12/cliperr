@@ -399,8 +399,8 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
         ))}
         <div className="spacer" />
         <div className="user-card">
-          {/* Tuile dégradé bleu → vert (carré arrondi), à la place de la photo de profil. */}
-          <div className="avatar" style={{ borderRadius: 10, background: 'linear-gradient(135deg, #3b82f6 0%, #14b8a6 55%, #22c55e 100%)' }} />
+          {/* Tuile dégradé bleu → vert pastel (carré arrondi), à la place de la photo de profil. */}
+          <div className="avatar" style={{ borderRadius: 10, background: 'linear-gradient(135deg, #bae6fd 0%, #99f6e4 55%, #bbf7d0 100%)' }} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {ttProfile?.nickname ? `@${ttProfile.nickname}` : 'Compte'}
