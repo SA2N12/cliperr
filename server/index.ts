@@ -1145,12 +1145,45 @@ app.post('/api/ideas/inspire', wrap(async (req, res) => {
 }))
 // Cache des profils upload-post (avatar + @handle) pour ne pas spammer l'API (429).
 let profilesCache: { at: number; data: UploadPostProfile[] } | null = null
+/**
+ * Filet « dernière valeur connue » (persisté en DB) : l'API upload-post renvoie
+ * parfois un profil SANS ses données TikTok (handle/avatar null, rafraîchissement
+ * interne côté upload-post). Sans ce filet, l'UI retombe sur la lettre « C » et le
+ * nom brut jusqu'au prochain tirage correct — visible surtout après un déploiement
+ * (les caches mémoire repartent de zéro). Toute valeur fraîche non nulle met à
+ * jour le magasin ; une valeur nulle est comblée par la dernière connue.
+ */
+function stickyProfileMeta(data: UploadPostProfile[]): UploadPostProfile[] {
+  type Known = Record<string, { handle: string | null; avatarUrl: string | null }>
+  let store: Known = {}
+  try {
+    store = JSON.parse(repo.getSetting('uploadpost_profile_meta') || '{}') as Known
+  } catch {
+    /* JSON invalide → on repart de zéro */
+  }
+  let dirty = false
+  const out = data.map((p) => {
+    const known = store[p.username]
+    const merged = {
+      ...p,
+      tiktokHandle: p.tiktokHandle ?? known?.handle ?? null,
+      avatarUrl: p.avatarUrl ?? known?.avatarUrl ?? null
+    }
+    if ((merged.tiktokHandle || merged.avatarUrl) && (known?.handle !== merged.tiktokHandle || known?.avatarUrl !== merged.avatarUrl)) {
+      store[p.username] = { handle: merged.tiktokHandle, avatarUrl: merged.avatarUrl }
+      dirty = true
+    }
+    return merged
+  })
+  if (dirty) repo.setSetting('uploadpost_profile_meta', JSON.stringify(store))
+  return out
+}
 async function cachedUploadPostProfiles(): Promise<UploadPostProfile[]> {
   const key = getEncrypted('uploadpost_key')
   if (!key) return []
   if (profilesCache && Date.now() - profilesCache.at < 5 * 60 * 1000) return profilesCache.data
   try {
-    const data = await listUploadPostProfiles(key)
+    const data = stickyProfileMeta(await listUploadPostProfiles(key))
     profilesCache = { at: Date.now(), data }
     return data
   } catch {
@@ -1465,7 +1498,7 @@ app.post('/api/settings/uploadpost', wrap((req, res) => {
 app.get('/api/uploadpost/profiles', wrap(async (_req, res) => {
   const key = getEncrypted('uploadpost_key')
   if (!key) return res.status(400).json({ error: 'Clé API upload-post manquante' })
-  res.json({ profiles: await listUploadPostProfiles(key) })
+  res.json({ profiles: stickyProfileMeta(await listUploadPostProfiles(key)) })
 }))
 
 // yt-dlp
