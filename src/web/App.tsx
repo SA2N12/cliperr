@@ -380,19 +380,21 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
 
   return (
     <div className="app">
+      {/* Barre repliée en colonne d'icônes ; se déploie au survol par-dessus le
+          contenu (les libellés `.lbl` apparaissent en fondu). */}
       <aside className="sidebar">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px 8px' }}>
-          <div className="brand" style={{ padding: 0, display: 'flex', alignItems: 'center', gap: 8 }}><Logo size={30} /> Cliperr</div>
+          <div className="brand" style={{ padding: 0, display: 'flex', alignItems: 'center', gap: 8 }}><Logo size={30} /> <span className="lbl">Cliperr</span></div>
         </div>
         <div className="side-search">
-          <Icon name="search" size={15} /> Rechercher <span className="kbd">Ctrl K</span>
+          <Icon name="search" size={15} /> <span className="lbl" style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>Rechercher <span className="kbd">Ctrl K</span></span>
         </div>
         {navGroups.map((group, gi) => (
           <div key={gi}>
-            {gi > 0 && <div style={{ height: 1, background: 'var(--border)', margin: '8px 10px' }} />}
+            {gi > 0 && <div className="nav-sep-line" />}
             {group.map((n) => (
-              <button key={n.id} className={`nav-item ${page === n.id ? 'active' : ''}`} onClick={() => setPage(n.id)}>
-                <Icon name={n.icon} /> {n.label}
+              <button key={n.id} className={`nav-item ${page === n.id ? 'active' : ''}`} title={n.label} onClick={() => setPage(n.id)}>
+                <Icon name={n.icon} /> <span className="lbl">{n.label}</span>
               </button>
             ))}
           </div>
@@ -401,13 +403,13 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
         <div className="user-card">
           {/* Tuile dégradé bleu → vert pastel (carré arrondi), à la place de la photo de profil. */}
           <div className="avatar" style={{ borderRadius: 10, background: 'linear-gradient(135deg, #bae6fd 0%, #99f6e4 55%, #bbf7d0 100%)' }} />
-          <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="lbl" style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {ttProfile?.nickname ? `@${ttProfile.nickname}` : 'Compte'}
             </div>
             <div className="muted small">TikTok</div>
           </div>
-          <button className="nav-item" style={{ width: 'auto', padding: 8 }} title="Déconnexion" onClick={() => api.logout().then(onLogout)}>
+          <button className="nav-item lbl" style={{ width: 'auto', padding: 8 }} title="Déconnexion" onClick={() => api.logout().then(onLogout)}>
             <Icon name="logout" />
           </button>
         </div>
