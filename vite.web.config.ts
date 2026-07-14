@@ -17,9 +17,12 @@ export default defineConfig({
   },
   server: {
     port: 3000,
+    // ⚠️ Clés en REGEX (`^/api/`), pas en préfixe simple : un préfixe '/api'
+    // intercepterait aussi le module source `/api.ts` et renverrait du HTML à la
+    // place du JS → « Failed to load module script » et page blanche en dev.
     proxy: {
-      '/api': { target: apiTarget, changeOrigin: true },
-      '/media': { target: apiTarget, changeOrigin: true }
+      '^/api/': { target: apiTarget, changeOrigin: true },
+      '^/media/': { target: apiTarget, changeOrigin: true }
     }
   }
 })
