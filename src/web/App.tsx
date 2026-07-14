@@ -496,6 +496,11 @@ function Dashboard({ log, go, onRefresh, scope }: { log: string[]; go: (p: Page)
   // ── Détail par vidéo d'un compte (drill-down) ──
   if (open) {
     const list = (posts ?? []).slice().sort((a, b) => b.views - a.views)
+    // TikTok peut ne pas renvoyer les stats PAR VIDÉO pour un compte (bug de
+    // connexion côté upload-post) alors que les totaux du compte sont corrects :
+    // tout à zéro sur ≥3 vidéos d'un compte qui a des vues = données absentes,
+    // pas des vidéos mortes — on l'affiche clairement pour éviter le contresens.
+    const statsUnavailable = list.length >= 3 && open.views > 0 && list.every((v) => !v.views && !v.likes && !v.comments && !v.shares)
     return (
       <>
         <div className="page-head">
@@ -515,6 +520,11 @@ function Dashboard({ log, go, onRefresh, scope }: { log: string[]; go: (p: Page)
           <div className="card muted">Aucune vidéo trackée pour ce compte. Les vidéos publiées via Cliperr <b>à partir de maintenant</b> apparaîtront ici avec leurs stats détaillées.</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {statsUnavailable && (
+              <div style={{ padding: '12px 14px', borderRadius: 10, background: '#fef3c7', color: '#b45309' }} className="small">
+                <b>⚠ Stats par vidéo indisponibles pour ce compte</b> — TikTok renvoie 0 partout alors que le compte totalise <b>{fmtNum(open.views)} vues</b> : les compteurs ci-dessous ne reflètent PAS la réalité. Pour réparer : reconnecte TikTok pour ce profil sur upload-post.com (Manage profiles → Reconnect). Les totaux du compte, eux, restent fiables.
+              </div>
+            )}
             {list.map((v) => (
               <div key={v.clipId} className="card">
                 <div className="row" style={{ gap: 12, alignItems: 'center' }}>
