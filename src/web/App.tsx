@@ -106,7 +106,7 @@ function GenerationsWidget({ sources, progress, ideaVideo }: { sources: SourceDT
 
   return (
     <div style={{ position: 'fixed', right: 16, bottom: 16, zIndex: 60, width: open ? 330 : 'auto', maxWidth: 'calc(100vw - 32px)' }}>
-      <div className="card" style={{ padding: 0, overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,.18)' }}>
+      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
         <button onClick={() => setOpen((o) => !o)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', background: 'var(--accent)', color: '#fff', border: 0, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
           <span className="dot" style={{ background: '#fff' }} />
           {items.length} génération{items.length > 1 ? 's' : ''} en cours
@@ -1794,7 +1794,7 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
           alignItems: 'center',
           gap: 6,
           fontFamily: 'inherit',
-          transition: 'border-color .15s, box-shadow .15s'
+          transition: 'border-color .15s'
         }}
       >
         <div className="ap-time" style={{ fontWeight: 700, fontSize: 13.5, color: s.failed ? 'var(--bad)' : s.done ? 'var(--ap-green-deep)' : 'var(--text)' }}>
@@ -1848,14 +1848,13 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
                 key={d}
                 onClick={() => setDay(d)}
                 style={{
-                  border: 'none',
                   cursor: 'pointer',
                   borderRadius: 6,
                   padding: '4px 14px',
                   fontSize: 13,
                   fontWeight: day === d ? 700 : 500,
                   background: day === d ? '#fff' : 'transparent',
-                  boxShadow: day === d ? '0 1px 2px rgba(0,0,0,0.10)' : 'none',
+                  border: day === d ? '1px solid var(--border)' : '1px solid transparent',
                   color: day === d ? 'var(--text)' : 'var(--muted)',
                   fontFamily: 'inherit'
                 }}
