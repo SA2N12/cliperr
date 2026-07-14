@@ -128,6 +128,97 @@ Sois concret et actionnable. Réponds en français, uniquement via l'outil propo
   return { ideas, usage: hasUsage ? { input_tokens: usageIn, output_tokens: usageOut } : null }
 }
 
+// ── Mode inspiration : vidéo ORIGINALE calquée sur la mécanique d'un TikTok qui marche ──
+
+export interface InspireOptions {
+  apiKey: string
+  model?: string
+  /** Vidéo source (métadonnées yt-dlp + transcription de la voix). */
+  source: { title: string | null; author: string | null; durationSec: number | null; transcript: string }
+  /** Niche cible (optionnel) — sinon l'idée reste sur le même thème que la source. */
+  niche?: string
+}
+
+/**
+ * Analyse un TikTok viral (transcription + méta) et écrit UNE idée ORIGINALE qui
+ * réutilise sa mécanique gagnante (hook, structure, levier émotionnel) sans en
+ * copier le contenu. Inspiration structurelle, pas plagiat.
+ */
+export async function generateInspiredIdea(opts: InspireOptions): Promise<{ idea: ViralIdea | null; usage: Usage | null }> {
+  const model = opts.model ?? 'claude-haiku-4-5'
+  const client = new Anthropic({ apiKey: opts.apiKey })
+
+  const tool = {
+    name: 'propose_idea',
+    description: 'Propose une idée de vidéo TikTok originale inspirée de la mécanique de la source.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Titre court et accrocheur de la NOUVELLE vidéo' },
+        hook: { type: 'string', description: "Phrase d'accroche des 3 premières secondes" },
+        angle: {
+          type: 'string',
+          description: 'Commence par « Mécanique reprise : … » (ce qui est gardé de la source), puis pourquoi ça peut devenir viral'
+        },
+        script: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'Déroulé plan par plan, 4 à 8 étapes courtes et concrètes. La DERNIÈRE étape doit être une question directe ou une affirmation clivante adressée au spectateur pour déclencher des commentaires.'
+        },
+        format: { type: 'string', description: 'Format conseillé : durée, style de montage, sous-titres…' },
+        hashtags: { type: 'array', items: { type: 'string' }, description: '5 à 8 hashtags pertinents, sans espace' }
+      },
+      required: ['title', 'hook', 'angle', 'script', 'format', 'hashtags']
+    }
+  } satisfies Anthropic.Tool
+
+  const s = opts.source
+  const transcript = s.transcript.slice(0, 8000)
+  const prompt = `Tu es un stratège de contenu TikTok expert en viralité. Voici une vidéo TikTok qui fonctionne, dont on veut S'INSPIRER :
+
+Auteur : ${s.author ?? 'inconnu'}
+Titre / légende : ${s.title ?? '(sans titre)'}
+Durée : ${s.durationSec ? `${Math.round(s.durationSec)} s` : 'inconnue'}
+Transcription de la voix : ${transcript ? `« ${transcript} »` : '(aucune parole détectée — vidéo probablement visuelle/musicale : appuie-toi sur la légende)'}
+
+ÉTAPE 1 — Analyse sa MÉCANIQUE virale : type de hook, structure narrative, rythme, levier émotionnel (curiosité, indignation, identification, surprise…), format.
+ÉTAPE 2 — Crée UNE vidéo ORIGINALE qui réutilise cette mécanique gagnante, ${opts.niche ? `adaptée à la niche/thème : « ${opts.niche} »` : 'sur le même thème général que la source'}.
+
+RÈGLES IMPORTANTES :
+- INTERDIT de copier la source : autre sujet précis, autres phrases, autres exemples, autre chute. On reprend la STRUCTURE et le levier émotionnel, jamais le contenu. Les deux vidéos doivent pouvoir coexister sans soupçon de plagiat.
+- Ancre l'idée dans du CONCRET : un artefact précis (enregistrement, document, photo, objet, étude, match…) et/ou une date ou un chiffre EXACT dans le titre — les titres concrets et datés surperforment.
+- Dans « angle », commence par « Mécanique reprise : … » (une phrase sur ce que tu gardes de la source).
+- La DERNIÈRE étape du script = question directe ou affirmation clivante adressée au spectateur (déclencheur de commentaires).
+
+Réponds en français, uniquement via l'outil propose_idea.`
+
+  let idea: ViralIdea | null = null
+  let usageIn = 0
+  let usageOut = 0
+  let hasUsage = false
+  for (let attempt = 0; attempt < 3 && !idea; attempt++) {
+    const msg = await client.messages.create({
+      model,
+      max_tokens: 3000,
+      tools: [tool],
+      tool_choice: { type: 'tool', name: 'propose_idea' },
+      messages: [{ role: 'user', content: prompt }]
+    })
+    if (msg.usage) {
+      usageIn += msg.usage.input_tokens
+      usageOut += msg.usage.output_tokens
+      hasUsage = true
+    }
+    const block = msg.content.find((b) => b.type === 'tool_use')
+    if (!block || block.type !== 'tool_use') continue
+    const parsed = IdeaSchema.safeParse(block.input)
+    if (!parsed.success) continue
+    idea = { ...parsed.data, hashtags: parsed.data.hashtags.map(normTag).filter(Boolean) }
+  }
+  return { idea, usage: hasUsage ? { input_tokens: usageIn, output_tokens: usageOut } : null }
+}
+
 // ── Mode série (feuilleton à épisodes, type « île des fruits skibidi ») ──
 
 export interface SeriesState {

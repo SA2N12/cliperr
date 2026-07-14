@@ -734,9 +734,106 @@ const STAGE_LABELS: Record<string, string> = {
   metadata: 'Génération des légendes'
 }
 
+// Onglet « Inspiration » : colle un lien TikTok qui marche → la vidéo est téléchargée
+// et transcrite, puis l'IA écrit une idée ORIGINALE qui reprend sa mécanique virale
+// (hook, structure, levier émotionnel) — jamais son contenu.
+function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
+  const [url, setUrl] = useState('')
+  const [niche, setNiche] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [idea, setIdea] = useState<SavedIdea | null>(null)
+  const [launched, setLaunched] = useState(false)
+  const [niches, setNiches] = useState<string[]>([])
+  useEffect(() => {
+    api.autopilotState()
+      .then((s) => setNiches([...new Set(s.profiles.map((p) => p.niche).filter(Boolean))]))
+      .catch(() => undefined)
+  }, [])
+
+  const inspire = async (): Promise<void> => {
+    if (!url.trim() || busy) return
+    setBusy(true)
+    setIdea(null)
+    setLaunched(false)
+    try {
+      const r = await api.inspireIdea(url.trim(), niche.trim())
+      setIdea(r.idea)
+    } catch (e) {
+      toast('Erreur : ' + (e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+  const genVideo = async (): Promise<void> => {
+    if (!idea) return
+    try {
+      await api.generateIdeaVideo(idea.id)
+      setLaunched(true)
+      toast('Vidéo lancée — suis la progression dans « Idées virales »')
+    } catch (e) {
+      toast('Erreur : ' + (e as Error).message)
+    }
+  }
+
+  return (
+    <div>
+      <input
+        className="input-full"
+        placeholder="Lien de la vidéo TikTok dont t’inspirer — https://www.tiktok.com/@…/video/…"
+        value={url}
+        onChange={(e) => setUrl(e.target.value)}
+        onKeyDown={(e) => e.key === 'Enter' && void inspire()}
+      />
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
+        <input
+          className="input-full"
+          style={{ flex: 1, minWidth: 220 }}
+          list="inspire-niches"
+          placeholder="Niche cible (optionnel — sinon même thème que la source)"
+          value={niche}
+          onChange={(e) => setNiche(e.target.value)}
+        />
+        <datalist id="inspire-niches">{niches.map((n) => <option key={n} value={n} />)}</datalist>
+        <button className="btn primary" onClick={() => void inspire()} disabled={busy || !url.trim()}>
+          <Icon name="bulb" size={15} /> {busy ? 'Analyse en cours…' : 'Créer une idée inspirée'}
+        </button>
+      </div>
+      <p className="muted small" style={{ marginTop: 10 }}>
+        La vidéo est téléchargée et transcrite, puis l’IA écrit une vidéo <b>originale</b> qui reprend sa mécanique virale (hook, structure, émotion) — jamais son contenu. Compte 1 à 2 minutes.
+      </p>
+      {busy && (
+        <div style={{ marginTop: 6, padding: '12px 14px', borderRadius: 10, background: 'var(--panel-2)', border: '1px solid var(--border)' }}>
+          <div className="small" style={{ fontWeight: 600 }}>⏳ Téléchargement → transcription → écriture de l’idée…</div>
+          <div className="muted small" style={{ marginTop: 3 }}>1 à 2 minutes selon la durée de la vidéo source.</div>
+        </div>
+      )}
+      {idea && (
+        <div style={{ marginTop: 6, padding: '14px 16px', borderRadius: 12, border: '1.5px solid var(--accent-strong)' }}>
+          <div className="row" style={{ marginBottom: 6 }}>
+            <strong>{idea.title}</strong>
+            <span className="chip" style={{ flexShrink: 0, marginLeft: 8 }}>{idea.niche}</span>
+          </div>
+          <div className="small" style={{ fontStyle: 'italic', marginBottom: 6 }}>🪝 {idea.hook}</div>
+          <div className="muted small" style={{ marginBottom: 8 }}>{idea.angle}</div>
+          <ol className="small" style={{ margin: '0 0 10px', paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {idea.script.map((s, i) => <li key={i}>{s}</li>)}
+          </ol>
+          <div className="muted small" style={{ marginBottom: 12 }}>{idea.hashtags.join(' ')}</div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+            <button className="btn" onClick={() => { setIdea(null); setUrl('') }}>Nouvelle inspiration</button>
+            <button className="btn primary" onClick={() => void genVideo()} disabled={launched}>
+              {launched ? '✓ Vidéo en cours — voir « Idées virales »' : '🎬 Générer la vidéo'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function Generate({ sources, progress, onRefresh, toast, goHistory }: { sources: SourceDTO[]; progress: Record<number, ProgressEvent>; onRefresh: () => Promise<void>; toast: (m: string) => void; goHistory: () => void }): JSX.Element {
   const [step, setStep] = useState<'import' | 'count'>('import')
-  const [tab, setTab] = useState<'upload' | 'url'>('upload')
+  const [tab, setTab] = useState<'upload' | 'url' | 'inspire'>('upload')
   const [url, setUrl] = useState('')
   const [busy, setBusy] = useState(false)
   const [uploadPct, setUploadPct] = useState<number | null>(null)
@@ -814,23 +911,26 @@ function Generate({ sources, progress, onRefresh, toast, goHistory }: { sources:
       <div className="page-head">
         <div>
           <h1>Générer</h1>
-          <p>Importe une vidéo, choisis le nombre de clips, lance la génération.</p>
+          <p>Importe une vidéo à découper en clips — ou inspire-toi d’un TikTok qui marche.</p>
         </div>
         <button className="btn" onClick={goHistory}><Icon name="list" size={16} /> Historique</button>
       </div>
 
       <div className="card" style={{ marginBottom: 18 }}>
-        <div className="stepper">
-          <div className={`step ${step === 'import' ? 'on' : 'done'}`}><span className="n">1</span> Importer</div>
-          <div className="step-line" />
-          <div className={`step ${step === 'count' ? 'on' : ''}`}><span className="n">2</span> Nombre de clips</div>
-        </div>
+        {tab !== 'inspire' && (
+          <div className="stepper">
+            <div className={`step ${step === 'import' ? 'on' : 'done'}`}><span className="n">1</span> Importer</div>
+            <div className="step-line" />
+            <div className={`step ${step === 'count' ? 'on' : ''}`}><span className="n">2</span> Nombre de clips</div>
+          </div>
+        )}
 
         {step === 'import' && (
-          <div style={{ marginTop: 18 }}>
+          <div style={{ marginTop: tab === 'inspire' ? 0 : 18 }}>
             <div className="tabs">
               <button className={`tab ${tab === 'upload' ? 'on' : ''}`} onClick={() => setTab('upload')}><Icon name="upload" size={16} /> Importer un fichier</button>
               <button className={`tab ${tab === 'url' ? 'on' : ''}`} onClick={() => setTab('url')}><Icon name="sources" size={16} /> Télécharger (URL)</button>
+              <button className={`tab ${tab === 'inspire' ? 'on' : ''}`} onClick={() => setTab('inspire')}><Icon name="bulb" size={16} /> Inspiration</button>
             </div>
             {tab === 'upload' ? (
               <div>
@@ -848,7 +948,7 @@ function Generate({ sources, progress, onRefresh, toast, goHistory }: { sources:
                 {uploadPct !== null && <div className="bar" style={{ marginTop: 12 }}><div style={{ width: `${uploadPct}%` }} /></div>}
                 <input ref={fileRef} type="file" accept="video/*" hidden onChange={onFile} />
               </div>
-            ) : (
+            ) : tab === 'url' ? (
               <div>
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                   <input className="input-full" style={{ flex: 1, minWidth: 260 }} placeholder="URL YouTube / Twitch…" value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addUrl()} />
@@ -856,6 +956,8 @@ function Generate({ sources, progress, onRefresh, toast, goHistory }: { sources:
                 </div>
                 <p className="muted small" style={{ marginTop: 10 }}>⚠️ Sur ce serveur, YouTube par URL est souvent bloqué — préfère l’import de fichier.</p>
               </div>
+            ) : (
+              <InspireTab toast={toast} />
             )}
           </div>
         )}

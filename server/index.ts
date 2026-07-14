@@ -31,10 +31,10 @@ import {
 import { runPipeline, type ReframeFocus } from '../src/main/pipeline/orchestrator'
 import { transcribeSource, transcribeWithGroq, type Word } from '../src/main/pipeline/transcribe'
 import { detectFaceCenterX } from '../src/main/pipeline/face'
-import { isLocalFile } from '../src/main/pipeline/ingest'
+import { isLocalFile, fetchMetadata, downloadVideo } from '../src/main/pipeline/ingest'
 import { downloadViaApi, isYouTubeUrl, searchYouTubeVideos, probeDownloadable, type SourceMetaApi } from './ytdl-api'
 import { listUploadPostProfiles, type UploadPostProfile } from '../src/main/publish/uploadpost'
-import { generateViralIdeas, generateEpisodeIdea, fetchTikTokTrends, type SeriesState } from './ideas'
+import { generateViralIdeas, generateEpisodeIdea, generateInspiredIdea, fetchTikTokTrends, type SeriesState } from './ideas'
 import type { PipelineContext } from '../src/main/pipeline/context'
 import type { Usage } from '../src/main/pipeline/highlights'
 import type { ProgressEvent } from '../src/shared/types'
@@ -1044,6 +1044,79 @@ app.post('/api/ideas', wrap(async (req, res) => {
   // On enregistre chaque idée générée (page « Mes idées »).
   const saved = ideas.map((idea) => repo.createIdea(niche, idea))
   res.json({ ideas: saved })
+}))
+// Inspiration : télécharge un TikTok (ou Short) qui marche, le transcrit, et écrit
+// une idée ORIGINALE reprenant sa mécanique virale (structure, hook, levier) — pas son contenu.
+app.post('/api/ideas/inspire', wrap(async (req, res) => {
+  const apiKey = getApiKey()
+  if (!apiKey) return res.status(400).json({ error: 'Configure d’abord ta clé API Claude dans les Réglages.' })
+  const url = String(req.body?.url ?? '').trim()
+  const niche = String(req.body?.niche ?? '').trim().slice(0, 120)
+  if (!/^https?:\/\/([\w-]+\.)*(tiktok\.com|youtube\.com|youtu\.be)\//i.test(url)) {
+    return res.status(400).json({ error: 'Colle un lien TikTok (ou YouTube Short) valide.' })
+  }
+  const ctx = await getContext()
+  const cookiesFile = repo.getSetting('ytdlp_cookies_file') || null
+  const tmpId = Date.now() // stem des fichiers temporaires dans downloads/ (hors plage des vrais ids)
+
+  emitLog(`Inspiration : analyse de ${url}…`)
+  const meta = await fetchMetadata(ctx, url, null, cookiesFile).catch(() => ({ title: null, author: null, durationSec: null }))
+  if (meta.durationSec && meta.durationSec > 600) {
+    return res.status(400).json({ error: 'Vidéo trop longue pour l’inspiration (10 min max).' })
+  }
+
+  let filePath: string | null = null
+  try {
+    emitLog('Inspiration : téléchargement de la vidéo source…')
+    try {
+      filePath = await downloadVideo(ctx, url, tmpId, undefined, null, cookiesFile)
+    } catch (e) {
+      const m = e instanceof Error ? e.message : String(e)
+      throw new Error(`Téléchargement impossible : ${m.split('\n')[0].slice(0, 220)}`)
+    }
+
+    // Transcription de la voix : Groq (rapide) si configuré, sinon whisper local.
+    emitLog('Inspiration : transcription de la voix…')
+    let transcript = ''
+    try {
+      const groqKey = getEncrypted('groq_key')
+      const words = groqKey
+        ? await transcribeWithGroq(ctx, groqKey, filePath, tmpId)
+        : await ensureWhisper(paths.bin, paths.models, (m) => emitLog(`Inspiration : ${m}`)).then((w) =>
+            transcribeSource(ctx, w, filePath as string, tmpId)
+          )
+      transcript = words.map((w) => w.text).join(' ').replace(/\s+/g, ' ').trim()
+    } catch (e) {
+      // Pas bloquant : vidéo musicale/sans parole, ou transcription indisponible →
+      // l'IA s'appuiera sur le titre/la légende.
+      emitLog(`Inspiration : transcription impossible (${e instanceof Error ? e.message.split('\n')[0] : e}) — analyse sur les métadonnées seules.`)
+    }
+
+    emitLog('Inspiration : écriture d’une idée originale (IA)…')
+    const model = scriptModel()
+    const { idea, usage } = await generateInspiredIdea({
+      apiKey,
+      model,
+      niche: niche || undefined,
+      source: { title: meta.title, author: meta.author, durationSec: meta.durationSec, transcript }
+    })
+    if (usage) addSpend(model, usage)
+    if (!idea) return res.status(502).json({ error: 'L’IA n’a pas réussi à produire une idée — réessaie.' })
+    const saved = repo.createIdea(niche || `Inspiration : ${meta.author || 'TikTok'}`, idea)
+    emitLog(`Inspiration : idée créée — « ${idea.title} »`)
+    res.json({ idea: saved })
+  } finally {
+    // Nettoyage des fichiers temporaires (vidéo + audio/JSON produits par la transcription).
+    for (const f of [
+      filePath,
+      join(paths.downloads, `${tmpId}.mp3`),
+      join(paths.downloads, `${tmpId}.wav`),
+      join(paths.downloads, `${tmpId}.whisper.json`),
+      join(paths.clips, `${tmpId}.transcript.json`)
+    ]) {
+      if (f && existsSync(f)) rmSync(f, { force: true })
+    }
+  }
 }))
 // Cache des profils upload-post (avatar + @handle) pour ne pas spammer l'API (429).
 let profilesCache: { at: number; data: UploadPostProfile[] } | null = null
