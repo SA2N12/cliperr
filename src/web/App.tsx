@@ -1607,28 +1607,34 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
   }
 
   return (
-    <div className="modal-overlay" onClick={() => !busy && onClose()}>
-      <div className="card" style={{ width: 560, maxWidth: '94vw', maxHeight: '90vh', overflow: 'auto' }} onClick={(e) => e.stopPropagation()}>
-        <div className="row" style={{ marginBottom: 14 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Avatar url={profile?.avatarUrl ?? null} name={user} size={34} />
-            <div>
-              <div style={{ fontWeight: 700 }}>{profile?.handle ? '@' + profile.handle : user}</div>
-              <div className="muted small">Réglages du compte</div>
+    <>
+      {/* Clic hors du volet = fermeture (pas de voile sombre : on reste sur le
+          rendu « volet secondaire » de Supabase, pas sur une modale). */}
+      <div className="side-panel-backdrop" onClick={() => !busy && onClose()} />
+      <aside className="side-panel">
+        <div className="sp-head">
+          <div className="row" style={{ marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+              <Avatar url={profile?.avatarUrl ?? null} name={user} size={34} />
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile?.handle ? '@' + profile.handle : user}</div>
+                <div className="muted small">Réglages du compte</div>
+              </div>
             </div>
+            {serie.enabled && <span className="chip" style={{ flexShrink: 0 }}>Ép. {serie.episode}</span>}
           </div>
-          {serie.enabled && <span className="chip">Ép. {serie.episode}</span>}
+
+          <div className="tabs">
+            <button className={`tab ${tab === 'general' ? 'on' : ''}`} onClick={() => setTab('general')}>Général</button>
+            <button className={`tab ${tab === 'niche' ? 'on' : ''}`} onClick={() => setTab('niche')}>Vidéos de niche</button>
+            <button className={`tab ${tab === 'serie' ? 'on' : ''}`} onClick={() => setTab('serie')}>
+              Série {serie.title.trim() && serie.universe.trim() ? '🟢' : ''}
+            </button>
+            <button className={`tab ${tab === 'clips' ? 'on' : ''}`} onClick={() => setTab('clips')}>Clips</button>
+          </div>
         </div>
 
-        <div className="tabs" style={{ marginBottom: 14 }}>
-          <button className={`tab ${tab === 'general' ? 'on' : ''}`} onClick={() => setTab('general')}>Général</button>
-          <button className={`tab ${tab === 'niche' ? 'on' : ''}`} onClick={() => setTab('niche')}>Vidéos de niche</button>
-          <button className={`tab ${tab === 'serie' ? 'on' : ''}`} onClick={() => setTab('serie')}>
-            Série {serie.title.trim() && serie.universe.trim() ? '🟢' : ''}
-          </button>
-          <button className={`tab ${tab === 'clips' ? 'on' : ''}`} onClick={() => setTab('clips')}>Clips</button>
-        </div>
-
+        <div className="sp-body">
         {tab === 'general' && (
           <>
             <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--panel-2)', border: '1px solid var(--border)', marginBottom: 12 }}>
@@ -1707,12 +1713,14 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
           </>
         )}
 
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+        </div>
+
+        <div className="sp-foot">
           <button className="btn" disabled={busy} onClick={onClose}>Annuler</button>
           <button className="btn primary" disabled={busy || !profile} onClick={() => void save()}>{busy ? 'Enregistrement…' : 'Enregistrer'}</button>
         </div>
-      </div>
-    </div>
+      </aside>
+    </>
   )
 }
 
