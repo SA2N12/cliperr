@@ -1782,20 +1782,21 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
         onClick={() => !s.done && setEditSlot(s)}
         title={s.failed ? `Échec : ${s.error ?? ''} — clique pour changer / retenter` : s.done ? s.niche : `${s.niche} — clique pour personnaliser (heure, type)`}
         style={{
-          width: opts?.hideAvatar ? 100 : 112,
-          padding: '10px 8px',
-          borderRadius: 12,
-          background: s.failed ? 'rgba(220,38,38,0.06)' : s.done ? 'var(--panel-2)' : '#fff',
-          border: s.failed ? '2px solid var(--bad)' : s.done ? '1px solid var(--border)' : `2px dashed ${generating ? 'var(--accent)' : s.pinned || s.type ? 'var(--accent-strong)' : '#c9c9cf'}`,
+          width: opts?.hideAvatar ? 104 : 116,
+          padding: '12px 8px',
+          borderRadius: 14,
+          background: s.failed ? 'rgba(220,38,38,0.06)' : s.done ? 'var(--ap-green-soft)' : '#fff',
+          border: s.failed ? '1.5px solid var(--bad)' : s.done ? '1.5px solid var(--ap-green-border)' : `2px dashed ${generating || s.pinned || s.type ? 'var(--ap-green)' : '#d6d6db'}`,
           cursor: s.done ? 'default' : 'pointer',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
           gap: 6,
-          fontFamily: 'inherit'
+          fontFamily: 'inherit',
+          transition: 'border-color .15s, box-shadow .15s'
         }}
       >
-        <div style={{ fontWeight: 700, fontSize: 13, fontVariantNumeric: 'tabular-nums', color: s.failed ? 'var(--bad)' : s.done ? 'var(--muted)' : 'var(--accent-strong)' }}>
+        <div className="ap-time" style={{ fontWeight: 700, fontSize: 13.5, color: s.failed ? 'var(--bad)' : s.done ? 'var(--ap-green-deep)' : 'var(--text)' }}>
           {s.done ? s.eta : `≈ ${s.eta}`}{s.failed ? ' ⚠' : (s.pinned || s.type) && !s.done ? ' 📌' : ''}{!s.done && !s.failed && s.music && s.music !== 'auto' ? (s.music === 'none' ? ' 🔇' : ' 🎵') : ''}
         </div>
         {!opts?.hideAvatar && <Avatar url={s.avatarUrl} name={s.user} size={30} />}
@@ -1804,8 +1805,8 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
             {s.handle ? '@' + s.handle : s.user}
           </div>
         )}
-        <div className="small" style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600, color: s.failed ? 'var(--bad)' : undefined }}>
-          {s.done ? '✓ publiée' : s.failed ? '⚠ Échec' : generating ? '⚙️ création…' : s.niche.split(' (')[0]}
+        <div className="small" style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: s.done || s.failed ? 700 : 500, color: s.failed ? 'var(--bad)' : s.done ? 'var(--ap-green-strong)' : generating ? 'var(--ap-green-strong)' : 'var(--muted)' }}>
+          {s.done ? '✓ Publiée' : s.failed ? '⚠ Échec' : generating ? '⚙️ création…' : s.niche.split(' (')[0]}
         </div>
         {s.failed && s.error ? (
           <div title={s.error} style={{ fontSize: 10, color: 'var(--bad)', maxWidth: '100%', whiteSpace: 'normal', lineHeight: 1.2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
@@ -1813,8 +1814,9 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
           </div>
         ) : s.credits != null ? (
           <div
+            className="ap-time"
             title="Coût estimé de cette vidéo (aperçu — aucun débit pour l’instant)"
-            style={{ fontSize: 11, fontWeight: 700, fontVariantNumeric: 'tabular-nums', padding: '1px 7px', borderRadius: 999, background: 'var(--panel-2)', border: '1px solid var(--border)', color: 'var(--muted)' }}
+            style={{ fontSize: 11, fontWeight: 700, padding: '1px 8px', borderRadius: 999, background: '#fff', border: '1px solid var(--border)', color: 'var(--muted)' }}
           >
             ≈ {s.credits} cr
           </div>
@@ -1862,16 +1864,18 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
             ))}
           </div>
           <div className="muted small">
-            {day === 1
-              ? `Planning de demain · ${slots.length} vidéo${slots.length > 1 ? 's' : ''} prévue${slots.length > 1 ? 's' : ''} · clique un bloc pour l’ajuster (s’applique demain et les jours suivants)`
-              : `${doneCount}/${slots.length} publiée${slots.length > 1 ? 's' : ''} · clique un bloc « à venir » pour choisir son heure et son type de vidéo`}
+            {day === 1 ? (
+              <>Planning de demain · {slots.length} vidéo{slots.length > 1 ? 's' : ''} prévue{slots.length > 1 ? 's' : ''} · clique un bloc pour l’ajuster (s’applique demain et les jours suivants)</>
+            ) : (
+              <><b className="ap-time" style={{ color: 'var(--ap-green-strong)' }}>{doneCount}/{slots.length}</b> publiée{slots.length > 1 ? 's' : ''} · clique un bloc « à venir » pour choisir son heure et son type de vidéo</>
+            )}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           {totalCredits > 0 && (
             <span className="pill-badge" title="Coût estimé total du jour (aperçu — aucun débit pour l’instant)" style={{ fontVariantNumeric: 'tabular-nums' }}>≈ {totalCredits} cr/jour</span>
           )}
-          <span className="pill-badge"><span className="dot" /> {plan.targetPerDay ?? plan.perDay} vidéo{(plan.targetPerDay ?? plan.perDay) > 1 ? 's' : ''}/jour</span>
+          <span className="ap-pill"><span className="dot" /> {plan.targetPerDay ?? plan.perDay} vidéo{(plan.targetPerDay ?? plan.perDay) > 1 ? 's' : ''}/jour</span>
         </div>
       </div>
       {paused && (
@@ -1906,7 +1910,7 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
                     disabled={userSlots.length >= 5}
                     onClick={() => void addVideo(u, userSlots.length)}
                     title={userSlots.length >= 5 ? 'Maximum atteint (5 vidéos/jour)' : 'Ajouter une vidéo (choix du type et de l’heure)'}
-                    style={{ width: 44, borderRadius: 12, justifyContent: 'center', padding: 0, fontSize: 20 }}
+                    style={{ width: 44, borderRadius: 14, justifyContent: 'center', padding: 0, fontSize: 20, border: '2px dashed var(--border)', background: 'transparent', color: 'var(--muted)' }}
                   >
                     +
                   </button>
@@ -1925,7 +1929,7 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
       )}
       {day === 0 && activeGen && (
         <div style={{ marginTop: 12 }}>
-          <div className="bar"><div style={{ width: `${genPct(activeGen.message)}%`, transition: 'width 0.4s ease' }} /></div>
+          <div className="bar"><div style={{ width: `${genPct(activeGen.message)}%`, transition: 'width 0.4s ease', background: 'var(--ap-green)' }} /></div>
           <div className="muted small" style={{ marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activeGen.message}</div>
         </div>
       )}
@@ -2402,15 +2406,18 @@ function Autopilot({ toast, ideaVideo }: { toast: (m: string) => void; ideaVideo
         <button className="btn" onClick={() => void load()}><Icon name="refresh" size={15} /> Actualiser</button>
       </div>
 
-      <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16, borderColor: enabled ? 'var(--accent)' : undefined }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 700, fontSize: 16 }}>{enabled ? '🟢 Pilote actif' : '⚪ Pilote en pause'}</div>
-          <div className="muted small">{enabled ? `Génère et publie automatiquement selon la cadence de chaque compte — ${totalPerDay} vidéo${totalPerDay > 1 ? 's' : ''}/jour au total.` : 'Active-le pour lancer la production quotidienne 100% autonome.'}</div>
+      <div className={`card ${enabled ? 'ap-banner' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 240, display: 'flex', alignItems: 'center', gap: 13 }}>
+          <span style={{ width: 10, height: 10, borderRadius: '50%', flexShrink: 0, background: enabled ? 'var(--ap-green)' : 'var(--muted-2)', boxShadow: enabled ? '0 0 0 4px rgba(16, 185, 129, 0.18)' : 'none' }} />
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 16, color: enabled ? 'var(--ap-green-deep)' : undefined }}>{enabled ? 'Pilote actif' : 'Pilote en pause'}</div>
+            <div className="muted small">{enabled ? `Génère et publie automatiquement selon la cadence de chaque compte — ${totalPerDay} vidéo${totalPerDay > 1 ? 's' : ''}/jour au total.` : 'Active-le pour lancer la production quotidienne 100% autonome.'}</div>
+          </div>
         </div>
-        <button className="btn" disabled={!!state?.busy} onClick={() => void runNow()} title="Génère et publie 1 vidéo maintenant (test)">
+        <button className={`btn ${enabled ? 'green' : ''}`} disabled={!!state?.busy} onClick={() => void runNow()} title="Génère et publie 1 vidéo maintenant (test)">
           <Icon name="bolt" size={15} /> {state?.busy ? 'Génération…' : 'Tester maintenant'}
         </button>
-        <button className={`btn ${enabled ? '' : 'primary'}`} disabled={saving} onClick={toggle}>{enabled ? 'Désactiver' : 'Activer'}</button>
+        <button className={`btn ${enabled ? '' : 'green'}`} disabled={saving} onClick={toggle}>{enabled ? 'Désactiver' : 'Activer'}</button>
       </div>
 
       <TodayPlan ideaVideo={ideaVideo} toast={toast} groupByAccount onConfigSaved={() => void load()} />

@@ -623,6 +623,54 @@ input[type='checkbox'] {
   accent-color: var(--accent);
 }
 
+/* ── Pilote auto : accent vert « mint » (version claire du design sombre) ── */
+:root {
+  --ap-green: #10b981;
+  --ap-green-strong: #059669;
+  --ap-green-deep: #065f46;
+  --ap-green-soft: #ecfdf5;
+  --ap-green-border: #a7f3d0;
+  --mono: ui-monospace, 'SF Mono', 'Cascadia Mono', 'Roboto Mono', Menlo, Consolas, monospace;
+}
+.btn.green {
+  background: var(--ap-green);
+  border-color: var(--ap-green);
+  color: #fff;
+}
+.btn.green:hover {
+  background: var(--ap-green-strong);
+}
+.ap-banner {
+  border-color: var(--ap-green-border);
+  background: linear-gradient(0deg, var(--ap-green-soft), var(--ap-green-soft)), #fff;
+}
+.ap-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ap-green-deep);
+  background: var(--ap-green-soft);
+  border: 1px solid var(--ap-green-border);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.ap-pill .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ap-green);
+}
+.ap-time {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
 /* Interrupteur (switch) */
 .switch {
   position: relative;
