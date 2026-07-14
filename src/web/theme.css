@@ -434,6 +434,7 @@ textarea:focus {
   display: flex;
   gap: 8px;
   justify-content: flex-end;
+  flex-wrap: wrap;
 }
 /* Les 4 onglets doivent tenir dans la largeur du volet. */
 .side-panel .tabs {

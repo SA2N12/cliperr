@@ -1423,19 +1423,24 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
   }
 
   return (
-    <div className="modal-overlay" onClick={() => !busy && onClose()}>
-      <div className="card" style={{ width: 440, maxWidth: '92vw' }} onClick={(e) => e.stopPropagation()}>
-        <div className="row" style={{ marginBottom: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+    <aside className="side-panel">
+      <div className="sp-head">
+        <div className="row" style={{ marginBottom: 12, gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
             <Avatar url={slot.avatarUrl} name={slot.user} size={32} />
-            <div>
-              <div style={{ fontWeight: 700 }}>{slot.handle ? '@' + slot.handle : slot.user}</div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{slot.handle ? '@' + slot.handle : slot.user}</div>
               <div className="muted small">Vidéo n°{slot.ordinal} du jour</div>
             </div>
           </div>
-          <span className="chip">≈ {slot.eta}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+            <span className="chip ap-time">≈ {slot.eta}</span>
+            <button className="btn icon-btn" disabled={busy} title="Fermer" onClick={onClose} style={{ width: 30, height: 30, fontSize: 16 }}>✕</button>
+          </div>
         </div>
+      </div>
 
+      <div className="sp-body">
         <label className="muted small" style={{ display: 'block', marginBottom: 4 }}>Heure de publication</label>
         <input type="time" value={time} onChange={(e) => setTime(e.target.value)} style={{ marginBottom: 12 }} />
 
@@ -1495,18 +1500,17 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
             </div>
           </>
         )}
-        <div className="muted small" style={{ marginBottom: 14 }}>Ces réglages sont prioritaires sur la répartition automatique et s'appliquent chaque jour jusqu'à modification.</div>
-
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-          <button className="btn" disabled={busy} onClick={() => void removeSlot()} style={{ color: 'var(--bad)', marginRight: 'auto' }} title="Retire cette vidéo (baisse la cadence du compte)">🗑 Supprimer</button>
-          {(slot.pinned || slot.type) && <button className="btn" disabled={busy} onClick={() => void apply(true)}>Réinitialiser</button>}
-          <button className="btn" disabled={busy} onClick={onClose}>Annuler</button>
-          <button className="btn primary" disabled={busy || (type === 'custom' && !subject.trim())} onClick={() => void apply(false)}>
-            {busy ? 'Enregistrement…' : 'Enregistrer'}
-          </button>
-        </div>
+        <div className="muted small">Ces réglages sont prioritaires sur la répartition automatique et s'appliquent chaque jour jusqu'à modification.</div>
       </div>
-    </div>
+
+      <div className="sp-foot">
+        <button className="btn" disabled={busy} onClick={() => void removeSlot()} style={{ color: 'var(--bad)', marginRight: 'auto' }} title="Retire cette vidéo (baisse la cadence du compte)">🗑 Supprimer</button>
+        {(slot.pinned || slot.type) && <button className="btn" disabled={busy} onClick={() => void apply(true)}>Réinitialiser</button>}
+        <button className="btn primary" disabled={busy || (type === 'custom' && !subject.trim())} onClick={() => void apply(false)}>
+          {busy ? 'Enregistrement…' : 'Enregistrer'}
+        </button>
+      </div>
+    </aside>
   )
 }
 type IdeaVideoMap = Record<number, { status: 'running' | 'done' | 'error'; message: string }>
@@ -1767,7 +1771,7 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
       setPlan(p)
       onConfigSaved?.()
       const created = p.slots.filter((s) => s.user === u && !s.done).pop()
-      if (created) setEditSlot(created)
+      if (created) { setCfgUser(null); setEditSlot(created) }
       else toast(`${next} vidéo${next > 1 ? 's' : ''}/jour pour ce compte`)
     } catch (e) {
       toast('Erreur : ' + (e as Error).message)
@@ -1790,7 +1794,7 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
     return (
       <button
         key={`${s.user}-${s.ordinal}`}
-        onClick={() => !s.done && setEditSlot(s)}
+        onClick={() => { if (!s.done) { setCfgUser(null); setEditSlot(s) } }}
         title={s.failed ? `Échec : ${s.error ?? ''} — clique pour changer / retenter` : s.done ? s.niche : `${s.niche} — clique pour personnaliser (heure, type)`}
         style={{
           width: opts?.hideAvatar ? 104 : 116,
@@ -1909,7 +1913,7 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
                     <div className="small" style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.handle ? '@' + a.handle : u}</div>
                     <div className="muted small">{userSlots.length === 0 ? 'Aucune vidéo prévue' : `${uDone}/${userSlots.length} publiée${uDone > 1 ? 's' : ''}${uCredits > 0 ? ` · ≈ ${uCredits} cr` : ''}`}</div>
                   </div>
-                  <button className="btn icon-btn" title="Réglages du compte (cadence, niche, CTA, série)" onClick={() => setCfgUser(u)} style={{ width: 30, height: 30, flexShrink: 0 }}>
+                  <button className="btn icon-btn" title="Réglages du compte (cadence, niche, CTA, série)" onClick={() => { setEditSlot(null); setCfgUser(u) }} style={{ width: 30, height: 30, flexShrink: 0 }}>
                     <Icon name="settings" size={14} />
                   </button>
                 </div>
