@@ -196,6 +196,9 @@ button {
   overflow: hidden;
 }
 .main {
+  /* La sidebar est en `position: fixed` → hors flux : sans cette ligne, `.main`
+     serait auto-placé dans la 1re colonne (le rail) et deviendrait invisible. */
+  grid-column: 2;
   overflow: auto;
   padding: 14px 20px 28px;
 }
