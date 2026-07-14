@@ -1608,12 +1608,11 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
 
   return (
     <>
-      {/* Clic hors du volet = fermeture (pas de voile sombre : on reste sur le
-          rendu « volet secondaire » de Supabase, pas sur une modale). */}
-      <div className="side-panel-backdrop" onClick={() => !busy && onClose()} />
+      {/* Volet NON modal (le contenu garde sa place à droite et reste cliquable)
+          → pas de voile : on ferme via ✕ ou Annuler. */}
       <aside className="side-panel">
         <div className="sp-head">
-          <div className="row" style={{ marginBottom: 14 }}>
+          <div className="row" style={{ marginBottom: 14, gap: 8 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
               <Avatar url={profile?.avatarUrl ?? null} name={user} size={34} />
               <div style={{ minWidth: 0 }}>
@@ -1621,7 +1620,10 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
                 <div className="muted small">Réglages du compte</div>
               </div>
             </div>
-            {serie.enabled && <span className="chip" style={{ flexShrink: 0 }}>Ép. {serie.episode}</span>}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+              {serie.enabled && <span className="chip">Ép. {serie.episode}</span>}
+              <button className="btn icon-btn" disabled={busy} title="Fermer" onClick={onClose} style={{ width: 30, height: 30, fontSize: 16 }}>✕</button>
+            </div>
           </div>
 
           <div className="tabs">

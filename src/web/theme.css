@@ -20,6 +20,8 @@
   /* Sidebar : largeur repliée (icônes seules) et déployée (au survol). */
   --rail: 64px;
   --side-w: 250px;
+  /* Volet secondaire (réglages d'un compte). */
+  --panel-w: 380px;
 }
 
 * {
@@ -54,6 +56,12 @@ button {
   grid-template-columns: var(--rail) 1fr;
   height: 100vh;
   background: var(--bg);
+  transition: grid-template-columns 0.16s ease;
+}
+/* Volet secondaire ouvert → la colonne de gauche s'élargit pour l'accueillir :
+   le contenu se réagence à droite au lieu d'être recouvert. */
+.app:has(.side-panel) {
+  grid-template-columns: calc(var(--rail) + var(--panel-w)) 1fr;
 }
 .sidebar {
   background: var(--panel);
@@ -386,17 +394,12 @@ textarea:focus {
 /* ── Volet latéral secondaire (façon Supabase) : collé à droite du rail d'icônes,
    pleine hauteur. z-index < celui de la sidebar (60) → le rail se déploie
    PAR-DESSUS le volet au survol, comme sur Supabase. ── */
-.side-panel-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 54;
-}
 .side-panel {
   position: fixed;
   top: 0;
   bottom: 0;
   left: var(--rail);
-  width: 380px;
+  width: var(--panel-w);
   max-width: calc(100vw - var(--rail));
   background: var(--panel);
   border-right: 1px solid var(--border);
