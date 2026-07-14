@@ -122,7 +122,11 @@ Règles de rétention (déterminantes pour la performance et les revenus TikTok)
 - DERNIÈRE scène = punchline mémorable + appel à l'action naturel (ex. « Abonne-toi, la suite est folle », « Dis-moi en commentaire si tu le savais »).
 - Ton : tutoiement, énergique, immersif, comme si tu parlais à un pote.
 - ÉCRIS POUR L'ORAL (le texte est lu par une voix de synthèse française) : nombres en toutes lettres (« mille neuf cent douze »), pas de sigles ambigus, pas de mots anglais inutiles, ponctuation naturelle.
-${styleHint ? `\nUNIVERS VISUEL IMPOSÉ (série à personnages récurrents — décris CES personnages et CE style dans CHAQUE imagePrompt, de façon identique d'une scène à l'autre) : ${styleHint}\n` : ''}
+${styleHint ? `\nUNIVERS VISUEL IMPOSÉ (série à personnages récurrents — décris CES personnages et CE style dans CHAQUE imagePrompt, de façon identique d'une scène à l'autre) : ${styleHint}\n` : `
+RÈGLES IMAGE IMPÉRATIVES (le générateur d'images REFUSE ces contenus — la vidéo échouerait entièrement) :
+- Aucun imagePrompt ne doit représenter un ENFANT ou un MINEUR, même de dos, même en silhouette, même sur une photo d'archive. Si le sujet en implique un (étude sur l'enfance, école, jeune cobaye, souvenir d'enfance…), illustre la scène AUTREMENT : l'objet seul posé sur une table, une main d'ADULTE, la pièce vide, un jouet abandonné, un document/dossier d'archive, un vieux moniteur, une silhouette d'adulte, un symbole. C'est souvent PLUS fort visuellement.
+- Pas de personne réelle identifiable (célébrité, personnalité politique), pas de gore, pas de contenu sexuel ou violent explicite.
+`}
 ${dialogue ? `FORMAT DIALOGUE — PAS DE NARRATEUR :
 - Chaque scène = UNE réplique d'UN personnage de l'univers (champ speaker). Les personnages se répondent, l'histoire avance uniquement par leurs échanges.
 - Répliques courtes, vivantes, pleines d'émotion (cris, chuchotements, rires, panique…). La dernière réplique = le cliffhanger.
@@ -250,20 +254,59 @@ async function tts(openaiKey: string, voice: string, text: string, dest: string,
   await writeFile(dest, Buffer.from(await res.arrayBuffer()))
 }
 
-/** Image IA verticale (DALL·E 3, 1024×1792) → fichier png. Gère réponse b64 OU url. */
-async function genImage(openaiKey: string, prompt: string, dest: string): Promise<void> {
-  const res = await fetch(`${OPENAI}/images/generations`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'gpt-image-1',
-      prompt: `${prompt}. Vertical 9:16, ultra-cinematic, dramatic volumetric lighting, rich saturated colors, shallow depth of field, highly detailed, photorealistic film still, epic mood, no text, no watermark, no logo.`,
-      size: '1024x1536',
-      quality: 'medium',
-      n: 1
+/** Rejet du filtre de sécurité OpenAI (le plus souvent : un mineur dans la scène). */
+function isSafetyRejection(status: number, body: string): boolean {
+  return status === 400 && /safety system|content[_ ]policy|moderation/i.test(body)
+}
+
+/**
+ * Retire toute présence humaine d'un prompt d'image. Le filtre d'OpenAI refuse
+ * notamment les mineurs : plutôt que de perdre la vidéo entière, on regénère le
+ * visuel sur le seul décor + les objets (souvent tout aussi cinématographique).
+ */
+function neutralizeImagePrompt(prompt: string): string {
+  const noPeople = prompt
+    // On avale aussi l'article/adjectif qui précède (« a young child » → ∅),
+    // sinon il reste des fragments du genre « a young sitting alone ».
+    .replace(
+      /\b(?:(?:a|an|the|one|two|three|several|some|his|her|their|young|little|small|tiny|old|elderly)\s+)*(?:children|child|kids?|boys?|girls?|bab(?:y|ies)|toddlers?|infants?|minors?|teenagers?|teens?|schoolchild(?:ren)?|pupils?|students?|sons?|daughters?|famil(?:y|ies)|people|persons?|humans?|man|men|woman|women|crowds?|faces?|silhouettes?)(?:'s)?\b/gi,
+      ''
+    )
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+([,.])/g, '$1')
+    .replace(/(^|[,.])\s*(?:of|the|a|an)\s+(?=[,.]|$)/gi, '$1')
+    .replace(/([,.])\s*(?=[,.])/g, '')
+    .replace(/^[\s,.]+/, '')
+    .trim()
+  return `${noPeople}. Empty scene showing ONLY the setting and the objects — absolutely no people, no human figures, no faces, no silhouettes, no body parts. Cinematic still life.`
+}
+
+/** Image IA verticale (gpt-image-1, 1024×1536) → fichier png. Gère réponse b64 OU url. */
+async function genImage(openaiKey: string, prompt: string, dest: string, onNote?: (m: string) => void): Promise<void> {
+  const call = (p: string): Promise<Response> =>
+    fetch(`${OPENAI}/images/generations`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'gpt-image-1',
+        prompt: `${p}. Vertical 9:16, ultra-cinematic, dramatic volumetric lighting, rich saturated colors, shallow depth of field, highly detailed, photorealistic film still, epic mood, no text, no watermark, no logo.`,
+        size: '1024x1536',
+        quality: 'medium',
+        n: 1
+      })
     })
-  })
-  if (!res.ok) throw new Error(`OpenAI image ${res.status} : ${(await res.text()).slice(0, 200)}`)
+  let res = await call(prompt)
+  if (!res.ok) {
+    const body = await res.text()
+    if (!isSafetyRejection(res.status, body)) throw new Error(`OpenAI image ${res.status} : ${body.slice(0, 200)}`)
+    // Scène bloquée par le filtre : on retente SANS aucun personnage plutôt que
+    // de faire échouer toute la vidéo.
+    onNote?.('Image refusée par le filtre de sécurité — nouvelle tentative sans personnage…')
+    res = await call(neutralizeImagePrompt(prompt))
+    if (!res.ok) {
+      throw new Error(`OpenAI image ${res.status} (repli sans personnage aussi refusé) : ${(await res.text()).slice(0, 160)}`)
+    }
+  }
   const j = (await res.json()) as { data?: { b64_json?: string; url?: string }[] }
   const item = j.data?.[0]
   if (item?.b64_json) {
@@ -521,10 +564,10 @@ export async function generateVideoFromIdea(
         try {
           await genImageGemini(opts.geminiKey, gPrompt, png, opts.characterRefPath)
         } catch {
-          await genImage(opts.openaiKey, imgPrompt, png) // repli si Gemini indisponible
+          await genImage(opts.openaiKey, imgPrompt, png, log) // repli si Gemini indisponible
         }
       } else {
-        await genImage(opts.openaiKey, imgPrompt, png)
+        await genImage(opts.openaiKey, imgPrompt, png, log)
       }
 
       // 2a) Moteur VEO : scène PARLÉE — le personnage prononce sa réplique
