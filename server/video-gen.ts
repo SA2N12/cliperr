@@ -122,7 +122,7 @@ Règles de rétention (déterminantes pour la performance et les revenus TikTok)
 - DERNIÈRE scène = punchline mémorable + appel à l'action naturel (ex. « Abonne-toi, la suite est folle », « Dis-moi en commentaire si tu le savais »).
 - Ton : tutoiement, énergique, immersif, comme si tu parlais à un pote.
 - ÉCRIS POUR L'ORAL (le texte est lu par une voix de synthèse française) : nombres en toutes lettres (« mille neuf cent douze »), pas de sigles ambigus, pas de mots anglais inutiles, ponctuation naturelle.
-${styleHint ? `\nUNIVERS VISUEL IMPOSÉ (série à personnages récurrents — décris CES personnages et CE style dans CHAQUE imagePrompt, de façon identique d'une scène à l'autre) : ${styleHint}\n` : `
+${styleHint && dialogue ? `\nUNIVERS VISUEL IMPOSÉ (série à personnages récurrents — décris CES personnages et CE style dans CHAQUE imagePrompt, de façon identique d'une scène à l'autre) : ${styleHint}\n` : ''}${styleHint && !dialogue ? `\nSTYLE VISUEL IMPOSÉ (repris de la vidéo dont on s'inspire — décris CE style dans CHAQUE imagePrompt, identique d'une scène à l'autre) : ${styleHint}\n` : ''}${dialogue ? '' : `
 RÈGLES IMAGE IMPÉRATIVES (le générateur d'images REFUSE ces contenus — la vidéo échouerait entièrement) :
 - Aucun imagePrompt ne doit représenter un ENFANT ou un MINEUR, même de dos, même en silhouette, même sur une photo d'archive. Si le sujet en implique un (étude sur l'enfance, école, jeune cobaye, souvenir d'enfance…), illustre la scène AUTREMENT : l'objet seul posé sur une table, une main d'ADULTE, la pièce vide, un jouet abandonné, un document/dossier d'archive, un vieux moniteur, une silhouette d'adulte, un symbole. C'est souvent PLUS fort visuellement.
 - Pas de personne réelle identifiable (célébrité, personnalité politique), pas de gore, pas de contenu sexuel ou violent explicite.
@@ -132,7 +132,7 @@ ${dialogue ? `FORMAT DIALOGUE — PAS DE NARRATEUR :
 - Répliques courtes, vivantes, pleines d'émotion (cris, chuchotements, rires, panique…). La dernière réplique = le cliffhanger.
 - CASTING : pour chaque personnage qui parle, choisis une voix TTS différente (varie graves/aiguës selon le physique du personnage) et décris précisément son intonation dans « style » — c'est ce qui fait vivre les personnages.
 ` : ''}
-Pour chaque scène : ${dialogue ? 'la RÉPLIQUE (speaker + narration)' : 'la phrase de VOIX OFF (français, courte, orale)'} + un IMAGE PROMPT en anglais décrivant un visuel vertical ULTRA-cinématographique, dramatique et très détaillé (éclairage volumétrique, ambiance, angle fort, couleurs riches), sans aucun texte. Réponds uniquement via l'outil storyboard.`
+Pour chaque scène : ${dialogue ? 'la RÉPLIQUE (speaker + narration)' : 'la phrase de VOIX OFF (français, courte, orale)'} + un IMAGE PROMPT en anglais ${styleHint ? 'respectant STRICTEMENT le style visuel imposé ci-dessus, très détaillé' : 'décrivant un visuel vertical ULTRA-cinématographique, dramatique et très détaillé (éclairage volumétrique, ambiance, angle fort, couleurs riches)'}, sans aucun texte. Réponds uniquement via l'outil storyboard.`
 
   const msg = await client.messages.create({
     model,
@@ -281,15 +281,22 @@ function neutralizeImagePrompt(prompt: string): string {
   return `${noPeople}. Empty scene showing ONLY the setting and the objects — absolutely no people, no human figures, no faces, no silhouettes, no body parts. Cinematic still life.`
 }
 
-/** Image IA verticale (gpt-image-1, 1024×1536) → fichier png. Gère réponse b64 OU url. */
-async function genImage(openaiKey: string, prompt: string, dest: string, onNote?: (m: string) => void): Promise<void> {
+/**
+ * Image IA verticale (gpt-image-1, 1024×1536) → fichier png. Gère réponse b64 OU url.
+ * `keepStyle` : le prompt impose déjà son propre style (mode inspiration/série) → on
+ * n'ajoute PAS le suffixe « photoréaliste cinématique » qui l'écraserait.
+ */
+async function genImage(openaiKey: string, prompt: string, dest: string, onNote?: (m: string) => void, keepStyle = false): Promise<void> {
+  const suffix = keepStyle
+    ? 'Vertical 9:16 composition, highly detailed, no text, no watermark, no logo.'
+    : 'Vertical 9:16, ultra-cinematic, dramatic volumetric lighting, rich saturated colors, shallow depth of field, highly detailed, photorealistic film still, epic mood, no text, no watermark, no logo.'
   const call = (p: string): Promise<Response> =>
     fetch(`${OPENAI}/images/generations`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: 'gpt-image-1',
-        prompt: `${p}. Vertical 9:16, ultra-cinematic, dramatic volumetric lighting, rich saturated colors, shallow depth of field, highly detailed, photorealistic film still, epic mood, no text, no watermark, no logo.`,
+        prompt: `${p}. ${suffix}`,
         size: '1024x1536',
         quality: 'medium',
         n: 1
@@ -557,17 +564,19 @@ export async function generateVideoFromIdea(
       log?.(`Scène ${i + 1}/${scenes.length} — image IA…`)
       const png = join(work, `i${i}.png`)
       const imgPrompt = opts.imageStyle
-        ? `${sc.imagePrompt}. Recurring characters and consistent art style across the whole series (keep them IDENTICAL in every image): ${opts.imageStyle}`
+        ? `${sc.imagePrompt}. ${opts.dialogue
+            ? `Recurring characters and consistent art style across the whole series (keep them IDENTICAL in every image): ${opts.imageStyle}`
+            : `Consistent visual style across the whole video — match this style EXACTLY in every image: ${opts.imageStyle}`}`
         : sc.imagePrompt
       if (opts.geminiKey && opts.characterRefPath) {
         const gPrompt = `Using EXACTLY the characters and art style from the reference image (same faces, colors, outfits, designs), create this new scene: ${sc.imagePrompt}. Vertical 9:16 composition, vivid saturated colors, expressive, dynamic, no text, no watermark.`
         try {
           await genImageGemini(opts.geminiKey, gPrompt, png, opts.characterRefPath)
         } catch {
-          await genImage(opts.openaiKey, imgPrompt, png, log) // repli si Gemini indisponible
+          await genImage(opts.openaiKey, imgPrompt, png, log, !!opts.imageStyle) // repli si Gemini indisponible
         }
       } else {
-        await genImage(opts.openaiKey, imgPrompt, png, log)
+        await genImage(opts.openaiKey, imgPrompt, png, log, !!opts.imageStyle)
       }
 
       // 2a) Moteur VEO : scène PARLÉE — le personnage prononce sa réplique

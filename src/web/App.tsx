@@ -815,6 +815,7 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
           </div>
           <div className="small" style={{ fontStyle: 'italic', marginBottom: 6 }}>🪝 {idea.hook}</div>
           <div className="muted small" style={{ marginBottom: 8 }}>{idea.angle}</div>
+          {idea.imageStyle && <div className="muted small" style={{ marginBottom: 8 }}>🎨 Style visuel repris de la source : {idea.imageStyle}</div>}
           <ol className="small" style={{ margin: '0 0 10px', paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 3 }}>
             {idea.script.map((s, i) => <li key={i}>{s}</li>)}
           </ol>

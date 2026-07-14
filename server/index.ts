@@ -35,7 +35,8 @@ import { isLocalFile, fetchMetadata, downloadVideo } from '../src/main/pipeline/
 import { downloadViaApi, isYouTubeUrl, searchYouTubeVideos, probeDownloadable, type SourceMetaApi } from './ytdl-api'
 import { listUploadPostProfiles, type UploadPostProfile } from '../src/main/publish/uploadpost'
 import { generateViralIdeas, generateEpisodeIdea, generateInspiredIdea, fetchTikTokTrends, type SeriesState } from './ideas'
-import type { PipelineContext } from '../src/main/pipeline/context'
+import { run, type PipelineContext } from '../src/main/pipeline/context'
+import { probeDuration } from '../src/main/pipeline/extract'
 import type { Usage } from '../src/main/pipeline/highlights'
 import type { ProgressEvent } from '../src/shared/types'
 import {
@@ -348,7 +349,9 @@ async function runVideoGen(
       voice: repo.getSetting('tts_voice') || 'onyx',
       idea,
       musicTrack,
-      imageStyle: opts.imageStyle,
+      // Style des images : priorité à l'appelant (univers de série), sinon celui
+      // porté par l'idée (mode inspiration : style repris de la vidéo source).
+      imageStyle: opts.imageStyle ?? idea.imageStyle,
       geminiKey: getEncrypted('gemini_key'),
       characterRefPath: opts.characterRefPath,
       falKey: getEncrypted('fal_key'),
@@ -1092,13 +1095,34 @@ app.post('/api/ideas/inspire', wrap(async (req, res) => {
       emitLog(`Inspiration : transcription impossible (${e instanceof Error ? e.message.split('\n')[0] : e}) — analyse sur les métadonnées seules.`)
     }
 
+    // Captures d'écran réparties sur la vidéo → Claude (vision) en déduit le STYLE
+    // VISUEL de la source, réappliqué ensuite aux images de la nouvelle vidéo.
+    emitLog('Inspiration : analyse du style visuel…')
+    const frames: string[] = []
+    try {
+      const dur = meta.durationSec || (await probeDuration(ctx, filePath).catch(() => 0))
+      const times = dur > 2 ? [0.12, 0.38, 0.62, 0.85].map((r) => r * dur) : [0.5, 1, 2, 3]
+      for (let i = 0; i < times.length; i++) {
+        const jpg = join(paths.downloads, `${tmpId}.f${i}.jpg`)
+        try {
+          await run(ctx.bin.ffmpeg, ['-y', '-ss', times[i].toFixed(2), '-i', filePath, '-frames:v', '1', '-vf', 'scale=480:-2', '-q:v', '4', jpg])
+          if (existsSync(jpg)) frames.push(readFileSync(jpg).toString('base64'))
+        } catch {
+          /* frame hors durée → on garde celles qui ont marché */
+        }
+      }
+    } catch {
+      /* pas bloquant : l'IA décrira un style plausible sans captures */
+    }
+
     emitLog('Inspiration : écriture d’une idée originale (IA)…')
     const model = scriptModel()
     const { idea, usage } = await generateInspiredIdea({
       apiKey,
       model,
       niche: niche || undefined,
-      source: { title: meta.title, author: meta.author, durationSec: meta.durationSec, transcript }
+      source: { title: meta.title, author: meta.author, durationSec: meta.durationSec, transcript },
+      frames
     })
     if (usage) addSpend(model, usage)
     if (!idea) return res.status(502).json({ error: 'L’IA n’a pas réussi à produire une idée — réessaie.' })
@@ -1106,13 +1130,14 @@ app.post('/api/ideas/inspire', wrap(async (req, res) => {
     emitLog(`Inspiration : idée créée — « ${idea.title} »`)
     res.json({ idea: saved })
   } finally {
-    // Nettoyage des fichiers temporaires (vidéo + audio/JSON produits par la transcription).
+    // Nettoyage des fichiers temporaires (vidéo + audio/JSON de transcription + captures).
     for (const f of [
       filePath,
       join(paths.downloads, `${tmpId}.mp3`),
       join(paths.downloads, `${tmpId}.wav`),
       join(paths.downloads, `${tmpId}.whisper.json`),
-      join(paths.clips, `${tmpId}.transcript.json`)
+      join(paths.clips, `${tmpId}.transcript.json`),
+      ...[0, 1, 2, 3].map((i) => join(paths.downloads, `${tmpId}.f${i}.jpg`))
     ]) {
       if (f && existsSync(f)) rmSync(f, { force: true })
     }

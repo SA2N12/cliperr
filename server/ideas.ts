@@ -15,7 +15,8 @@ const IdeaSchema = z.object({
   angle: z.string(),
   script: z.array(z.string()),
   format: z.string(),
-  hashtags: z.array(z.string())
+  hashtags: z.array(z.string()),
+  imageStyle: z.string().optional()
 })
 const IdeasSchema = z.object({ ideas: z.array(IdeaSchema) })
 
@@ -137,6 +138,8 @@ export interface InspireOptions {
   source: { title: string | null; author: string | null; durationSec: number | null; transcript: string }
   /** Niche cible (optionnel) — sinon l'idée reste sur le même thème que la source. */
   niche?: string
+  /** Captures d'écran de la vidéo source (JPEG base64) → analyse du style visuel. */
+  frames?: string[]
 }
 
 /**
@@ -167,31 +170,47 @@ export async function generateInspiredIdea(opts: InspireOptions): Promise<{ idea
             'Déroulé plan par plan, 4 à 8 étapes courtes et concrètes. La DERNIÈRE étape doit être une question directe ou une affirmation clivante adressée au spectateur pour déclencher des commentaires.'
         },
         format: { type: 'string', description: 'Format conseillé : durée, style de montage, sous-titres…' },
-        hashtags: { type: 'array', items: { type: 'string' }, description: '5 à 8 hashtags pertinents, sans espace' }
+        hashtags: { type: 'array', items: { type: 'string' }, description: '5 à 8 hashtags pertinents, sans espace' },
+        imageStyle: {
+          type: 'string',
+          description:
+            "Style visuel de la vidéo source, décrit en ANGLAIS (2-3 phrases) comme consigne de génération d'images : type de visuel (photo réaliste, image IA stylisée, dessin, 3D, archive…), palette de couleurs, éclairage, ambiance, composition. Décris uniquement l'ESTHÉTIQUE transposable à des images fixes générées — pas le format vidéo (pas de « personne face caméra », pas de « montage rapide »)."
+        }
       },
-      required: ['title', 'hook', 'angle', 'script', 'format', 'hashtags']
+      required: ['title', 'hook', 'angle', 'script', 'format', 'hashtags', 'imageStyle']
     }
   } satisfies Anthropic.Tool
 
   const s = opts.source
   const transcript = s.transcript.slice(0, 8000)
-  const prompt = `Tu es un stratège de contenu TikTok expert en viralité. Voici une vidéo TikTok qui fonctionne, dont on veut S'INSPIRER :
+  const frames = (opts.frames ?? []).slice(0, 5)
+  const prompt = `Tu es un stratège de contenu TikTok expert en viralité. Voici une vidéo TikTok qui fonctionne, dont on veut S'INSPIRER${frames.length ? ' (captures d’écran ci-jointes, dans l’ordre chronologique)' : ''} :
 
 Auteur : ${s.author ?? 'inconnu'}
 Titre / légende : ${s.title ?? '(sans titre)'}
 Durée : ${s.durationSec ? `${Math.round(s.durationSec)} s` : 'inconnue'}
-Transcription de la voix : ${transcript ? `« ${transcript} »` : '(aucune parole détectée — vidéo probablement visuelle/musicale : appuie-toi sur la légende)'}
+Transcription de la voix : ${transcript ? `« ${transcript} »` : '(aucune parole détectée — vidéo probablement visuelle/musicale : appuie-toi sur la légende et les captures)'}
 
 ÉTAPE 1 — Analyse sa MÉCANIQUE virale : type de hook, structure narrative, rythme, levier émotionnel (curiosité, indignation, identification, surprise…), format.
-ÉTAPE 2 — Crée UNE vidéo ORIGINALE qui réutilise cette mécanique gagnante, ${opts.niche ? `adaptée à la niche/thème : « ${opts.niche} »` : 'sur le même thème général que la source'}.
+ÉTAPE 2 — Analyse son STYLE VISUEL${frames.length ? ' à partir des captures' : ' probable (d’après la légende et le thème)'} : type de visuels, palette, éclairage, ambiance, composition → champ imageStyle (en anglais). La nouvelle vidéo sera générée en images IA dans CE style.
+ÉTAPE 3 — Crée UNE vidéo ORIGINALE qui réutilise cette mécanique gagnante, ${opts.niche ? `adaptée à la niche/thème : « ${opts.niche} »` : 'sur le même thème général que la source'}.
 
 RÈGLES IMPORTANTES :
-- INTERDIT de copier la source : autre sujet précis, autres phrases, autres exemples, autre chute. On reprend la STRUCTURE et le levier émotionnel, jamais le contenu. Les deux vidéos doivent pouvoir coexister sans soupçon de plagiat.
+- INTERDIT de copier la source : autre sujet précis, autres phrases, autres exemples, autre chute. On reprend la STRUCTURE, le levier émotionnel et le STYLE VISUEL, jamais le contenu. Les deux vidéos doivent pouvoir coexister sans soupçon de plagiat.
 - Ancre l'idée dans du CONCRET : un artefact précis (enregistrement, document, photo, objet, étude, match…) et/ou une date ou un chiffre EXACT dans le titre — les titres concrets et datés surperforment.
 - Dans « angle », commence par « Mécanique reprise : … » (une phrase sur ce que tu gardes de la source).
 - La DERNIÈRE étape du script = question directe ou affirmation clivante adressée au spectateur (déclencheur de commentaires).
+- imageStyle : ne décris JAMAIS d'enfant/mineur ni de personne réelle identifiable (le générateur d'images les refuse).
 
-Réponds en français, uniquement via l'outil propose_idea.`
+Réponds en français (imageStyle en anglais), uniquement via l'outil propose_idea.`
+
+  const content: Anthropic.ContentBlockParam[] = [
+    ...frames.map((data): Anthropic.ImageBlockParam => ({
+      type: 'image',
+      source: { type: 'base64', media_type: 'image/jpeg', data }
+    })),
+    { type: 'text', text: prompt }
+  ]
 
   let idea: ViralIdea | null = null
   let usageIn = 0
@@ -203,7 +222,7 @@ Réponds en français, uniquement via l'outil propose_idea.`
       max_tokens: 3000,
       tools: [tool],
       tool_choice: { type: 'tool', name: 'propose_idea' },
-      messages: [{ role: 'user', content: prompt }]
+      messages: [{ role: 'user', content }]
     })
     if (msg.usage) {
       usageIn += msg.usage.input_tokens

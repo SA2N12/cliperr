@@ -55,6 +55,8 @@ export interface ViralIdea {
   script: string[]
   format: string
   hashtags: string[]
+  /** Style visuel imposé aux images de la vidéo (ex. repris d'une vidéo source en mode inspiration). */
+  imageStyle?: string
 }
 
 export interface SavedIdea extends ViralIdea {
