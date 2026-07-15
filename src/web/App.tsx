@@ -168,8 +168,9 @@ function ProfilePicker({ profiles, active, onChange }: { profiles: PubProfile[];
       </button>
       {open && (
         <>
-          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 30 }} />
-          <div className="card" style={{ position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 31, minWidth: 240, padding: 6, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 80 }} />
+          {/* Aligné à GAUCHE : le sélecteur vit dans la barre du haut, côté gauche. */}
+          <div className="card" style={{ position: 'absolute', left: 0, top: 'calc(100% + 6px)', zIndex: 81, minWidth: 240, padding: 6, display: 'flex', flexDirection: 'column', gap: 2 }}>
             <button
               className="nav-item"
               onClick={() => { onChange(ALL_SCOPE); setOpen(false) }}
@@ -204,22 +205,15 @@ type PublishStateT = { mode: string; profiles: PubProfile[]; active: string; sco
 
 // Barre globale (haut de chaque page) : bannière « quota atteint » + sélecteur
 // de portée (un profil précis, ou « Tous les comptes » pour la vue d'ensemble).
-function TopBar({ state, onChange }: { state: PublishStateT | null; onChange: (v: string) => void }): JSX.Element | null {
-  if (!state || state.mode !== 'uploadpost' || state.profiles.length === 0) return null
+/** Alerte de quota. Le sélecteur de profil, lui, vit désormais dans la barre du haut. */
+function TopBar({ state }: { state: PublishStateT | null }): JSX.Element | null {
+  if (!state || state.mode !== 'uploadpost' || !state.quotaReached) return null
   const quotaProf = state.profiles.find((p) => p.username === state.quotaProfile)
   return (
-    <div style={{ marginBottom: 16 }}>
-      {state.quotaReached && (
-        <div className="card" style={{ marginBottom: 12, background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 18 }}>⚠️</span>
-          <div className="small">
-            <b>Quota journalier atteint pour {quotaProf?.handle ? `@${quotaProf.handle}` : state.quotaProfile}.</b> TikTok limite le nombre de publications par jour et par compte. La publication reprendra automatiquement dès que possible — ou choisis un autre profil à droite.
-          </div>
-        </div>
-      )}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8 }}>
-        <span className="muted small" style={{ whiteSpace: 'nowrap' }}>Profil actif</span>
-        <ProfilePicker profiles={state.profiles} active={state.scope} onChange={onChange} />
+    <div className="card" style={{ marginBottom: 16, background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', display: 'flex', alignItems: 'center', gap: 10 }}>
+      <span style={{ fontSize: 18 }}>⚠️</span>
+      <div className="small">
+        <b>Quota journalier atteint pour {quotaProf?.handle ? `@${quotaProf.handle}` : state.quotaProfile}.</b> TikTok limite le nombre de publications par jour et par compte. La publication reprendra automatiquement dès que possible — ou choisis un autre profil en haut de la page.
       </div>
     </div>
   )
@@ -380,15 +374,35 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
 
   return (
     <div className="app">
+      {/* Barre du haut, pleine largeur : logo · compte TikTok actif …
+          recherche · compte du dashboard. */}
+      <header className="topbar">
+        <Logo size={26} />
+        {/* Pas de compte configuré → pas de sélecteur (ni son séparateur). */}
+        {(pub?.profiles.length ?? 0) > 0 && (
+          <>
+            <span className="tb-sep">/</span>
+            <ProfilePicker profiles={pub?.profiles ?? []} active={scope} onChange={changeScope} />
+          </>
+        )}
+        <div style={{ flex: 1 }} />
+        <div className="tb-search" title="Recherche (bientôt)">
+          <Icon name="search" size={14} /> Rechercher <span className="kbd">Ctrl K</span>
+        </div>
+        <button
+          className="btn icon-btn"
+          title={`${ttProfile?.nickname ? '@' + ttProfile.nickname : 'Compte'} — se déconnecter`}
+          onClick={() => api.logout().then(onLogout)}
+          style={{ width: 34, height: 34, padding: 0, borderRadius: 9, overflow: 'hidden', border: '1px solid var(--border)' }}
+        >
+          {/* Tuile dégradé bleu → vert pastel = compte du dashboard. */}
+          <span style={{ width: '100%', height: '100%', display: 'block', background: 'linear-gradient(135deg, #bae6fd 0%, #99f6e4 55%, #bbf7d0 100%)' }} />
+        </button>
+      </header>
+
       {/* Barre repliée en colonne d'icônes ; se déploie au survol par-dessus le
           contenu (les libellés `.lbl` apparaissent en fondu). */}
       <aside className="sidebar">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px 8px' }}>
-          <div className="brand" style={{ padding: 0, display: 'flex', alignItems: 'center', gap: 8 }}><Logo size={30} /> <span className="lbl">Cliperr</span></div>
-        </div>
-        <div className="side-search">
-          <Icon name="search" size={15} /> <span className="lbl" style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>Rechercher <span className="kbd">Ctrl K</span></span>
-        </div>
         {navGroups.map((group, gi) => (
           <div key={gi}>
             {gi > 0 && <div className="nav-sep-line" />}
@@ -400,23 +414,10 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
           </div>
         ))}
         <div className="spacer" />
-        <div className="user-card">
-          {/* Tuile dégradé bleu → vert pastel (carré arrondi), à la place de la photo de profil. */}
-          <div className="avatar" style={{ borderRadius: 10, background: 'linear-gradient(135deg, #bae6fd 0%, #99f6e4 55%, #bbf7d0 100%)' }} />
-          <div className="lbl" style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {ttProfile?.nickname ? `@${ttProfile.nickname}` : 'Compte'}
-            </div>
-            <div className="muted small">TikTok</div>
-          </div>
-          <button className="nav-item lbl" style={{ width: 'auto', padding: 8 }} title="Déconnexion" onClick={() => api.logout().then(onLogout)}>
-            <Icon name="logout" />
-          </button>
-        </div>
       </aside>
 
       <main className="main">
-        <TopBar state={pub} onChange={changeScope} />
+        <TopBar state={pub} />
         {page === 'dashboard' && <Dashboard log={log} go={setPage} onRefresh={refresh} scope={scope} />}
         {page === 'autopilot' && isAll && <Autopilot toast={showToast} ideaVideo={ideaVideo} />}
         {page === 'generate' && <Generate sources={sources} progress={progress} onRefresh={refresh} toast={showToast} goHistory={() => setPage('history')} />}

@@ -22,6 +22,8 @@
   --side-w: 250px;
   /* Volet secondaire (réglages d'un compte). */
   --panel-w: 380px;
+  /* Barre du haut (logo · compte TikTok · recherche · compte dashboard). */
+  --topbar-h: 52px;
 }
 
 * {
@@ -52,8 +54,9 @@ button {
 .app {
   display: grid;
   /* La colonne reste étroite : la sidebar (fixed) se déploie PAR-DESSUS le
-     contenu au survol, sans décaler la page. */
+     contenu au survol, sans décaler la page. Ligne 1 = barre du haut, pleine largeur. */
   grid-template-columns: var(--rail) 1fr;
+  grid-template-rows: var(--topbar-h) 1fr;
   height: 100vh;
   background: var(--bg);
   transition: grid-template-columns 0.16s ease;
@@ -63,11 +66,54 @@ button {
 .app:has(.side-panel) {
   grid-template-columns: calc(var(--rail) + var(--panel-w)) 1fr;
 }
+
+/* ── Barre du haut (façon Supabase) : logo · compte TikTok … recherche · compte ── */
+.topbar {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  z-index: 70; /* au-dessus de la sidebar (60) et des volets (55) */
+}
+.topbar .tb-sep {
+  color: var(--muted-2);
+  font-size: 15px;
+}
+.topbar .tb-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 7px 10px;
+  color: var(--muted-2);
+  font-size: 13px;
+  width: 240px;
+  cursor: pointer;
+}
+.topbar .tb-search:hover {
+  border-color: var(--muted-2);
+}
+.topbar .tb-search .kbd {
+  margin-left: auto;
+  font-size: 11px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1px 6px;
+  color: var(--muted);
+}
+
 .sidebar {
   background: var(--panel);
   border-right: 1px solid var(--border);
   position: fixed;
-  top: 0;
+  top: var(--topbar-h);
   bottom: 0;
   left: 0;
   width: var(--rail);
@@ -205,9 +251,10 @@ button {
   overflow: hidden;
 }
 .main {
-  /* La sidebar est en `position: fixed` → hors flux : sans cette ligne, `.main`
+  /* La sidebar est en `position: fixed` → hors flux : sans ces lignes, `.main`
      serait auto-placé dans la 1re colonne (le rail) et deviendrait invisible. */
   grid-column: 2;
+  grid-row: 2;
   overflow: auto;
   padding: 14px 20px 28px;
 }
@@ -396,7 +443,7 @@ textarea:focus {
    PAR-DESSUS le volet au survol, comme sur Supabase. ── */
 .side-panel {
   position: fixed;
-  top: 0;
+  top: var(--topbar-h);
   bottom: 0;
   left: var(--rail);
   width: var(--panel-w);
