@@ -161,10 +161,14 @@ function ProfilePicker({ profiles, active, onChange }: { profiles: PubProfile[];
   const label = (p: PubProfile): string => (p.handle ? `@${p.handle}` : p.username)
   return (
     <div style={{ position: 'relative' }}>
-      <button className="btn" onClick={() => setOpen((o) => !o)} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      {/* Style Supabase : sans bordure ni fond, fond au survol, double chevron. */}
+      <button className="tb-picker" onClick={() => setOpen((o) => !o)}>
         {isAll ? <GlobeBadge /> : <Avatar url={cur?.avatarUrl ?? null} name={cur?.username} />}
         {isAll ? 'Tous les comptes' : cur ? label(cur) : '—'}
-        <span style={{ opacity: 0.5, fontSize: 11 }}>▾</span>
+        <svg className="tb-chev" width="10" height="14" viewBox="0 0 10 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M2 5.5L5 2.5L8 5.5" />
+          <path d="M2 8.5L5 11.5L8 8.5" />
+        </svg>
       </button>
       {open && (
         <>
@@ -389,15 +393,13 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
         <div className="tb-search" title="Recherche (bientôt)">
           <Icon name="search" size={14} /> Rechercher <span className="kbd">Ctrl K</span>
         </div>
+        {/* Compte du dashboard : tuile dégradé bleu → vert pastel, sans bordure. */}
         <button
-          className="btn icon-btn"
+          className="tb-account"
           title={`${ttProfile?.nickname ? '@' + ttProfile.nickname : 'Compte'} — se déconnecter`}
           onClick={() => api.logout().then(onLogout)}
-          style={{ width: 34, height: 34, padding: 0, borderRadius: 9, overflow: 'hidden', border: '1px solid var(--border)' }}
-        >
-          {/* Tuile dégradé bleu → vert pastel = compte du dashboard. */}
-          <span style={{ width: '100%', height: '100%', display: 'block', background: 'linear-gradient(135deg, #bae6fd 0%, #99f6e4 55%, #bbf7d0 100%)' }} />
-        </button>
+          style={{ background: 'linear-gradient(135deg, #bae6fd 0%, #99f6e4 55%, #bbf7d0 100%)' }}
+        />
       </header>
 
       {/* Barre repliée en colonne d'icônes ; se déploie au survol par-dessus le

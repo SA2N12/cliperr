@@ -83,6 +83,40 @@ button {
   color: var(--muted-2);
   font-size: 15px;
 }
+/* Sélecteur de compte : rendu Supabase — pas de bordure ni de fond au repos. */
+.topbar .tb-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+.topbar .tb-picker:hover {
+  background: var(--panel-2);
+}
+.topbar .tb-chev {
+  opacity: 0.45;
+  flex-shrink: 0;
+}
+/* Compte du dashboard : tuile dégradée, sans bordure. */
+.topbar .tb-account {
+  width: 34px;
+  height: 34px;
+  border: none;
+  padding: 0;
+  border-radius: 10px;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: block;
+}
 .topbar .tb-search {
   display: flex;
   align-items: center;
