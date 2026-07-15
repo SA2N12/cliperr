@@ -255,6 +255,7 @@ export async function publishClipById(
   repo.setClipPublish(id, 'scheduled')
   try {
     const deps = buildPublishDeps(paths)
+    deps.onNote = log // trace les réponses ambiguës d'upload-post dans le journal
     // upload-post : on publie sur le PROFIL ACTIF (choisi en haut à droite), ou
     // sur un compte forcé (overrides). Un seul compte, pas de rotation.
     if (deps.mode === 'uploadpost') {

@@ -12,6 +12,8 @@ export interface PublishDeps {
   privacyLevel?: string
   uploadPostKey?: string | null
   uploadPostUser?: string | null
+  /** Journal (diagnostic des réponses ambiguës d'upload-post). */
+  onNote?: (m: string) => void
 }
 
 export interface PublishOutcome {
@@ -60,7 +62,8 @@ export async function publishClip(
       privacyLevel: overrides.privacyLevel ?? deps.privacyLevel,
       disableComment: overrides.disableComment,
       disableDuet: overrides.disableDuet,
-      disableStitch: overrides.disableStitch
+      disableStitch: overrides.disableStitch,
+      onNote: deps.onNote
     })
     return { ok: true, detail: res.url ? `Publié via upload-post → ${res.url}` : 'Publié via upload-post', postUrl: res.url, postId: res.postId }
   }

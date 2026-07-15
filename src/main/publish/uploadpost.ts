@@ -16,6 +16,8 @@ export interface UploadPostParams {
   disableComment?: boolean
   disableDuet?: boolean
   disableStitch?: boolean
+  /** Journal (diagnostic des réponses ambiguës d'upload-post). */
+  onNote?: (m: string) => void
 }
 
 interface UploadPostResult {
@@ -79,7 +81,7 @@ export async function uploadPostTikTok(p: UploadPostParams): Promise<{ url: stri
   }
   // Cas asynchrone : traité en tâche de fond → on suit le statut jusqu'au résultat réel.
   if (res.ok && json.success && json.request_id) {
-    return pollUploadStatus(p.apiKey, json.request_id)
+    return pollUploadStatus(p.apiKey, json.request_id, p.onNote)
   }
   throw new Error(`upload-post : ${json.error || `HTTP ${res.status}`}`)
 }
@@ -96,7 +98,11 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
  * réelle. Lève une erreur (avec le message TikTok, ex. spam_risk) si l'upload
  * échoue → permet la bascule de compte en amont. Renvoie l'URL du post sinon.
  */
-async function pollUploadStatus(apiKey: string, requestId: string): Promise<{ url: string | null; postId: string | null }> {
+async function pollUploadStatus(
+  apiKey: string,
+  requestId: string,
+  onNote?: (m: string) => void
+): Promise<{ url: string | null; postId: string | null }> {
   const url = `https://api.upload-post.com/api/uploadposts/status?request_id=${encodeURIComponent(requestId)}`
   for (let i = 0; i < 40; i++) {
     let j: StatusResult | null = null
@@ -111,11 +117,22 @@ async function pollUploadStatus(apiKey: string, requestId: string): Promise<{ ur
     if (j && (j.status === 'completed' || j.status === 'failed')) {
       const tk = (j.results ?? []).find((x) => x.platform === 'tiktok') ?? j.results?.[0]
       if (tk?.success === true) return { url: tk.post_url ?? null, postId: tk.platform_post_id ?? postIdFromUrl(tk.post_url) }
-      throw new Error(`upload-post : ${tk?.error_message || 'échec de la publication'}`)
+      // ⚠️ Un faux échec coûte TRÈS cher : l'appelant régénère et REPUBLIE une vidéo
+      // déjà en ligne (doublon sur le compte). On ne conclut donc à l'échec que sur
+      // preuve EXPLICITE — `success: false`, ou un statut « failed ».
+      if (tk?.success === false || j.status === 'failed') {
+        throw new Error(`upload-post : ${tk?.error_message || 'échec de la publication'}`)
+      }
+      // « completed » sans résultat exploitable (results absent/vide/autre forme) :
+      // le traitement s'est terminé sans erreur → la vidéo est très probablement en
+      // ligne. On considère soumis, sans URL, plutôt que de risquer un doublon.
+      onNote?.(`upload-post : statut « completed » sans résultat TikTok exploitable — considéré publié. Réponse : ${JSON.stringify(j).slice(0, 300)}`)
+      return { url: null, postId: null }
     }
     await sleep(3000)
   }
   // Toujours en cours après le délai max : considéré soumis (pas de faux échec).
+  onNote?.(`upload-post : toujours « processing » après ${(40 * 3000) / 1000}s — considéré soumis (request_id ${requestId}).`)
   return { url: null, postId: null }
 }
 
