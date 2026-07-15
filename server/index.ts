@@ -724,6 +724,15 @@ async function runAutopilotTick(force = false): Promise<void> {
     set.add(ord)
     repo.setSetting(`autopilot_doneord_${u}_${today}`, JSON.stringify([...set].sort((a, b) => a - b)))
     repo.setSetting(`autopilot_count_${u}_${today}`, String(set.size))
+    // Réussi : on efface les traces de tentative/échec de ce créneau.
+    try {
+      const f = JSON.parse(repo.getSetting(`autopilot_failed_${u}_${today}`) || '{}') as Record<string, string>
+      if (f[String(ord)]) { delete f[String(ord)]; repo.setSetting(`autopilot_failed_${u}_${today}`, JSON.stringify(f)) }
+      const t = JSON.parse(repo.getSetting(`autopilot_tries_${u}_${today}`) || '{}') as Record<string, number>
+      if (t[String(ord)]) { delete t[String(ord)]; repo.setSetting(`autopilot_tries_${u}_${today}`, JSON.stringify(t)) }
+    } catch {
+      /* ignore */
+    }
   }
   // Créneaux EN ÉCHEC aujourd'hui (ordinal → message d'erreur). Un créneau qui échoue
   // est ÉCARTÉ de la sélection (sinon re-choisi en boucle → bloque les suivants), et son
@@ -741,6 +750,25 @@ async function runAutopilotTick(force = false): Promise<void> {
     const m = failedMapOf(u)
     m[String(ord)] = (error || 'échec').slice(0, 200)
     repo.setSetting(`autopilot_failed_${u}_${today}`, JSON.stringify(m))
+  }
+  // Tentatives par créneau, incrémentées AVANT la génération. Si le process meurt
+  // en cours de route (redémarrage, crash, OOM), le `finally` ne s'exécute pas : sans
+  // ce compteur le créneau serait re-choisi indéfiniment et régénérerait une vidéo à
+  // chaque cycle (crédits gaspillés). Ici, il est écarté après MAX_TRIES tentatives.
+  const MAX_TRIES = 2
+  const triesOf = (u: string): Record<string, number> => {
+    try {
+      const o = JSON.parse(repo.getSetting(`autopilot_tries_${u}_${today}`) || '{}')
+      if (o && typeof o === 'object') return o as Record<string, number>
+    } catch {
+      /* ignore */
+    }
+    return {}
+  }
+  const bumpTry = (u: string, ord: number): void => {
+    const m = triesOf(u)
+    m[String(ord)] = (Number(m[String(ord)]) || 0) + 1
+    repo.setSetting(`autopilot_tries_${u}_${today}`, JSON.stringify(m))
   }
   // Ordinaux à SAUTER dans la sélection : déjà produits OU en échec aujourd'hui.
   const skipOrdOf = (u: string): Set<number> =>
@@ -808,6 +836,17 @@ async function runAutopilotTick(force = false): Promise<void> {
   const done = doneOf(user)
   const slotOv = ovToday[`${user}:${ordinal}`] ?? {}
   const niche = nicheForProfile(user)
+
+  // Garde-fou anti-boucle : un créneau déjà tenté MAX_TRIES fois sans succès est
+  // écarté. Couvre le cas où le process est tué en pleine génération (le `finally`
+  // ci-dessous ne tourne alors PAS) — sinon on régénérerait une vidéo à chaque cycle.
+  const nTries = Number(triesOf(user)[String(ordinal)]) || 0
+  if (nTries >= MAX_TRIES) {
+    markFailed(user, ordinal, `abandonné après ${MAX_TRIES} tentatives interrompues (redémarrage ou plantage ?)`)
+    emitLog(`Pilote auto : créneau n°${ordinal} de « ${user} » écarté après ${MAX_TRIES} tentatives sans résultat.`)
+    return
+  }
+  bumpTry(user, ordinal)
 
   // Suivi du résultat de ce créneau : si rien n'est produit (échec), on l'écarte pour
   // la journée AVEC son erreur (markFailed dans le finally) → le planning continue.
