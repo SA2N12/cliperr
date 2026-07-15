@@ -134,6 +134,36 @@ function musicTracks(): string[] {
   return existsSync(musicDir) ? readdirSync(musicDir).filter((f) => AUDIO_RE.test(f)) : []
 }
 
+// profile_music = { [user]: string[] } — playlist du compte : les vidéos générées
+// piochent dedans À TOUR DE RÔLE (une piste différente à chaque vidéo). Vide =
+// l'IA choisit la musique selon l'ambiance (comportement historique).
+function profileMusic(): Record<string, string[]> {
+  try {
+    const raw = repo.getSetting('profile_music')
+    if (raw) {
+      const o = JSON.parse(raw) as unknown
+      if (o && typeof o === 'object') return o as Record<string, string[]>
+    }
+  } catch {
+    /* JSON invalide → vide */
+  }
+  return {}
+}
+/**
+ * Piste suivante de la playlist d'un compte (rotation persistée via
+ * `music_idx_<user>`), ou null si le compte n'a pas de playlist. Les pistes
+ * supprimées de /data/music sont ignorées.
+ */
+function nextMusicForProfile(user: string, available: string[]): string | null {
+  const pool = (profileMusic()[user] ?? []).filter((t) => available.includes(t))
+  if (!pool.length) return null
+  const key = `music_idx_${user}`
+  const i = Math.max(0, Number(repo.getSetting(key)) || 0)
+  const pick = pool[i % pool.length]
+  repo.setSetting(key, String((i + 1) % pool.length))
+  return pick
+}
+
 let ctxPromise: Promise<PipelineContext> | null = null
 function getContext(): Promise<PipelineContext> {
   if (!ctxPromise) {
@@ -331,15 +361,25 @@ async function runVideoGen(
       musicTrack = join(musicDir, opts.music)
       emitIdeaVideo({ ideaId, status: 'running', message: `Musique : ${cleanName(opts.music)}` })
     } else if (tracks.length && !opts.noMusic) {
-      emitIdeaVideo({ ideaId, status: 'running', message: 'Choix de la musique (IA)…' })
-      // Évite de rejouer le dernier morceau utilisé sur ce compte (variété).
-      const lastKey = `music_last_${targetProfile}`
-      const exclude = repo.getSetting(lastKey)
-      const chosen = await chooseMusicTrack(anthropicKey, model, idea, tracks, exclude)
-      if (chosen) {
-        musicTrack = join(musicDir, chosen)
-        repo.setSetting(lastKey, chosen)
-        emitIdeaVideo({ ideaId, status: 'running', message: `Musique : ${cleanName(chosen)}` })
+      // Playlist du compte : on prend la piste suivante (rotation) → les vidéos
+      // d'un même compte alternent. Prioritaire sur le choix IA.
+      const rotated = nextMusicForProfile(targetProfile, tracks)
+      if (rotated) {
+        musicTrack = join(musicDir, rotated)
+        repo.setSetting(`music_last_${targetProfile}`, rotated)
+        emitIdeaVideo({ ideaId, status: 'running', message: `Musique : ${cleanName(rotated)} (playlist du compte)` })
+      } else {
+        // Aucune playlist définie → l'IA choisit selon l'ambiance de la vidéo.
+        emitIdeaVideo({ ideaId, status: 'running', message: 'Choix de la musique (IA)…' })
+        // Évite de rejouer le dernier morceau utilisé sur ce compte (variété).
+        const lastKey = `music_last_${targetProfile}`
+        const exclude = repo.getSetting(lastKey)
+        const chosen = await chooseMusicTrack(anthropicKey, model, idea, tracks, exclude)
+        if (chosen) {
+          musicTrack = join(musicDir, chosen)
+          repo.setSetting(lastKey, chosen)
+          emitIdeaVideo({ ideaId, status: 'running', message: `Musique : ${cleanName(chosen)}` })
+        }
       }
     }
     const { filePath, durationSec, usage } = await generateVideoFromIdea(ctx, {
@@ -1543,6 +1583,7 @@ app.get('/api/autopilot', wrap(async (_req, res) => {
   const seriesMap = autopilotSeries()
   const globalPerDay = Math.max(1, Number(repo.getSetting('autopilot_per_day')) || 1)
   const pdMap = perDayMap()
+  const musicMap = profileMusic()
   res.json({
     enabled: repo.getSetting('autopilot_enabled') === '1',
     perDay: globalPerDay,
@@ -1555,6 +1596,7 @@ app.get('/api/autopilot', wrap(async (_req, res) => {
         avatarUrl: meta.get(u)?.avatarUrl ?? null,
         niche: (niches[u] ?? '').trim() || nicheForProfile(u),
         ctas: ctaMapForProfile(u),
+        music: (musicMap[u] ?? []).filter((t) => typeof t === 'string'),
         clipChannels: (clipChannelsMap()[u] ?? '').trim(),
         perDay: pdMap[u] == null ? globalPerDay : Math.max(0, Math.min(5, Math.round(Number(pdMap[u])) || 0)),
         series: {
@@ -1840,9 +1882,19 @@ app.get('/api/autopilot/plan', wrap(async (req, res) => {
 // Réglages d'UN SEUL compte (fusion dans les maps existantes — pas de remplacement
 // global) : utilisé par la fenêtre ⚙️ des lignes du planning.
 app.post('/api/autopilot/account', wrap((req, res) => {
-  const b = (req.body ?? {}) as { user?: unknown; perDay?: unknown; niche?: unknown; ctas?: unknown; clipChannels?: unknown; series?: unknown }
+  const b = (req.body ?? {}) as { user?: unknown; perDay?: unknown; niche?: unknown; ctas?: unknown; music?: unknown; clipChannels?: unknown; series?: unknown }
   const user = String(b.user ?? '').trim()
   if (!user || !uploadPostProfiles().includes(user)) return res.status(400).json({ error: 'Compte inconnu' })
+  if (Array.isArray(b.music)) {
+    // Playlist du compte : on ne garde que des pistes réellement présentes.
+    const avail = musicTracks()
+    const list = (b.music as unknown[]).map(String).filter((t) => avail.includes(t)).slice(0, 50)
+    const m = profileMusic()
+    if (list.length) m[user] = list
+    else delete m[user]
+    repo.setSetting('profile_music', JSON.stringify(m))
+    repo.setSetting(`music_idx_${user}`, '0') // playlist modifiée → rotation repart au début
+  }
   if (b.perDay != null) {
     const m = perDayMap()
     m[user] = Math.max(0, Math.min(5, Math.round(Number(b.perDay)) || 0))

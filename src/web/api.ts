@@ -107,6 +107,7 @@ export const api = {
         avatarUrl: string | null
         niche: string
         ctas: { niche?: string; serie?: string; custom?: string; clip?: string }
+        music: string[]
         clipChannels: string
         perDay: number
         series: { enabled: boolean; title: string; universe: string; episode: number }
@@ -154,7 +155,7 @@ export const api = {
     }>(`/api/autopilot/plan${day ? `?day=${day}` : ''}`),
   saveAutopilotSlot: (slot: { user: string; ordinal: number; hm?: number | null; type?: string | null; subject?: string | null; music?: string | null; reset?: boolean }) =>
     post<{ ok: boolean }>('/api/autopilot/slot', slot),
-  saveAutopilotAccount: (cfg: { user: string; perDay?: number; niche?: string; ctas?: { niche?: string; serie?: string; custom?: string; clip?: string }; clipChannels?: string; series?: { enabled: boolean; title: string; universe: string } }) =>
+  saveAutopilotAccount: (cfg: { user: string; perDay?: number; niche?: string; ctas?: { niche?: string; serie?: string; custom?: string; clip?: string }; music?: string[]; clipChannels?: string; series?: { enabled: boolean; title: string; universe: string } }) =>
     post<{ ok: boolean }>('/api/autopilot/account', cfg),
   testClipChannels: (channels: string) =>
     post<{ results: { channel: string; status: string; videos: number; longCount: number; sample?: string }[] }>('/api/autopilot/clip-channels/test', { channels }),

@@ -1345,6 +1345,11 @@ const CRON_LABELS: Record<string, string> = {
 }
 
 type AutopilotSlot = { user: string; handle: string | null; avatarUrl: string | null; niche: string; ordinal: number; etaHm: number; eta: string; done: boolean; pinned?: boolean; type?: string; subject?: string; hasSeries?: boolean; credits?: number; failed?: boolean; error?: string; music?: string }
+/** Nom lisible d'un morceau (retire le préfixe technique + l'extension du fichier). */
+function trackLabel(f: string): string {
+  return f.replace(/^[a-z]+-\d+-/i, '').replace(/^\d+-/, '').replace(/\.[^.]+$/, '')
+}
+
 type AutopilotAccount = { user: string; handle: string | null; avatarUrl: string | null }
 type AutopilotPlan = { enabled: boolean; paused?: boolean; perDay: number; targetPerDay?: number; window: { start: number; end: number }; nowHm: number; day?: number; accounts?: AutopilotAccount[]; slots: AutopilotSlot[] }
 
@@ -1361,8 +1366,6 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
   const [dragOver, setDragOver] = useState(false)
   const musicInputRef = useRef<HTMLInputElement>(null)
   useEffect(() => { api.musicList().then((r) => setTracks(r.tracks)).catch(() => undefined) }, [])
-  // Nom lisible d'un morceau (retire le préfixe technique + l'extension du fichier).
-  const trackLabel = (f: string): string => f.replace(/^[a-z]+-\d+-/i, '').replace(/^\d+-/, '').replace(/\.[^.]+$/, '')
   // Import d'un MP3 depuis le bloc → stocké dans /data/music (partagé), puis auto-sélectionné pour ce bloc.
   const uploadTrack = async (file: File): Promise<void> => {
     if (!/\.(mp3|m4a|aac|wav|ogg|opus)$/i.test(file.name)) { toast('Format audio non supporté (mp3, m4a, wav, ogg…)'); return }
@@ -1541,9 +1544,11 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
   const [perDay, setPerDay] = useState(1)
   const [niche, setNiche] = useState('')
   const [ctas, setCtas] = useState<{ niche?: string; serie?: string; custom?: string; clip?: string }>({})
+  const [music, setMusic] = useState<string[]>([])
+  const [tracks, setTracks] = useState<string[]>([])
   const [clipChannels, setClipChannels] = useState('')
   const [serie, setSerie] = useState<SeriesCfg>({ enabled: false, title: '', universe: '', episode: 1 })
-  const [tab, setTab] = useState<'niche' | 'serie' | 'custom' | 'clips'>('niche')
+  const [tab, setTab] = useState<'niche' | 'serie' | 'custom' | 'clips' | 'music'>('niche')
   const [busy, setBusy] = useState(false)
   const [testing, setTesting] = useState(false)
   const [chanResults, setChanResults] = useState<{ channel: string; status: string; videos: number; longCount: number; sample?: string }[] | null>(null)
@@ -1584,9 +1589,11 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
       setPerDay(p.perDay)
       setNiche(p.niche)
       setCtas(p.ctas ?? {})
+      setMusic(p.music ?? [])
       setClipChannels(p.clipChannels)
       setSerie(p.series)
     }).catch(() => undefined)
+    api.musicList().then((r) => setTracks(r.tracks)).catch(() => undefined)
   }, [user])
 
   // Champ CTA d'un type de vidéo, rendu au bas de l'onglet correspondant
@@ -1606,6 +1613,7 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
         user,
         niche,
         ctas,
+        music,
         clipChannels,
         // Plus de toggle : la série est « prête » dès que titre + univers sont remplis.
         series: { enabled: !!(serie.title.trim() && serie.universe.trim()), title: serie.title, universe: serie.universe }
@@ -1645,10 +1653,11 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
           </div>
 
           <div className="tabs">
-            <button className={`tab ${tab === 'niche' ? 'on' : ''}`} onClick={() => setTab('niche')}>Vidéos de niche</button>
+            <button className={`tab ${tab === 'niche' ? 'on' : ''}`} onClick={() => setTab('niche')}>Niche</button>
             <button className={`tab ${tab === 'serie' ? 'on' : ''}`} onClick={() => setTab('serie')}>Série</button>
             <button className={`tab ${tab === 'custom' ? 'on' : ''}`} onClick={() => setTab('custom')}>Sujet libre</button>
             <button className={`tab ${tab === 'clips' ? 'on' : ''}`} onClick={() => setTab('clips')}>Clips</button>
+            <button className={`tab ${tab === 'music' ? 'on' : ''}`} onClick={() => setTab('music')}>Musique</button>
           </div>
         </div>
 
@@ -1722,6 +1731,44 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
               </div>
             )}
             {ctaField('clip', 'CTA des clips', 'ex. 👉 Abonne-toi pour + de clips')}
+          </>
+        )}
+
+        {tab === 'music' && (
+          <>
+            <div className="small" style={{ fontWeight: 600, marginBottom: 6 }}>Playlist du compte</div>
+            <div className="muted small" style={{ marginBottom: 10 }}>
+              Coche les musiques à utiliser sur ce compte : les vidéos les jouent <b>à tour de rôle</b> (une piste différente à chaque vidéo, puis ça reboucle). Si tu n’en coches <b>aucune</b>, l’IA choisit la musique selon l’ambiance de chaque vidéo. Une piste choisie <b>sur un bloc</b> du planning reste prioritaire.
+            </div>
+            {tracks.length === 0 ? (
+              <div className="muted small">Aucune musique disponible — ajoute des pistes dans Réglages → Musique, ou importe un MP3 depuis un bloc du planning.</div>
+            ) : (
+              <>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 8 }}>
+                  {tracks.map((t) => {
+                    const i = music.indexOf(t)
+                    return (
+                      <label key={t} className="small" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 8, cursor: 'pointer', background: i >= 0 ? 'var(--ap-green-soft)' : 'transparent' }}>
+                        <input
+                          type="checkbox"
+                          checked={i >= 0}
+                          onChange={(e) => setMusic((m) => (e.target.checked ? [...m, t] : m.filter((x) => x !== t)))}
+                          style={{ flexShrink: 0 }}
+                        />
+                        {/* Le numéro montre l'ordre de passage dans la rotation. */}
+                        {i >= 0 && <span className="ap-time" style={{ fontSize: 11, fontWeight: 700, color: 'var(--ap-green-deep)', flexShrink: 0 }}>{i + 1}</span>}
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{trackLabel(t)}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+                <div className="muted small">
+                  {music.length === 0
+                    ? '➜ Aucune cochée : choix automatique par l’IA.'
+                    : `➜ ${music.length} piste${music.length > 1 ? 's' : ''} en rotation, dans l’ordre affiché.`}
+                </div>
+              </>
+            )}
           </>
         )}
 
