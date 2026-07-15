@@ -1543,7 +1543,7 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
   const [ctas, setCtas] = useState<{ niche?: string; serie?: string; custom?: string; clip?: string }>({})
   const [clipChannels, setClipChannels] = useState('')
   const [serie, setSerie] = useState<SeriesCfg>({ enabled: false, title: '', universe: '', episode: 1 })
-  const [tab, setTab] = useState<'niche' | 'serie' | 'clips'>('niche')
+  const [tab, setTab] = useState<'niche' | 'serie' | 'custom' | 'clips'>('niche')
   const [busy, setBusy] = useState(false)
   const [testing, setTesting] = useState(false)
   const [chanResults, setChanResults] = useState<{ channel: string; status: string; videos: number; longCount: number; sample?: string }[] | null>(null)
@@ -1646,9 +1646,8 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
 
           <div className="tabs">
             <button className={`tab ${tab === 'niche' ? 'on' : ''}`} onClick={() => setTab('niche')}>Vidéos de niche</button>
-            <button className={`tab ${tab === 'serie' ? 'on' : ''}`} onClick={() => setTab('serie')}>
-              Série {serie.title.trim() && serie.universe.trim() ? '🟢' : ''}
-            </button>
+            <button className={`tab ${tab === 'serie' ? 'on' : ''}`} onClick={() => setTab('serie')}>Série</button>
+            <button className={`tab ${tab === 'custom' ? 'on' : ''}`} onClick={() => setTab('custom')}>Sujet libre</button>
             <button className={`tab ${tab === 'clips' ? 'on' : ''}`} onClick={() => setTab('clips')}>Clips</button>
           </div>
         </div>
@@ -1662,8 +1661,15 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
               Chaque vidéo « niche » est une idée originale générée dans ce thème (hook fort, script rétention, images IA, voix off). C’est le type par défaut des blocs du planning.
             </div>
             {ctaField('niche', 'CTA des vidéos de niche', 'ex. 🔗 Mon guide est en bio')}
-            {/* Les blocs « Sujet libre » empruntent le même chemin de génération que
-                les niches → leur CTA vit naturellement dans cet onglet. */}
+          </>
+        )}
+
+        {tab === 'custom' && (
+          <>
+            <div className="small" style={{ fontWeight: 600, marginBottom: 6 }}>Vidéos à sujet imposé</div>
+            <div className="muted small">
+              Le sujet se choisit <b>bloc par bloc</b> sur le planning : clique un bloc « à venir », choisis le type <b>« Sujet personnalisé »</b> et écris le sujet exact (ex. « le mystère du vol MH370 »). L’IA écrit alors la vidéo sur CE sujet au lieu d’en trouver un dans la niche du compte — même hook fort, même script rétention, mêmes images IA.
+            </div>
             {ctaField('custom', 'CTA des vidéos « Sujet libre »', 'ex. 🔗 Lien en bio')}
           </>
         )}
