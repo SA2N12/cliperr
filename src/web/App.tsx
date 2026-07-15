@@ -1548,7 +1548,7 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
   const [tracks, setTracks] = useState<string[]>([])
   const [clipChannels, setClipChannels] = useState('')
   const [serie, setSerie] = useState<SeriesCfg>({ enabled: false, title: '', universe: '', episode: 1 })
-  const [tab, setTab] = useState<'niche' | 'serie' | 'custom' | 'clips' | 'music'>('niche')
+  const [tab, setTab] = useState<'niche' | 'serie' | 'custom' | 'clips'>('niche')
   const [busy, setBusy] = useState(false)
   const [testing, setTesting] = useState(false)
   const [chanResults, setChanResults] = useState<{ channel: string; status: string; videos: number; longCount: number; sample?: string }[] | null>(null)
@@ -1653,11 +1653,10 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
           </div>
 
           <div className="tabs">
-            <button className={`tab ${tab === 'niche' ? 'on' : ''}`} onClick={() => setTab('niche')}>Niche</button>
+            <button className={`tab ${tab === 'niche' ? 'on' : ''}`} onClick={() => setTab('niche')}>Vidéos de niche</button>
             <button className={`tab ${tab === 'serie' ? 'on' : ''}`} onClick={() => setTab('serie')}>Série</button>
             <button className={`tab ${tab === 'custom' ? 'on' : ''}`} onClick={() => setTab('custom')}>Sujet libre</button>
             <button className={`tab ${tab === 'clips' ? 'on' : ''}`} onClick={() => setTab('clips')}>Clips</button>
-            <button className={`tab ${tab === 'music' ? 'on' : ''}`} onClick={() => setTab('music')}>Musique</button>
           </div>
         </div>
 
@@ -1669,6 +1668,46 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
             <div className="muted small">
               Chaque vidéo « niche » est une idée originale générée dans ce thème (hook fort, script rétention, images IA, voix off). C’est le type par défaut des blocs du planning.
             </div>
+
+            {/* Playlist : réglage du COMPTE (elle sert aussi aux vidéos « Sujet libre »
+                et aux séries dont le bloc impose une piste) — logée ici, l'onglet
+                principal du compte, plutôt que dans un onglet dédié. */}
+            <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+              <label className="muted small" style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>Musique du compte</label>
+              <div className="muted small" style={{ marginBottom: 8 }}>
+                Coche les pistes à utiliser : les vidéos les jouent <b>à tour de rôle</b> (une différente à chaque fois, puis ça reboucle). Aucune cochée = l’IA choisit selon l’ambiance. Une piste choisie <b>sur un bloc</b> reste prioritaire.
+              </div>
+              {tracks.length === 0 ? (
+                <div className="muted small">Aucune musique disponible — ajoute des pistes dans Réglages → Musique, ou importe un MP3 depuis un bloc du planning.</div>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 8 }}>
+                    {tracks.map((t) => {
+                      const i = music.indexOf(t)
+                      return (
+                        <label key={t} className="small" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 8, cursor: 'pointer', background: i >= 0 ? 'var(--ap-green-soft)' : 'transparent' }}>
+                          <input
+                            type="checkbox"
+                            checked={i >= 0}
+                            onChange={(e) => setMusic((m) => (e.target.checked ? [...m, t] : m.filter((x) => x !== t)))}
+                            style={{ flexShrink: 0 }}
+                          />
+                          {/* Le numéro montre l'ordre de passage dans la rotation. */}
+                          {i >= 0 && <span className="ap-time" style={{ fontSize: 11, fontWeight: 700, color: 'var(--ap-green-deep)', flexShrink: 0 }}>{i + 1}</span>}
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{trackLabel(t)}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                  <div className="muted small">
+                    {music.length === 0
+                      ? '➜ Aucune cochée : choix automatique par l’IA.'
+                      : `➜ ${music.length} piste${music.length > 1 ? 's' : ''} en rotation, dans l’ordre affiché.`}
+                  </div>
+                </>
+              )}
+            </div>
+
             {ctaField('niche', 'CTA des vidéos de niche', 'ex. 🔗 Mon guide est en bio')}
           </>
         )}
@@ -1731,44 +1770,6 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
               </div>
             )}
             {ctaField('clip', 'CTA des clips', 'ex. 👉 Abonne-toi pour + de clips')}
-          </>
-        )}
-
-        {tab === 'music' && (
-          <>
-            <div className="small" style={{ fontWeight: 600, marginBottom: 6 }}>Playlist du compte</div>
-            <div className="muted small" style={{ marginBottom: 10 }}>
-              Coche les musiques à utiliser sur ce compte : les vidéos les jouent <b>à tour de rôle</b> (une piste différente à chaque vidéo, puis ça reboucle). Si tu n’en coches <b>aucune</b>, l’IA choisit la musique selon l’ambiance de chaque vidéo. Une piste choisie <b>sur un bloc</b> du planning reste prioritaire.
-            </div>
-            {tracks.length === 0 ? (
-              <div className="muted small">Aucune musique disponible — ajoute des pistes dans Réglages → Musique, ou importe un MP3 depuis un bloc du planning.</div>
-            ) : (
-              <>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 8 }}>
-                  {tracks.map((t) => {
-                    const i = music.indexOf(t)
-                    return (
-                      <label key={t} className="small" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 8, cursor: 'pointer', background: i >= 0 ? 'var(--ap-green-soft)' : 'transparent' }}>
-                        <input
-                          type="checkbox"
-                          checked={i >= 0}
-                          onChange={(e) => setMusic((m) => (e.target.checked ? [...m, t] : m.filter((x) => x !== t)))}
-                          style={{ flexShrink: 0 }}
-                        />
-                        {/* Le numéro montre l'ordre de passage dans la rotation. */}
-                        {i >= 0 && <span className="ap-time" style={{ fontSize: 11, fontWeight: 700, color: 'var(--ap-green-deep)', flexShrink: 0 }}>{i + 1}</span>}
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{trackLabel(t)}</span>
-                      </label>
-                    )
-                  })}
-                </div>
-                <div className="muted small">
-                  {music.length === 0
-                    ? '➜ Aucune cochée : choix automatique par l’IA.'
-                    : `➜ ${music.length} piste${music.length > 1 ? 's' : ''} en rotation, dans l’ordre affiché.`}
-                </div>
-              </>
-            )}
           </>
         )}
 
