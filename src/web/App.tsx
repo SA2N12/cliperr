@@ -1469,12 +1469,20 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
         {type !== 'clip' && (
           <>
             <label className="muted small" style={{ display: 'block', marginBottom: 4 }}>Musique de fond</label>
-            <select className="input-full" value={music} onChange={(e) => setMusic(e.target.value)} style={{ marginBottom: 8 }}>
-              <option value="auto">Choix automatique (IA)</option>
+            <select className="input-full" value={music} onChange={(e) => setMusic(e.target.value)} style={{ marginBottom: music === 'auto' ? 4 : 8 }}>
+              {/* « auto » ne veut pas dire « l'IA choisit » : ça veut dire « ne rien
+                  imposer ici » → le bloc suit la playlist du compte (rotation), et
+                  ce n'est QUE sans playlist que l'IA tranche. */}
+              <option value="auto">Automatique — playlist du compte</option>
               <option value="none">Aucune musique</option>
               {tracks.map((t) => <option key={t} value={t}>{trackLabel(t)}</option>)}
             </select>
-            {type === 'serie' && music === 'auto' && <div className="muted small" style={{ marginTop: -2, marginBottom: 8 }}>Les épisodes de série n'ont pas de musique de fond par défaut (dialogues seuls). Choisis une piste ci-dessus pour en ajouter une.</div>}
+            {music === 'auto' && (
+              <div className="muted small" style={{ marginBottom: 8 }}>
+                Prend la piste suivante de la playlist du compte (⚙️ de la ligne → onglet <b>Vidéos de niche</b>), pour que les vidéos alternent. Si aucune piste n’y est cochée, l’IA choisit selon l’ambiance.
+              </div>
+            )}
+            {type === 'serie' && music === 'auto' && <div className="muted small" style={{ marginTop: -4, marginBottom: 8 }}>Exception : les épisodes de série n’ont pas de musique de fond (dialogues seuls). Choisis une piste précise ci-dessus pour en imposer une.</div>}
             <div
               onDragOver={(e) => { e.preventDefault(); if (!uploading) setDragOver(true) }}
               onDragLeave={() => setDragOver(false)}
