@@ -1543,7 +1543,7 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
   const [ctas, setCtas] = useState<{ niche?: string; serie?: string; custom?: string; clip?: string }>({})
   const [clipChannels, setClipChannels] = useState('')
   const [serie, setSerie] = useState<SeriesCfg>({ enabled: false, title: '', universe: '', episode: 1 })
-  const [tab, setTab] = useState<'general' | 'niche' | 'serie' | 'clips'>('general')
+  const [tab, setTab] = useState<'niche' | 'serie' | 'clips'>('niche')
   const [busy, setBusy] = useState(false)
   const [testing, setTesting] = useState(false)
   const [chanResults, setChanResults] = useState<{ channel: string; status: string; videos: number; longCount: number; sample?: string }[] | null>(null)
@@ -1589,6 +1589,16 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
     }).catch(() => undefined)
   }, [user])
 
+  // Champ CTA d'un type de vidéo, rendu au bas de l'onglet correspondant
+  // (le CTA appliqué à la légende dépend du type du bloc publié).
+  const ctaField = (key: 'niche' | 'serie' | 'custom' | 'clip', label: string, ph: string): JSX.Element => (
+    <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+      <label className="muted small" style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>{label}</label>
+      <input className="input-full" value={ctas[key] ?? ''} placeholder={ph} onChange={(e) => setCtas((c) => ({ ...c, [key]: e.target.value }))} />
+      <div className="muted small" style={{ marginTop: 4 }}>Ajouté à la fin de la légende. Laisse vide pour aucun CTA sur ce type.</div>
+    </div>
+  )
+
   const save = async (): Promise<void> => {
     setBusy(true)
     try {
@@ -1621,7 +1631,11 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
               <Avatar url={profile?.avatarUrl ?? null} name={user} size={34} />
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile?.handle ? '@' + profile.handle : user}</div>
-                <div className="muted small">Réglages du compte</div>
+                {/* Cadence : info en lecture seule (elle se règle sur le planning) —
+                    remontée ici depuis l'ancien onglet « Général ». */}
+                <div className="muted small" title="S'ajuste sur le planning : bouton + en bout de ligne pour ajouter une vidéo, 🗑 Supprimer sur un bloc pour en retirer une.">
+                  {perDay === 0 ? 'En pause' : `${perDay} vidéo${perDay > 1 ? 's' : ''}/jour`} · 9h→23h
+                </div>
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
@@ -1631,7 +1645,6 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
           </div>
 
           <div className="tabs">
-            <button className={`tab ${tab === 'general' ? 'on' : ''}`} onClick={() => setTab('general')}>Général</button>
             <button className={`tab ${tab === 'niche' ? 'on' : ''}`} onClick={() => setTab('niche')}>Vidéos de niche</button>
             <button className={`tab ${tab === 'serie' ? 'on' : ''}`} onClick={() => setTab('serie')}>
               Série {serie.title.trim() && serie.universe.trim() ? '🟢' : ''}
@@ -1641,25 +1654,6 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
         </div>
 
         <div className="sp-body">
-        {tab === 'general' && (
-          <>
-            <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--panel-2)', border: '1px solid var(--border)', marginBottom: 12 }}>
-              <div className="small" style={{ fontWeight: 600 }}>
-                Cadence : {perDay === 0 ? 'en pause' : `${perDay} vidéo${perDay > 1 ? 's' : ''}/jour`}
-              </div>
-              <div className="muted small">S'ajuste sur le planning : bouton <b>+</b> en bout de ligne pour ajouter, <b>🗑 Supprimer</b> sur un bloc pour retirer. Publication étalée de 9h à 23h.</div>
-            </div>
-            <label className="muted small" style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>CTA par type de vidéo (ajouté à chaque légende)</label>
-            <div className="muted small" style={{ marginBottom: 8 }}>Le CTA utilisé dépend du <b>type du bloc</b> publié. Laisse vide pour aucun CTA sur ce type.</div>
-            {([['niche', 'Niche', 'ex. 🔗 Mon guide est en bio'], ['serie', 'Série', 'ex. 🔔 Abonne-toi pour la suite !'], ['custom', 'Sujet libre', 'ex. 🔗 Lien en bio'], ['clip', 'Clip', 'ex. 👉 Abonne-toi pour + de clips']] as const).map(([key, label, ph]) => (
-              <div key={key} style={{ marginBottom: 8 }}>
-                <label className="muted small" style={{ display: 'block', marginBottom: 3 }}>{label}</label>
-                <input className="input-full" value={ctas[key] ?? ''} placeholder={ph} onChange={(e) => setCtas((c) => ({ ...c, [key]: e.target.value }))} />
-              </div>
-            ))}
-          </>
-        )}
-
         {tab === 'niche' && (
           <>
             <label className="muted small" style={{ display: 'block', marginBottom: 4 }}>Niche / thème des vidéos classiques</label>
@@ -1667,6 +1661,10 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
             <div className="muted small">
               Chaque vidéo « niche » est une idée originale générée dans ce thème (hook fort, script rétention, images IA, voix off). C’est le type par défaut des blocs du planning.
             </div>
+            {ctaField('niche', 'CTA des vidéos de niche', 'ex. 🔗 Mon guide est en bio')}
+            {/* Les blocs « Sujet libre » empruntent le même chemin de génération que
+                les niches → leur CTA vit naturellement dans cet onglet. */}
+            {ctaField('custom', 'CTA des vidéos « Sujet libre »', 'ex. 🔗 Lien en bio')}
           </>
         )}
 
@@ -1681,6 +1679,7 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
             <label className="muted small" style={{ display: 'block', marginBottom: 4 }}>Univers (personnages récurrents + style visuel)</label>
             <textarea className="input-full" rows={4} value={serie.universe} placeholder="Décris les personnages (noms + traits visuels précis) et le style — c’est ce qui garde les personnages identiques d’un épisode à l’autre." onChange={(e) => setSerie((s) => ({ ...s, universe: e.target.value }))} style={{ marginBottom: 4 }} />
             <div className="muted small">Épisodes en vidéo animée avec dialogues joués (voix par personnage) et cliffhanger. Mémoire de l’histoire conservée. Changer le titre relance à l’épisode 1.</div>
+            {ctaField('serie', 'CTA des épisodes de série', 'ex. 🔔 Abonne-toi pour la suite !')}
           </>
         )}
 
@@ -1716,6 +1715,7 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
                 })}
               </div>
             )}
+            {ctaField('clip', 'CTA des clips', 'ex. 👉 Abonne-toi pour + de clips')}
           </>
         )}
 
