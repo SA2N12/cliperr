@@ -11,7 +11,7 @@ import {
   type SavedIdea
 } from './api'
 
-type Page = 'dashboard' | 'autopilot' | 'generate' | 'ideas' | 'history' | 'clips' | 'queue' | 'published' | 'settings'
+type Page = 'dashboard' | 'autopilot' | 'generate' | 'ideas' | 'history' | 'clips' | 'queue' | 'published' | 'providers' | 'settings'
 
 const ICONS: Record<string, string> = {
   dashboard: 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z',
@@ -34,7 +34,8 @@ const ICONS: Record<string, string> = {
   folder: 'M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z',
   list: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
   bolt: 'M13 2L4 14h6l-1 8 9-12h-6l1-8z',
-  globe: 'M12 3a9 9 0 100 18 9 9 0 000-18zM3 12h18M12 3c2.6 2.7 2.6 15.3 0 18M12 3c-2.6 2.7-2.6 15.3 0 18'
+  globe: 'M12 3a9 9 0 100 18 9 9 0 000-18zM3 12h18M12 3c2.6 2.7 2.6 15.3 0 18M12 3c-2.6 2.7-2.6 15.3 0 18',
+  plug: 'M4 5h16v5H4zM4 14h16v5H4zM7.5 7h.01M7.5 16h.01'
 }
 
 // Valeur spéciale du sélecteur en haut à droite : « Tous les comptes » (vue globale).
@@ -372,6 +373,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
     ],
     [
       { id: 'history', label: 'Historique', icon: 'list' },
+      { id: 'providers', label: 'Fournisseurs', icon: 'plug' },
       { id: 'settings', label: 'Réglages', icon: 'settings' }
     ]
   ]
@@ -428,6 +430,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
         {page === 'clips' && <Clips clips={clips} sources={sources} onRefresh={refresh} toast={showToast} ttProfile={ttProfile} scope={scope} />}
         {page === 'queue' && <Queue go={setPage} scope={scope} ideaVideo={ideaVideo} toast={showToast} />}
         {page === 'published' && <Published clips={clips} go={setPage} scope={scope} />}
+        {page === 'providers' && <Providers go={setPage} />}
         {page === 'settings' && <Settings toast={showToast} onTtProfile={setTtProfile} />}
       </main>
       <GenerationsWidget sources={sources} progress={progress} ideaVideo={ideaVideo} />
@@ -2563,6 +2566,100 @@ function Field({ label, children }: { label: string; children: ReactNode }): JSX
       <label className="muted small" style={{ display: 'block', marginBottom: 6 }}>{label}</label>
       {children}
     </div>
+  )
+}
+
+// Métadonnées statiques des fournisseurs (rôle + coût) ; l'état vient de /api/providers.
+const PROVIDER_META: { id: string; name: string; role: string; cost: string; essential: boolean }[] = [
+  { id: 'claude', name: 'Claude (Anthropic)', role: 'Idées, scripts et épisodes de série', cost: '≈ 0,07 $/vidéo · Opus 5 $/1M entrée, 25 $/1M sortie', essential: true },
+  { id: 'openai', name: 'OpenAI', role: 'Images des vidéos + voix off TTS', cost: '≈ 0,20 – 0,40 € / vidéo', essential: true },
+  { id: 'uploadpost', name: 'upload-post', role: 'Publication automatique sur TikTok', cost: 'Plan payant (TikTok non inclus dans le gratuit)', essential: true },
+  { id: 'elevenlabs', name: 'ElevenLabs', role: 'Voix off humaines (option, remplace OpenAI)', cost: '≈ 5 – 22 $/mois selon le volume', essential: false },
+  { id: 'gemini', name: 'Gemini (Nano Banana + Veo)', role: 'Images de série cohérentes + scènes parlées Veo', cost: '≈ 1,40 $ / épisode animé', essential: false },
+  { id: 'fal', name: 'fal.ai', role: 'Animation des scènes de série (image → vidéo)', cost: '≈ 0,18 $ / scène', essential: false },
+  { id: 'groq', name: 'Groq (Whisper)', role: 'Transcription des clips YouTube', cost: 'Gratuit / quasi nul', essential: false },
+  { id: 'rapidapi', name: 'RapidAPI', role: 'Recherche de vidéos à cliper + tendances TikTok', cost: 'Abonnement selon le plan', essential: false },
+  { id: 'cookies', name: 'Cookies YouTube', role: 'Débloque le téléchargement des clips', cost: 'Gratuit (à réexporter régulièrement)', essential: false },
+  { id: 'proxy', name: 'Proxy résidentiel (Webshare)', role: 'IP française pour télécharger YouTube sans blocage', cost: '≈ 6 $/mois (250 Go)', essential: false }
+]
+
+function Providers({ go }: { go: (p: Page) => void }): JSX.Element {
+  const [data, setData] = useState<{ voiceProvider: string; seriesEngine: string; providers: Record<string, boolean> } | null>(null)
+  const [spend, setSpend] = useState<{ usd: number } | null>(null)
+  useEffect(() => {
+    api.providers().then(setData).catch(() => undefined)
+    api.spend().then((s) => setSpend({ usd: s.usd })).catch(() => undefined)
+  }, [])
+  const st = data?.providers ?? {}
+  const nConf = PROVIDER_META.filter((p) => st[p.id]).length
+  const note = (id: string): string | null => {
+    if (id === 'openai' && data?.voiceProvider === 'openai') return 'Voix off active'
+    if (id === 'elevenlabs' && data?.voiceProvider === 'elevenlabs' && st.elevenlabs) return 'Voix off active'
+    if (id === 'elevenlabs' && st.elevenlabs && data?.voiceProvider !== 'elevenlabs') return 'Configuré, mais OpenAI est actif'
+    if (id === 'gemini' && data?.seriesEngine === 'veo' && st.gemini) return 'Moteur Veo activé (séries)'
+    return null
+  }
+  return (
+    <>
+      <div className="page-head">
+        <div>
+          <h1>Fournisseurs</h1>
+          <p>Services externes du projet — état et coûts. Configure/modifie les clés dans les Réglages.</p>
+        </div>
+        <button className="btn" onClick={() => go('settings')}><Icon name="settings" size={16} /> Réglages</button>
+      </div>
+
+      <div className="grid-3" style={{ marginBottom: 16 }}>
+        <div className="card">
+          <div className="muted small">Fournisseurs configurés</div>
+          <div style={{ fontSize: 30, fontWeight: 700 }}>{nConf}<span className="muted" style={{ fontSize: 18 }}> / {PROVIDER_META.length}</span></div>
+        </div>
+        <div className="card">
+          <div className="muted small">Dépense Claude suivie</div>
+          <div style={{ fontSize: 30, fontWeight: 700 }}>{spend ? `$${spend.usd.toFixed(2)}` : '—'}</div>
+          <div className="muted small">cumul depuis la dernière remise à zéro</div>
+        </div>
+        <div className="card">
+          <div className="muted small">Voix off active</div>
+          <div style={{ fontSize: 20, fontWeight: 700, marginTop: 6 }}>{data?.voiceProvider === 'elevenlabs' ? 'ElevenLabs' : 'OpenAI'}</div>
+          <div className="muted small">Séries : moteur {data?.seriesEngine === 'veo' ? 'Veo (voix native)' : data?.seriesEngine ?? '—'}</div>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {PROVIDER_META.map((p) => {
+          const on = !!st[p.id]
+          const n = note(p.id)
+          return (
+            <div key={p.id} className="card" style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 220 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={{ fontWeight: 700 }}>{p.name}</span>
+                  {p.essential && <span className="chip" style={{ fontSize: 10 }}>essentiel</span>}
+                  {n && <span className="pill-badge" style={{ fontSize: 11 }}>{n}</span>}
+                </div>
+                <div className="muted small" style={{ marginTop: 2 }}>{p.role}</div>
+                <div className="small" style={{ marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>💳 {p.cost}</div>
+              </div>
+              <span
+                style={{
+                  flexShrink: 0,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  padding: '4px 12px',
+                  borderRadius: 999,
+                  color: on ? 'var(--good)' : p.essential ? 'var(--bad)' : 'var(--muted)',
+                  background: on ? '#e9f9ef' : p.essential ? '#fdeaea' : 'var(--panel-2)',
+                  border: `1px solid ${on ? '#b7ebc6' : p.essential ? '#f6c9c9' : 'var(--border)'}`
+                }}
+              >
+                {on ? '✓ Configuré' : p.essential ? '✗ Manquant' : '– Non configuré'}
+              </span>
+            </div>
+          )
+        })}
+      </div>
+    </>
   )
 }
 

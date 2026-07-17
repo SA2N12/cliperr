@@ -1547,6 +1547,26 @@ app.post('/api/settings/groq', wrap((req, res) => {
   res.json({ ok: true })
 }))
 
+// Vue d'ensemble des fournisseurs externes : état (configuré ou non) en un appel.
+app.get('/api/providers', wrap((_req, res) => {
+  res.json({
+    voiceProvider: repo.getSetting('voice_provider') || 'openai',
+    seriesEngine: repo.getSetting('series_video_engine') || 'seedance',
+    providers: {
+      claude: hasApiKey(),
+      openai: !!getEncrypted('openai_key'),
+      elevenlabs: !!getEncrypted('elevenlabs_key'),
+      gemini: !!getEncrypted('gemini_key'),
+      fal: !!getEncrypted('fal_key'),
+      groq: !!getEncrypted('groq_key'),
+      rapidapi: !!getEncrypted('rapidapi_key'),
+      uploadpost: !!getEncrypted('uploadpost_key'),
+      cookies: !!(repo.getSetting('ytdlp_cookies_file') || '').trim(),
+      proxy: !!(process.env.DOWNLOAD_PROXY || '').trim()
+    }
+  })
+}))
+
 // Clé ElevenLabs (voix off humaines, alternative au TTS OpenAI)
 app.get('/api/settings/elevenlabs', wrap((_req, res) => res.json({ has: !!getEncrypted('elevenlabs_key') })))
 app.post('/api/settings/elevenlabs', wrap(async (req, res) => {
