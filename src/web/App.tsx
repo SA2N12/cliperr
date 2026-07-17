@@ -1574,6 +1574,8 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
   const [tracks, setTracks] = useState<string[]>([])
   const [voice, setVoice] = useState('')
   const [voicePlaying, setVoicePlaying] = useState(false)
+  const [voiceList, setVoiceList] = useState<{ id: string; label: string }[]>([])
+  const [voiceProvider, setVoiceProvider] = useState<'openai' | 'elevenlabs'>('openai')
   const [clipChannels, setClipChannels] = useState('')
   const [serie, setSerie] = useState<SeriesCfg>({ enabled: false, title: '', universe: '', episode: 1 })
   const [tab, setTab] = useState<'niche' | 'serie' | 'custom' | 'clips'>('niche')
@@ -1623,13 +1625,16 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
       setSerie(p.series)
     }).catch(() => undefined)
     api.musicList().then((r) => setTracks(r.tracks)).catch(() => undefined)
+    api.ttsVoices().then((r) => { setVoiceProvider(r.provider); setVoiceList(r.voices) }).catch(() => undefined)
   }, [user])
 
   // Écoute un court extrait de la voix sélectionnée (générée à la volée côté serveur).
   const playVoice = (): void => {
     if (voicePlaying) return
+    const v = voice || (voiceProvider === 'elevenlabs' ? voiceList[0]?.id ?? '' : 'ash')
+    if (!v) { toast('Choisis une voix'); return }
     setVoicePlaying(true)
-    const a = new Audio(`/api/tts/preview?voice=${encodeURIComponent(voice || 'ash')}`)
+    const a = new Audio(`/api/tts/preview?voice=${encodeURIComponent(v)}`)
     a.onended = () => setVoicePlaying(false)
     a.onerror = () => { setVoicePlaying(false); toast('Aperçu voix indisponible') }
     a.play().catch(() => { setVoicePlaying(false); toast('Aperçu voix indisponible') })
@@ -1712,16 +1717,16 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
             {/* Voix off du compte : une voix différente par compte diversifie le "son"
                 (utile contre la détection de contenu IA) et casse l'effet monotone. */}
             <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
-              <label className="muted small" style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>Voix off du compte</label>
+              <label className="muted small" style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>Voix off du compte {voiceProvider === 'elevenlabs' && <span className="chip" style={{ marginLeft: 4 }}>ElevenLabs</span>}</label>
               <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
                 <select className="input-full" style={{ flex: 1 }} value={voice} onChange={(e) => setVoice(e.target.value)}>
-                  {TTS_VOICES.map((v) => <option key={v.id || 'default'} value={v.id}>{v.label}</option>)}
+                  {(voiceProvider === 'elevenlabs' ? [{ id: '', label: 'Par défaut (1re voix ElevenLabs)' }, ...voiceList] : TTS_VOICES).map((v) => <option key={v.id || 'default'} value={v.id}>{v.label}</option>)}
                 </select>
                 <button className="btn" type="button" onClick={playVoice} disabled={voicePlaying} title="Écouter un extrait de cette voix" style={{ flexShrink: 0 }}>
                   {voicePlaying ? '⏳' : '▶'} Écouter
                 </button>
               </div>
-              <div className="muted small" style={{ marginTop: 4 }}>S'applique à la narration de ce compte (niche, sujet libre). Les épisodes de série gardent leurs voix par personnage.</div>
+              <div className="muted small" style={{ marginTop: 4 }}>{voiceProvider === 'elevenlabs' ? 'Voix humaine ElevenLabs.' : "Voix OpenAI (bascule sur ElevenLabs dans Réglages pour des voix plus organiques)."} S'applique à la narration (niche, sujet libre) ; les séries gardent la voix native Veo.</div>
             </div>
 
             {/* Playlist : réglage du COMPTE (elle sert aussi aux vidéos « Sujet libre »
@@ -2578,6 +2583,8 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
   const [geminiHas, setGeminiHas] = useState(false)
   const [falKey, setFalKey] = useState('')
   const [falHas, setFalHas] = useState(false)
+  const [elevenKey, setElevenKey] = useState('')
+  const [elevenHas, setElevenHas] = useState(false)
   const [music, setMusic] = useState<string[]>([])
   const [upProfiles, setUpProfiles] = useState<{ username: string; tiktokHandle: string | null; tiktokConnected: boolean; reauthRequired: boolean; blocked: boolean }[]>([])
   const [upSelected, setUpSelected] = useState<string[]>([])
@@ -2591,7 +2598,7 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
     setFlags((f) => ({ ...f, [k]: r.value ?? '' }))
   }, [])
   useEffect(() => {
-    ;['publish_mode', 'highlights_model', 'script_model', 'transcribe_enabled', 'transcribe_backend', 'reframe_focus', 'tiktok_privacy', 'tiktok_client_key', 'tiktok_redirect', 'uploadpost_user', 'uploadpost_users', 'uploadpost_fallback'].forEach((k) => loadFlag(k).catch(() => undefined))
+    ;['publish_mode', 'highlights_model', 'script_model', 'transcribe_enabled', 'transcribe_backend', 'reframe_focus', 'tiktok_privacy', 'tiktok_client_key', 'tiktok_redirect', 'uploadpost_user', 'uploadpost_users', 'uploadpost_fallback', 'voice_provider'].forEach((k) => loadFlag(k).catch(() => undefined))
     api.apiKeyStatus().then(setKeyStatus).catch(() => undefined)
     api.groqStatus().then((r) => setGroqHas(r.has)).catch(() => undefined)
     api.rapidApiStatus().then((r) => setRapidHas(r.has)).catch(() => undefined)
@@ -2600,6 +2607,7 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
     api.openaiStatus().then((r) => setOpenaiHas(r.has)).catch(() => undefined)
     api.geminiStatus().then((r) => setGeminiHas(r.has)).catch(() => undefined)
     api.falStatus().then((r) => setFalHas(r.has)).catch(() => undefined)
+    api.elevenlabsStatus().then((r) => setElevenHas(r.has)).catch(() => undefined)
     api.musicList().then((r) => setMusic(r.tracks)).catch(() => undefined)
     api.golinks().then((r) => setLinks(Object.entries(r.links).map(([slug, url]) => ({ slug, url })))).catch(() => undefined)
     api.tiktokStatus().then(setTt).catch(() => undefined)
@@ -2750,6 +2758,19 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
             <button className="btn primary" onClick={async () => { await api.setFalKey(falKey); setFalKey(''); setFalHas((await api.falStatus()).has); toast('Clé fal.ai enregistrée') }} disabled={!falKey.trim()}>Enregistrer</button>
           </div>
           <div className="muted small" style={{ marginTop: 6 }}>Anime chaque scène des épisodes de série (image → clip vidéo, ~0,18 $/scène). Sans clé, les scènes restent des images animées (zoom).</div>
+        </Field>
+        <Field label="Voix off des vidéos (narration)">
+          <select className="input-full" style={{ maxWidth: 320 }} value={flags['voice_provider'] || 'openai'} onChange={(e) => void setFlag('voice_provider', e.target.value)}>
+            <option value="openai">OpenAI (TTS — inclus)</option>
+            <option value="elevenlabs">ElevenLabs (voix humaines){elevenHas ? '' : ' — clé requise'}</option>
+          </select>
+          {(flags['voice_provider'] || 'openai') === 'elevenlabs' && (
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <input className="input-full" style={{ flex: 1 }} type="password" placeholder={elevenHas ? 'Clé ElevenLabs configurée ✓ — recolle pour changer' : 'clé ElevenLabs…  (elevenlabs.io → Profile → API key)'} value={elevenKey} onChange={(e) => setElevenKey(e.target.value)} />
+              <button className="btn primary" onClick={async () => { await api.setElevenlabsKey(elevenKey); setElevenKey(''); setElevenHas((await api.elevenlabsStatus()).has); toast('Clé ElevenLabs enregistrée') }} disabled={!elevenKey.trim()}>Enregistrer</button>
+            </div>
+          )}
+          <div className="muted small" style={{ marginTop: 6 }}>ElevenLabs = voix nettement plus humaines/organiques (modèle multilingue). Payant (~5 $/mois). Choisis ensuite la voix <b>par compte</b> (⚙️ d'une ligne → onglet Vidéos de niche → bouton Écouter). Les épisodes de <b>série</b> gardent Veo (voix native jouée).</div>
         </Field>
         <Field label="Musiques de fond (libres de droits)">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

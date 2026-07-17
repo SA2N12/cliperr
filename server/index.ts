@@ -9,7 +9,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { appPaths, config, assertConfig, type AppPaths } from './config'
 import { handleLogin, handleLogout, isAuthed, requireAuth } from './auth'
 import { sseHandler, emitProgress, emitLog, emitIdeaVideo } from './sse'
-import { generateVideoFromIdea, chooseMusicTrack, genImageGemini, ttsPreview, OPENAI_VOICES } from './video-gen'
+import { generateVideoFromIdea, chooseMusicTrack, genImageGemini, ttsPreview, listElevenVoices, OPENAI_VOICES } from './video-gen'
 import {
   getApiKey,
   setApiKey,
@@ -397,11 +397,18 @@ async function runVideoGen(
         }
       }
     }
+    // Voix off : ElevenLabs (voix humaines) si activé + clé présente, sinon OpenAI TTS.
+    const elevenKey = getEncrypted('elevenlabs_key')
+    const useEleven = (repo.getSetting('voice_provider') || 'openai') === 'elevenlabs' && !!elevenKey
+    const acctVoice = profileVoice()[targetProfile]
+    const narrationVoice = acctVoice || (useEleven ? repo.getSetting('elevenlabs_default_voice') || '' : repo.getSetting('tts_voice') || 'ash')
     const { filePath, durationSec, usage } = await generateVideoFromIdea(ctx, {
       anthropicKey,
       anthropicModel: model,
       openaiKey,
-      voice: profileVoice()[targetProfile] || repo.getSetting('tts_voice') || 'ash',
+      voice: narrationVoice,
+      voiceProvider: useEleven ? 'elevenlabs' : 'openai',
+      elevenKey,
       idea,
       musicTrack,
       // Style des images : priorité à l'appelant (univers de série), sinon celui
@@ -1540,6 +1547,23 @@ app.post('/api/settings/groq', wrap((req, res) => {
   res.json({ ok: true })
 }))
 
+// Clé ElevenLabs (voix off humaines, alternative au TTS OpenAI)
+app.get('/api/settings/elevenlabs', wrap((_req, res) => res.json({ has: !!getEncrypted('elevenlabs_key') })))
+app.post('/api/settings/elevenlabs', wrap(async (req, res) => {
+  const key = String(req.body?.key ?? '')
+  setEncrypted('elevenlabs_key', key)
+  // Auto-sélectionne une voix par défaut (1re du compte) pour ne pas retomber sur OpenAI.
+  if (key) {
+    try {
+      const voices = await listElevenVoices(key)
+      if (voices[0]) repo.setSetting('elevenlabs_default_voice', voices[0].id)
+    } catch {
+      /* clé invalide → l'utilisateur verra la liste vide */
+    }
+  }
+  res.json({ ok: true })
+}))
+
 // Clé RapidAPI (téléchargement vidéo côté serveur, contourne le blocage YouTube)
 app.get('/api/settings/rapidapi', wrap((_req, res) => res.json({ has: !!getEncrypted('rapidapi_key') })))
 app.post('/api/settings/rapidapi', wrap((req, res) => {
@@ -2010,16 +2034,40 @@ app.post('/api/autopilot/account', wrap((req, res) => {
   res.json({ ok: true })
 }))
 
-// Aperçu d'une voix TTS : renvoie un court extrait mp3 (bouton « Écouter » des réglages).
+// Fournisseur de voix off actif : elevenlabs (voix humaines) si activé + clé présente.
+function activeVoiceProvider(): 'openai' | 'elevenlabs' {
+  return (repo.getSetting('voice_provider') || 'openai') === 'elevenlabs' && !!getEncrypted('elevenlabs_key') ? 'elevenlabs' : 'openai'
+}
+// Liste des voix du fournisseur actif (pour le sélecteur par compte). OpenAI : liste
+// fixe côté client ; ElevenLabs : voix du compte de l'utilisateur.
+app.get('/api/tts/voices', wrap(async (_req, res) => {
+  if (activeVoiceProvider() === 'elevenlabs') {
+    try {
+      const voices = await listElevenVoices(getEncrypted('elevenlabs_key') as string)
+      return res.json({ provider: 'elevenlabs', voices: voices.map((v) => ({ id: v.id, label: v.name })) })
+    } catch (e) {
+      return res.json({ provider: 'elevenlabs', voices: [], error: e instanceof Error ? e.message : String(e) })
+    }
+  }
+  res.json({ provider: 'openai', voices: [] })
+}))
+// Aperçu d'une voix : renvoie un court extrait mp3 (bouton « Écouter » des réglages).
 app.get('/api/tts/preview', wrap(async (req, res) => {
   const voice = String(req.query.voice ?? '').trim()
-  if (!OPENAI_VOICES.includes(voice)) return res.status(400).json({ error: 'Voix inconnue' })
+  const provider = activeVoiceProvider()
   const openaiKey = getEncrypted('openai_key')
-  if (!openaiKey) return res.status(400).json({ error: 'Clé OpenAI manquante (Réglages).' })
-  const buf = await ttsPreview(openaiKey, voice)
-  res.setHeader('Content-Type', 'audio/mpeg')
-  res.setHeader('Cache-Control', 'no-store')
-  res.send(buf)
+  const elevenKey = getEncrypted('elevenlabs_key')
+  if (provider === 'openai' && !OPENAI_VOICES.includes(voice)) return res.status(400).json({ error: 'Voix inconnue' })
+  if (provider === 'openai' && !openaiKey) return res.status(400).json({ error: 'Clé OpenAI manquante (Réglages).' })
+  if (provider === 'elevenlabs' && !voice) return res.status(400).json({ error: 'Choisis une voix.' })
+  try {
+    const buf = await ttsPreview(voice, { openaiKey: openaiKey || '', provider, elevenKey })
+    res.setHeader('Content-Type', 'audio/mpeg')
+    res.setHeader('Cache-Control', 'no-store')
+    res.send(buf)
+  } catch (e) {
+    res.status(502).json({ error: e instanceof Error ? e.message : String(e) })
+  }
 }))
 
 // Test de compatibilité des chaînes préférées (catégorie Clip) : pour chaque

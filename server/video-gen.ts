@@ -34,6 +34,10 @@ export interface VideoGenOptions {
   anthropicModel?: string
   openaiKey: string
   voice?: string
+  /** Fournisseur de voix off : 'elevenlabs' (voix humaines) sinon OpenAI TTS. */
+  voiceProvider?: string
+  /** Clé ElevenLabs (si voiceProvider = 'elevenlabs'). */
+  elevenKey?: string | null
   idea: ViralIdea
   /** Chemin d'une musique de fond (libre de droits) à mixer sous la voix. */
   musicTrack?: string
@@ -237,41 +241,76 @@ function voiceInstructions(characterStyle?: string): string {
   return `Tu es un créateur TikTok français natif (France) qui raconte une histoire à un pote — PAS un lecteur robotique. Mets de l'ÉNERGIE et surtout des VARIATIONS de ton : accélère sur l'action, RALENTIS et baisse la voix sur le suspense/le mystère, remonte en intensité vers la révélation finale. Marque de vraies respirations et micro-pauses aux virgules. Appuie fort sur les mots-clés (dates, chiffres, mots chocs). Ton complice, vivant, légèrement théâtral, avec des inflexions naturelles — surtout JAMAIS plat ni monotone. Prononciation française impeccable : liaisons naturelles, nombres et noms propres bien articulés.`
 }
 
-/** Génère un court extrait pour ECOUTER une voix (bouton d'aperçu dans les réglages). */
-export async function ttsPreview(openaiKey: string, voice: string): Promise<Buffer> {
-  const sample =
-    'En mille neuf cent quarante-cinq, cinq avions décollent… et disparaissent sans laisser la moindre trace. Accident, ou dissimulation ? Dis-moi en commentaire.'
-  const res = await fetch(`${OPENAI}/audio/speech`, {
+// ── ElevenLabs : voix off HUMAINES (modèle multilingue v2). Voix repérée par ID. ──
+const ELEVEN = 'https://api.elevenlabs.io/v1'
+async function elevenSpeech(key: string, voiceId: string, text: string): Promise<Buffer> {
+  const res = await fetch(`${ELEVEN}/text-to-speech/${encodeURIComponent(voiceId)}`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: 'gpt-4o-mini-tts', voice, input: sample, response_format: 'mp3', instructions: voiceInstructions() })
+    headers: { 'xi-api-key': key, 'Content-Type': 'application/json', Accept: 'audio/mpeg' },
+    body: JSON.stringify({
+      text,
+      model_id: 'eleven_multilingual_v2',
+      // stabilité basse + style = plus d'émotion/variations (moins monotone).
+      voice_settings: { stability: 0.4, similarity_boost: 0.8, style: 0.45, use_speaker_boost: true }
+    })
   })
-  if (!res.ok) throw new Error(`OpenAI TTS ${res.status} : ${(await res.text()).slice(0, 200)}`)
+  if (!res.ok) throw new Error(`ElevenLabs ${res.status} : ${(await res.text()).slice(0, 200)}`)
   return Buffer.from(await res.arrayBuffer())
 }
+/** Liste les voix du compte ElevenLabs (pour le sélecteur par compte). */
+export async function listElevenVoices(key: string): Promise<{ id: string; name: string }[]> {
+  const res = await fetch(`${ELEVEN}/voices`, { headers: { 'xi-api-key': key } })
+  if (!res.ok) throw new Error(`ElevenLabs voices ${res.status} : ${(await res.text()).slice(0, 160)}`)
+  const j = (await res.json()) as { voices?: { voice_id: string; name: string }[] }
+  return (j.voices ?? []).map((v) => ({ id: v.voice_id, name: v.name }))
+}
 
-async function tts(openaiKey: string, voice: string, text: string, dest: string, characterStyle?: string): Promise<void> {
-  const instructions = voiceInstructions(characterStyle)
+async function openaiSpeech(openaiKey: string, voice: string, text: string, instructions: string): Promise<Buffer> {
+  // Voix inconnue (ex. un ID ElevenLabs en repli) → voix OpenAI sûre.
+  const v = OPENAI_VOICES.includes(voice) ? voice : 'ash'
   let res = await fetch(`${OPENAI}/audio/speech`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'gpt-4o-mini-tts',
-      voice,
-      input: text,
-      response_format: 'mp3',
-      instructions
-    })
+    body: JSON.stringify({ model: 'gpt-4o-mini-tts', voice: v, input: text, response_format: 'mp3', instructions })
   })
   if (!res.ok && (res.status === 400 || res.status === 404)) {
     res = await fetch(`${OPENAI}/audio/speech`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'tts-1-hd', voice, input: text, response_format: 'mp3', speed: 1.08 })
+      body: JSON.stringify({ model: 'tts-1-hd', voice: v, input: text, response_format: 'mp3', speed: 1.08 })
     })
   }
   if (!res.ok) throw new Error(`OpenAI TTS ${res.status} : ${(await res.text()).slice(0, 200)}`)
-  await writeFile(dest, Buffer.from(await res.arrayBuffer()))
+  return Buffer.from(await res.arrayBuffer())
+}
+
+export interface VoiceOpts {
+  openaiKey: string
+  provider?: string
+  elevenKey?: string | null
+  onNote?: (m: string) => void
+}
+
+/** Génère un court extrait pour ECOUTER une voix (bouton d'aperçu dans les réglages). */
+export async function ttsPreview(voice: string, o: VoiceOpts): Promise<Buffer> {
+  const sample =
+    'En mille neuf cent quarante-cinq, cinq avions décollent… et disparaissent sans laisser la moindre trace. Accident, ou dissimulation ? Dis-moi en commentaire.'
+  if (o.provider === 'elevenlabs' && o.elevenKey && voice) return elevenSpeech(o.elevenKey, voice, sample)
+  return openaiSpeech(o.openaiKey, voice, sample, voiceInstructions())
+}
+
+async function tts(voice: string, text: string, dest: string, o: VoiceOpts, characterStyle?: string): Promise<void> {
+  // ElevenLabs prioritaire si configuré ; repli automatique sur OpenAI (une voix
+  // ne doit jamais faire échouer toute la vidéo).
+  if (o.provider === 'elevenlabs' && o.elevenKey && voice) {
+    try {
+      await writeFile(dest, await elevenSpeech(o.elevenKey, voice, text))
+      return
+    } catch (e) {
+      o.onNote?.(`ElevenLabs indisponible (${e instanceof Error ? e.message.split('\n')[0] : e}) → repli voix OpenAI`)
+    }
+  }
+  await writeFile(dest, await openaiSpeech(o.openaiKey, voice, text, voiceInstructions(characterStyle)))
 }
 
 /** Rejet du filtre de sécurité OpenAI (le plus souvent : un mineur dans la scène). */
@@ -638,10 +677,19 @@ export async function generateVideoFromIdea(
       if (sceneDone) continue
 
       // 2b) Chemin classique : voix TTS (jouée par personnage) puis animation fal.ai / Ken Burns.
-      const sceneVoice = member && OPENAI_VOICES.includes(member.voice) ? member.voice : voice
+      const eleven = opts.voiceProvider === 'elevenlabs' && !!opts.elevenKey
+      // ElevenLabs : voix du compte pour toutes les scènes (les timbres par
+      // personnage n'existent qu'en OpenAI). Sinon : casting par personnage.
+      const sceneVoice = eleven ? voice : member && OPENAI_VOICES.includes(member.voice) ? member.voice : voice
       log?.(`Scène ${i + 1}/${scenes.length} — voix${member ? ` de ${member.name}` : ' off'}…`)
       const mp3 = join(work, `a${i}.mp3`)
-      await tts(opts.openaiKey, sceneVoice, sc.narration, mp3, member ? `${member.name} — ${member.style}` : undefined)
+      await tts(
+        sceneVoice,
+        sc.narration,
+        mp3,
+        { openaiKey: opts.openaiKey, provider: opts.voiceProvider, elevenKey: opts.elevenKey, onNote: log },
+        eleven ? undefined : member ? `${member.name} — ${member.style}` : undefined
+      )
       const dur = (await mediaDuration(ctx.bin.ffprobe, mp3)) + 0.4
 
       let animClip: string | null = null
