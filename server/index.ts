@@ -9,7 +9,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { appPaths, config, assertConfig, type AppPaths } from './config'
 import { handleLogin, handleLogout, isAuthed, requireAuth } from './auth'
 import { sseHandler, emitProgress, emitLog, emitIdeaVideo } from './sse'
-import { generateVideoFromIdea, chooseMusicTrack, genImageGemini } from './video-gen'
+import { generateVideoFromIdea, chooseMusicTrack, genImageGemini, ttsPreview, OPENAI_VOICES } from './video-gen'
 import {
   getApiKey,
   setApiKey,
@@ -132,6 +132,21 @@ const musicDir = join(paths.data, 'music')
 const AUDIO_RE = /\.(mp3|m4a|aac|wav|ogg|opus)$/i
 function musicTracks(): string[] {
   return existsSync(musicDir) ? readdirSync(musicDir).filter((f) => AUDIO_RE.test(f)) : []
+}
+
+// profile_voice = { [user]: voix } — voix TTS de la narration, par compte (défaut 'ash').
+// Avoir une voix différente par compte diversifie aussi le "son" (anti-détection IA).
+function profileVoice(): Record<string, string> {
+  try {
+    const raw = repo.getSetting('profile_voice')
+    if (raw) {
+      const o = JSON.parse(raw) as unknown
+      if (o && typeof o === 'object') return o as Record<string, string>
+    }
+  } catch {
+    /* JSON invalide → vide */
+  }
+  return {}
 }
 
 // profile_music = { [user]: string[] } — playlist du compte : les vidéos générées
@@ -386,7 +401,7 @@ async function runVideoGen(
       anthropicKey,
       anthropicModel: model,
       openaiKey,
-      voice: repo.getSetting('tts_voice') || 'onyx',
+      voice: profileVoice()[targetProfile] || repo.getSetting('tts_voice') || 'ash',
       idea,
       musicTrack,
       // Style des images : priorité à l'appelant (univers de série), sinon celui
@@ -1623,6 +1638,7 @@ app.get('/api/autopilot', wrap(async (_req, res) => {
   const globalPerDay = Math.max(1, Number(repo.getSetting('autopilot_per_day')) || 1)
   const pdMap = perDayMap()
   const musicMap = profileMusic()
+  const voiceMap = profileVoice()
   res.json({
     enabled: repo.getSetting('autopilot_enabled') === '1',
     perDay: globalPerDay,
@@ -1636,6 +1652,7 @@ app.get('/api/autopilot', wrap(async (_req, res) => {
         niche: (niches[u] ?? '').trim() || nicheForProfile(u),
         ctas: ctaMapForProfile(u),
         music: (musicMap[u] ?? []).filter((t) => typeof t === 'string'),
+        voice: OPENAI_VOICES.includes(voiceMap[u]) ? voiceMap[u] : '',
         clipChannels: (clipChannelsMap()[u] ?? '').trim(),
         perDay: pdMap[u] == null ? globalPerDay : Math.max(0, Math.min(5, Math.round(Number(pdMap[u])) || 0)),
         series: {
@@ -1921,9 +1938,16 @@ app.get('/api/autopilot/plan', wrap(async (req, res) => {
 // Réglages d'UN SEUL compte (fusion dans les maps existantes — pas de remplacement
 // global) : utilisé par la fenêtre ⚙️ des lignes du planning.
 app.post('/api/autopilot/account', wrap((req, res) => {
-  const b = (req.body ?? {}) as { user?: unknown; perDay?: unknown; niche?: unknown; ctas?: unknown; music?: unknown; clipChannels?: unknown; series?: unknown }
+  const b = (req.body ?? {}) as { user?: unknown; perDay?: unknown; niche?: unknown; ctas?: unknown; music?: unknown; voice?: unknown; clipChannels?: unknown; series?: unknown }
   const user = String(b.user ?? '').trim()
   if (!user || !uploadPostProfiles().includes(user)) return res.status(400).json({ error: 'Compte inconnu' })
+  if (b.voice !== undefined) {
+    const v = String(b.voice ?? '').trim()
+    const m = profileVoice()
+    if (v && OPENAI_VOICES.includes(v)) m[user] = v
+    else delete m[user] // vide / inconnue → voix par défaut
+    repo.setSetting('profile_voice', JSON.stringify(m))
+  }
   if (Array.isArray(b.music)) {
     // Playlist du compte : on ne garde que des pistes réellement présentes.
     const avail = musicTracks()
@@ -1984,6 +2008,18 @@ app.post('/api/autopilot/account', wrap((req, res) => {
     repo.setSetting('autopilot_series', JSON.stringify(map))
   }
   res.json({ ok: true })
+}))
+
+// Aperçu d'une voix TTS : renvoie un court extrait mp3 (bouton « Écouter » des réglages).
+app.get('/api/tts/preview', wrap(async (req, res) => {
+  const voice = String(req.query.voice ?? '').trim()
+  if (!OPENAI_VOICES.includes(voice)) return res.status(400).json({ error: 'Voix inconnue' })
+  const openaiKey = getEncrypted('openai_key')
+  if (!openaiKey) return res.status(400).json({ error: 'Clé OpenAI manquante (Réglages).' })
+  const buf = await ttsPreview(openaiKey, voice)
+  res.setHeader('Content-Type', 'audio/mpeg')
+  res.setHeader('Cache-Control', 'no-store')
+  res.send(buf)
 }))
 
 // Test de compatibilité des chaînes préférées (catégorie Clip) : pour chaque

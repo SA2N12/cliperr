@@ -27,7 +27,7 @@ export interface CastMember {
   style: string
 }
 /** Voix disponibles côté OpenAI TTS (gpt-4o-mini-tts). */
-const OPENAI_VOICES = ['alloy', 'ash', 'ballad', 'coral', 'echo', 'fable', 'onyx', 'nova', 'sage', 'shimmer']
+export const OPENAI_VOICES = ['alloy', 'ash', 'ballad', 'coral', 'echo', 'fable', 'onyx', 'nova', 'sage', 'shimmer']
 
 export interface VideoGenOptions {
   anthropicKey: string
@@ -228,10 +228,30 @@ Réponds via l’outil pick_mood.`
  * française nettement meilleure + pilotable par consignes (ton, débit).
  * Repli automatique sur `tts-1-hd` si le modèle n'est pas disponible.
  */
+// Consignes de JEU pour la voix off — le vrai levier contre l'effet monotone/IA
+// (gpt-4o-mini-tts obéit à ces instructions de ton, débit, émotion).
+function voiceInstructions(characterStyle?: string): string {
+  if (characterStyle) {
+    return `Tu es un doubleur pro de dessin animé, français de France, prononciation native impeccable. Tu INCARNES ce personnage : ${characterStyle}. Joue-le à fond : intonation très expressive et théâtrale, émotions marquées (cris, chuchotements, rires), rythme vivant. Jamais monocorde.`
+  }
+  return `Tu es un créateur TikTok français natif (France) qui raconte une histoire à un pote — PAS un lecteur robotique. Mets de l'ÉNERGIE et surtout des VARIATIONS de ton : accélère sur l'action, RALENTIS et baisse la voix sur le suspense/le mystère, remonte en intensité vers la révélation finale. Marque de vraies respirations et micro-pauses aux virgules. Appuie fort sur les mots-clés (dates, chiffres, mots chocs). Ton complice, vivant, légèrement théâtral, avec des inflexions naturelles — surtout JAMAIS plat ni monotone. Prononciation française impeccable : liaisons naturelles, nombres et noms propres bien articulés.`
+}
+
+/** Génère un court extrait pour ECOUTER une voix (bouton d'aperçu dans les réglages). */
+export async function ttsPreview(openaiKey: string, voice: string): Promise<Buffer> {
+  const sample =
+    'En mille neuf cent quarante-cinq, cinq avions décollent… et disparaissent sans laisser la moindre trace. Accident, ou dissimulation ? Dis-moi en commentaire.'
+  const res = await fetch(`${OPENAI}/audio/speech`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: 'gpt-4o-mini-tts', voice, input: sample, response_format: 'mp3', instructions: voiceInstructions() })
+  })
+  if (!res.ok) throw new Error(`OpenAI TTS ${res.status} : ${(await res.text()).slice(0, 200)}`)
+  return Buffer.from(await res.arrayBuffer())
+}
+
 async function tts(openaiKey: string, voice: string, text: string, dest: string, characterStyle?: string): Promise<void> {
-  const instructions = characterStyle
-    ? `Tu es un doubleur professionnel de dessin animé. Français de France, prononciation native impeccable. Tu joues ce personnage : ${characterStyle}. Intonation TRÈS expressive et théâtrale, émotions marquées, vivant.`
-    : 'Parle en français de France avec une prononciation native impeccable (liaisons naturelles, nombres et noms propres bien articulés). Ton de créateur TikTok : énergique, complice, vivant. Débit soutenu mais parfaitement intelligible.'
+  const instructions = voiceInstructions(characterStyle)
   let res = await fetch(`${OPENAI}/audio/speech`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
@@ -535,7 +555,7 @@ export async function generateVideoFromIdea(
   ctx: PipelineContext,
   opts: VideoGenOptions
 ): Promise<{ filePath: string; durationSec: number; usage: Usage | null }> {
-  const voice = opts.voice || 'onyx'
+  const voice = opts.voice || 'ash' // ash = plus expressive/dynamique qu'onyx (par défaut)
   const log = opts.onProgress
   log?.('Écriture du storyboard (IA)…')
   const { scenes, cast, usage } = await buildStoryboard(

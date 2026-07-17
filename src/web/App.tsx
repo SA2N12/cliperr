@@ -1353,6 +1353,21 @@ function trackLabel(f: string): string {
   return f.replace(/^[a-z]+-\d+-/i, '').replace(/^\d+-/, '').replace(/\.[^.]+$/, '')
 }
 
+/** Voix TTS proposées (les plus dynamiques d'abord). '' = voix par défaut du système. */
+const TTS_VOICES: { id: string; label: string }[] = [
+  { id: '', label: 'Par défaut (Ash — expressive)' },
+  { id: 'ash', label: 'Ash — masculine, expressive et dynamique' },
+  { id: 'ballad', label: 'Ballad — masculine, chaleureuse et posée' },
+  { id: 'onyx', label: 'Onyx — masculine, grave et dramatique' },
+  { id: 'coral', label: 'Coral — féminine, pétillante et énergique' },
+  { id: 'nova', label: 'Nova — féminine, jeune et énergique' },
+  { id: 'sage', label: 'Sage — féminine, naturelle et douce' },
+  { id: 'shimmer', label: 'Shimmer — féminine, douce' },
+  { id: 'fable', label: 'Fable — narrative et expressive' },
+  { id: 'echo', label: 'Echo — masculine, neutre' },
+  { id: 'alloy', label: 'Alloy — neutre' }
+]
+
 type AutopilotAccount = { user: string; handle: string | null; avatarUrl: string | null }
 type AutopilotPlan = { enabled: boolean; paused?: boolean; perDay: number; targetPerDay?: number; window: { start: number; end: number }; nowHm: number; day?: number; accounts?: AutopilotAccount[]; slots: AutopilotSlot[] }
 
@@ -1557,6 +1572,8 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
   const [ctas, setCtas] = useState<{ niche?: string; serie?: string; custom?: string; clip?: string }>({})
   const [music, setMusic] = useState<string[]>([])
   const [tracks, setTracks] = useState<string[]>([])
+  const [voice, setVoice] = useState('')
+  const [voicePlaying, setVoicePlaying] = useState(false)
   const [clipChannels, setClipChannels] = useState('')
   const [serie, setSerie] = useState<SeriesCfg>({ enabled: false, title: '', universe: '', episode: 1 })
   const [tab, setTab] = useState<'niche' | 'serie' | 'custom' | 'clips'>('niche')
@@ -1601,11 +1618,22 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
       setNiche(p.niche)
       setCtas(p.ctas ?? {})
       setMusic(p.music ?? [])
+      setVoice(p.voice ?? '')
       setClipChannels(p.clipChannels)
       setSerie(p.series)
     }).catch(() => undefined)
     api.musicList().then((r) => setTracks(r.tracks)).catch(() => undefined)
   }, [user])
+
+  // Écoute un court extrait de la voix sélectionnée (générée à la volée côté serveur).
+  const playVoice = (): void => {
+    if (voicePlaying) return
+    setVoicePlaying(true)
+    const a = new Audio(`/api/tts/preview?voice=${encodeURIComponent(voice || 'ash')}`)
+    a.onended = () => setVoicePlaying(false)
+    a.onerror = () => { setVoicePlaying(false); toast('Aperçu voix indisponible') }
+    a.play().catch(() => { setVoicePlaying(false); toast('Aperçu voix indisponible') })
+  }
 
   // Champ CTA d'un type de vidéo, rendu au bas de l'onglet correspondant
   // (le CTA appliqué à la légende dépend du type du bloc publié).
@@ -1625,6 +1653,7 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
         niche,
         ctas,
         music,
+        voice,
         clipChannels,
         // Plus de toggle : la série est « prête » dès que titre + univers sont remplis.
         series: { enabled: !!(serie.title.trim() && serie.universe.trim()), title: serie.title, universe: serie.universe }
@@ -1678,6 +1707,21 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
             <input className="input-full" value={niche} placeholder="ex. mystères non résolus, sport, psychologie…" onChange={(e) => setNiche(e.target.value)} style={{ marginBottom: 4 }} />
             <div className="muted small">
               Chaque vidéo « niche » est une idée originale générée dans ce thème (hook fort, script rétention, images IA, voix off). C’est le type par défaut des blocs du planning.
+            </div>
+
+            {/* Voix off du compte : une voix différente par compte diversifie le "son"
+                (utile contre la détection de contenu IA) et casse l'effet monotone. */}
+            <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+              <label className="muted small" style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>Voix off du compte</label>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
+                <select className="input-full" style={{ flex: 1 }} value={voice} onChange={(e) => setVoice(e.target.value)}>
+                  {TTS_VOICES.map((v) => <option key={v.id || 'default'} value={v.id}>{v.label}</option>)}
+                </select>
+                <button className="btn" type="button" onClick={playVoice} disabled={voicePlaying} title="Écouter un extrait de cette voix" style={{ flexShrink: 0 }}>
+                  {voicePlaying ? '⏳' : '▶'} Écouter
+                </button>
+              </div>
+              <div className="muted small" style={{ marginTop: 4 }}>S'applique à la narration de ce compte (niche, sujet libre). Les épisodes de série gardent leurs voix par personnage.</div>
             </div>
 
             {/* Playlist : réglage du COMPTE (elle sert aussi aux vidéos « Sujet libre »
