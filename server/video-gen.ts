@@ -109,7 +109,7 @@ async function buildStoryboard(
     input_schema: { type: 'object', properties, required: dialogue ? ['cast', 'scenes'] : ['scenes'] }
   } as Anthropic.Tool
 
-  const prompt = `Tu es un scénariste TikTok expert en RÉTENTION et en viralité. Transforme cette idée en storyboard de 5 à 7 scènes pour une vidéo verticale « faceless » de 25 à 40 secondes.
+  const prompt = `Tu es un scénariste TikTok expert en RÉTENTION et en viralité. Transforme cette idée en storyboard de 4 à 5 scènes pour une vidéo verticale « faceless » COURTE de 20 à 28 secondes (la brièveté maximise le taux de complétion — le signal n°1 de l'algorithme TikTok pour être re-poussé au-delà du 1er lot de vues).
 Titre : ${idea.title}
 Hook : ${idea.hook}
 Script de départ : ${idea.script.join(' ')}
@@ -119,7 +119,7 @@ Règles de rétention (déterminantes pour la performance et les revenus TikTok)
 - Ouvre une BOUCLE au début (promesse implicite) et ne la referme qu'à la toute fin → donne envie de rester jusqu'au bout.
 - Rythme rapide : 1 idée = 1 scène = 1 phrase courte, orale, percutante. Zéro remplissage.
 - Monte en intensité ; garde l'info la plus forte (le payoff) pour l'avant-dernière scène.
-- DERNIÈRE scène = punchline mémorable + appel à l'action naturel (ex. « Abonne-toi, la suite est folle », « Dis-moi en commentaire si tu le savais »).
+- DERNIÈRE scène = soit une BOUCLE sur la toute première seconde (la dernière phrase renvoie ou répond au hook d'ouverture → la vidéo se re-regarde en boucle sans couture, énorme signal de watch-time), soit un cliffhanger (pour les séries) — PLUS un déclencheur d'engagement : une question qui divise (« Accident ou dissimulation ? Dis-le en commentaire ») OU une incitation au PARTAGE (« Envoie ça à quelqu'un qui… »). Évite le simple « Abonne-toi » : commentaire, partage et rewatch pèsent beaucoup plus lourd.
 - Ton : tutoiement, énergique, immersif, comme si tu parlais à un pote.
 - ÉCRIS POUR L'ORAL (le texte est lu par une voix de synthèse française) : nombres en toutes lettres (« mille neuf cent douze »), pas de sigles ambigus, pas de mots anglais inutiles, ponctuation naturelle.
 ${styleHint && dialogue ? `\nUNIVERS VISUEL IMPOSÉ (série à personnages récurrents — décris CES personnages et CE style dans CHAQUE imagePrompt, de façon identique d'une scène à l'autre) : ${styleHint}\n` : ''}${styleHint && !dialogue ? `\nSTYLE VISUEL IMPOSÉ (repris de la vidéo dont on s'inspire — décris CE style dans CHAQUE imagePrompt, identique d'une scène à l'autre) : ${styleHint}\n` : ''}${dialogue ? '' : `

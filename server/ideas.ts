@@ -96,8 +96,8 @@ Pour chaque idée : un titre accrocheur, un hook (3 premières secondes), l'angl
 
 RÈGLES IMPORTANTES :
 - Chaque idée doit être NETTEMENT différente des sujets déjà traités (autre sujet, autre angle, autre accroche). VARIE les formats d'accroche (question, chiffre choc, POV, storytelling, mythe à casser, révélation…) — n'emploie pas toujours la même tournure.
-- Ancre chaque idée dans du CONCRET : un artefact précis (enregistrement, cassette, lettre, photo, document, objet, étude, match…) et/ou une date ou un chiffre EXACT dans le titre (ex. « La cassette VHS de 1987… », « Les 3 minutes manquantes du vol… », « L'étude de 1971 qui… »). Les titres concrets et datés surperforment très nettement les concepts abstraits — évite les titres vagues sans chiffre ni objet.
-- La DERNIÈRE étape du script doit être une question directe ou une affirmation clivante adressée au spectateur, pour déclencher des COMMENTAIRES.
+- Ancre chaque idée dans du CONCRET et RECONNAISSABLE : privilégie des sujets CÉLÈBRES et VÉRIFIABLES que le spectateur peut reconnaître ou googler (ex. le manuscrit de Voynich, le col Dyatlov, l'affaire Zodiac, le vol MH370, une étude ou un personnage connus…) + un artefact précis (enregistrement, lettre, document, objet, étude, match…) et une date ou un chiffre EXACT dans le titre. ⛔ ÉVITE ABSOLUMENT les sujets obscurs ou qui « sonnent inventés » (ils ne déclenchent ni recherche, ni commentaire, ni crédibilité → ils plafonnent) et les concepts purement abstraits (ils sous-performent nettement). Un sujet reconnaissable = crédibilité + envie de commenter/vérifier.
+- Les DEUX dernières étapes du script doivent déclencher l'ENGAGEMENT : (a) une question directe ou une affirmation clivante adressée au spectateur (→ COMMENTAIRES : « Accident ou dissimulation ? Ton avis en commentaire »), ET (b) une raison de PARTAGER (« Envoie ça à quelqu'un qui refuse de croire à… », « Taggue celui qui… ») — le PARTAGE est le signal le plus puissant pour l'algorithme, priorise-le.
 
 Sois concret et actionnable. Réponds en français, uniquement via l'outil propose_ideas.`
 
