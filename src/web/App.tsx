@@ -384,7 +384,8 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
       {/* Barre du haut, pleine largeur : logo · compte TikTok actif …
           recherche · compte du dashboard. */}
       <header className="topbar">
-        <Logo size={26} />
+        {/* Logo centré dans une zone de la largeur du rail → aligné avec les icônes de la sidebar. */}
+        <div className="tb-logo"><Logo size={26} /></div>
         {/* Pas de compte configuré → pas de sélecteur (ni son séparateur). */}
         {(pub?.profiles.length ?? 0) > 0 && (
           <>

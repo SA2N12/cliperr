@@ -76,8 +76,16 @@ button {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 0 12px;
+  padding: 0 12px 0 0; /* pas de padding à gauche : la zone logo (rail) commence à x=0 */
   z-index: 70; /* au-dessus de la sidebar (60) et des volets (55) */
+}
+/* Zone du logo = largeur du rail, logo centré → aligné verticalement avec les icônes de nav. */
+.topbar .tb-logo {
+  width: var(--rail);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .topbar .tb-sep {
   color: var(--muted-2);
