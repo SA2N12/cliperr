@@ -655,69 +655,58 @@ function Dashboard({ log, go, onRefresh, scope }: { log: string[]; go: (p: Page)
             </div>
           </div>
 
-          <div className="card" style={{ marginTop: 16 }}>
-            <div className="row">
-              <div>
-                <strong>Vues dans le temps</strong>
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16, marginTop: 16, alignItems: 'start' }}>
+            <div className="card">
+              <div className="row">
+                <div>
+                  <strong>Vues dans le temps</strong>
+                </div>
+              </div>
+              <div style={{ marginTop: 14 }}><AreaChart data={buckets} /></div>
+              <div className="metrics-row">
+                <div className="metric"><div className="ml">Total période</div><div className="mv">{fmtNum(totalPeriod)}</div></div>
+                <div className="metric"><div className="ml">Moyenne / jour</div><div className="mv">{fmtNum(avgPerDay)}</div></div>
+                <div className="metric"><div className="ml">Pic</div><div className="mv">{fmtNum(peak.count)} · {peak.label}</div></div>
               </div>
             </div>
-            <div style={{ marginTop: 14 }}><AreaChart data={buckets} /></div>
-            <div className="metrics-row">
-              <div className="metric"><div className="ml">Total période</div><div className="mv">{fmtNum(totalPeriod)}</div></div>
-              <div className="metric"><div className="ml">Moyenne / jour</div><div className="mv">{fmtNum(avgPerDay)}</div></div>
-              <div className="metric"><div className="ml">Pic</div><div className="mv">{fmtNum(peak.count)} · {peak.label}</div></div>
-            </div>
-          </div>
 
-          <div className="card" style={{ marginTop: 16 }}>
-            <div className="row" style={{ marginBottom: 2 }}>
-              <strong>Répartition des vues</strong>
-              <span className="small muted">Engagement global · <b style={{ color: 'var(--accent-strong)' }}>{engGlobal}</b></span>
-            </div>
-            <p className="muted small" style={{ margin: '0 0 4px' }}>Par compte · clique pour le détail</p>
-            <div>
-              {profiles.map((p, i) => (
-                <div
-                  key={p.profile}
-                  className="funnel-row"
-                  onClick={() => openProfile(p)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 0', borderTop: i ? '1px solid var(--border)' : 'none', cursor: 'pointer' }}
-                >
-                  <Avatar url={p.avatarUrl} name={p.profile} size={36} />
-                  <div style={{ flex: '0 1 165px', minWidth: 110 }}>
-                    <div style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.handle ? '@' + p.handle : p.profile}</span>
-                      {i === 0 && p.views > 0 && <span className="chip">🏆</span>}
-                      {p.videoCount > 0 && p.views === 0 && <span className="chip" style={{ background: '#fef3c7', color: '#b45309' }}>⏳</span>}
-                    </div>
-                    <div className="muted small" style={{ whiteSpace: 'nowrap' }}>{p.videoCount} vidéo{p.videoCount > 1 ? 's' : ''} · {fmtNum(p.followers)} abonné{p.followers > 1 ? 's' : ''}</div>
-                  </div>
-                  <div style={{ flex: 1, minWidth: 50 }}>
-                    <div className="bar"><div style={{ width: `${maxViews ? (p.views / maxViews) * 100 : 0}%` }} /></div>
-                  </div>
-                  <div style={{ display: 'flex', gap: 18, alignItems: 'flex-end' }}>
-                    {[['Vues', fmtNum(p.views), true], ['Likes', fmtNum(p.likes), false], ['Comm.', fmtNum(p.comments), false], ['Part.', fmtNum(p.shares), false]].map(([l, v, big]) => (
-                      <div key={l as string} style={{ textAlign: 'right', minWidth: 34 }}>
-                        <div style={{ fontWeight: 700, fontSize: big ? 18 : 14, color: big ? 'var(--accent-strong)' : undefined }}>{v}</div>
-                        <div className="muted small">{l}</div>
+            <div className="card">
+              <div className="row" style={{ marginBottom: 2 }}>
+                <strong>Répartition des vues</strong>
+                <span className="small muted">Eng. <b style={{ color: 'var(--accent-strong)' }}>{engGlobal}</b></span>
+              </div>
+              <p className="muted small" style={{ margin: '0 0 2px' }}>Par compte · clique pour le détail</p>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {profiles.map((p, i) => (
+                  <div
+                    key={p.profile}
+                    className="funnel-row"
+                    onClick={() => openProfile(p)}
+                    style={{ display: 'flex', gap: 10, alignItems: 'center', cursor: 'pointer', padding: '8px 0', borderTop: i ? '1px solid var(--border)' : 'none' }}
+                  >
+                    <Avatar url={p.avatarUrl} name={p.profile} size={28} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div className="row" style={{ marginBottom: 5, gap: 6 }}>
+                        <span className="small" style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {p.handle ? '@' + p.handle : p.profile}
+                          {i === 0 && p.views > 0 && ' 🏆'}
+                        </span>
+                        <span className="small muted" style={{ flexShrink: 0 }}>{fmtNum(p.views)}</span>
                       </div>
-                    ))}
+                      <div className="bar"><div style={{ width: `${maxViews ? (p.views / maxViews) * 100 : 0}%` }} /></div>
+                    </div>
                   </div>
-                  <div style={{ textAlign: 'right', minWidth: 118 }}>
-                    <div className="muted small" style={{ whiteSpace: 'nowrap' }}>≈ {p.videoCount ? fmtNum(Math.round(p.views / p.videoCount)) : 0}/vidéo · {eng(p)}</div>
-                    <div className="small" style={{ color: 'var(--accent)', fontWeight: 600 }}>Voir les vidéos →</div>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
 
-          <div className="card" style={{ marginTop: 16 }}>
-            <div className="row" style={{ marginBottom: 10 }}>
+          <div className="card" style={{ marginTop: 12 }}>
+            <div className="row" style={{ marginBottom: 8 }}>
               <strong>Activité en direct</strong>
               <span className="chip">SSE</span>
             </div>
-            <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: 12, color: 'var(--muted)', maxHeight: 200, overflow: 'auto', fontFamily: 'ui-monospace, Menlo, monospace' }}>
+            <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: 12, color: 'var(--muted)', maxHeight: 84, overflow: 'auto', fontFamily: 'ui-monospace, Menlo, monospace' }}>
               {log.join('\n') || 'En attente…'}
             </pre>
           </div>
