@@ -655,77 +655,61 @@ function Dashboard({ log, go, onRefresh, scope }: { log: string[]; go: (p: Page)
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16, marginTop: 16 }}>
-            <div className="card">
-              <div className="row">
-                <div>
-                  <strong>Vues dans le temps</strong>
-                </div>
-              </div>
-              <div style={{ marginTop: 14 }}><AreaChart data={buckets} /></div>
-              <div className="metrics-row">
-                <div className="metric"><div className="ml">Total période</div><div className="mv">{fmtNum(totalPeriod)}</div></div>
-                <div className="metric"><div className="ml">Moyenne / jour</div><div className="mv">{fmtNum(avgPerDay)}</div></div>
-                <div className="metric"><div className="ml">Pic</div><div className="mv">{fmtNum(peak.count)} · {peak.label}</div></div>
+          <div className="card" style={{ marginTop: 16 }}>
+            <div className="row">
+              <div>
+                <strong>Vues dans le temps</strong>
               </div>
             </div>
-
-            <div className="card">
-              <strong>Répartition des vues</strong>
-              <p className="muted small" style={{ marginTop: 2 }}>Par compte · clique pour le détail</p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 12 }}>
-                {profiles.map((p) => (
-                  <div key={p.profile} className="funnel-row" style={{ display: 'flex', gap: 12, alignItems: 'center', cursor: 'pointer' }} onClick={() => openProfile(p)}>
-                    <Avatar url={p.avatarUrl} name={p.profile} size={30} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div className="row" style={{ marginBottom: 6 }}>
-                        <span className="small" style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.handle ? '@' + p.handle : p.profile}</span>
-                        <span className="small muted">{fmtNum(p.views)}</span>
-                      </div>
-                      <div className="bar"><div style={{ width: `${(p.views / maxViews) * 100}%` }} /></div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="gauge-wrap">
-                <div>
-                  <div className="ml">Engagement global</div>
-                  <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--accent-strong)' }}>{engGlobal}</div>
-                  <div className="small muted">likes + comm. + partages / vues</div>
-                </div>
-              </div>
+            <div style={{ marginTop: 14 }}><AreaChart data={buckets} /></div>
+            <div className="metrics-row">
+              <div className="metric"><div className="ml">Total période</div><div className="mv">{fmtNum(totalPeriod)}</div></div>
+              <div className="metric"><div className="ml">Moyenne / jour</div><div className="mv">{fmtNum(avgPerDay)}</div></div>
+              <div className="metric"><div className="ml">Pic</div><div className="mv">{fmtNum(peak.count)} · {peak.label}</div></div>
             </div>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 16 }}>
-            {profiles.map((p, i) => (
-              <div key={p.profile} className="card folder" style={{ display: 'block' }} onClick={() => openProfile(p)}>
-                <div className="row" style={{ alignItems: 'center', gap: 12 }}>
-                  <Avatar url={p.avatarUrl} name={p.profile} size={40} />
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontWeight: 700 }}>
-                      {p.handle ? '@' + p.handle : p.profile}
-                      {i === 0 && p.views > 0 && <span className="chip" style={{ marginLeft: 8 }}>🏆 top</span>}
-                      {p.videoCount > 0 && p.views === 0 && <span className="chip" style={{ marginLeft: 8, background: '#fef3c7', color: '#b45309' }}>⏳ stats en attente</span>}
+          <div className="card" style={{ marginTop: 16 }}>
+            <div className="row" style={{ marginBottom: 2 }}>
+              <strong>Répartition des vues</strong>
+              <span className="small muted">Engagement global · <b style={{ color: 'var(--accent-strong)' }}>{engGlobal}</b></span>
+            </div>
+            <p className="muted small" style={{ margin: '0 0 4px' }}>Par compte · clique pour le détail</p>
+            <div>
+              {profiles.map((p, i) => (
+                <div
+                  key={p.profile}
+                  className="funnel-row"
+                  onClick={() => openProfile(p)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 0', borderTop: i ? '1px solid var(--border)' : 'none', cursor: 'pointer' }}
+                >
+                  <Avatar url={p.avatarUrl} name={p.profile} size={36} />
+                  <div style={{ flex: '0 1 165px', minWidth: 110 }}>
+                    <div style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.handle ? '@' + p.handle : p.profile}</span>
+                      {i === 0 && p.views > 0 && <span className="chip">🏆</span>}
+                      {p.videoCount > 0 && p.views === 0 && <span className="chip" style={{ background: '#fef3c7', color: '#b45309' }}>⏳</span>}
                     </div>
-                    <div className="muted small">{p.videoCount} vidéo{p.videoCount > 1 ? 's' : ''} · {fmtNum(p.followers)} abonné{p.followers > 1 ? 's' : ''}</div>
+                    <div className="muted small" style={{ whiteSpace: 'nowrap' }}>{p.videoCount} vidéo{p.videoCount > 1 ? 's' : ''} · {fmtNum(p.followers)} abonné{p.followers > 1 ? 's' : ''}</div>
                   </div>
-                  <Sparkline data={p.timeseries.map((t) => t.value)} />
-                </div>
-                <div style={{ display: 'flex', gap: 22, marginTop: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-                  {[['Vues', fmtNum(p.views), true], ['Likes', fmtNum(p.likes), false], ['Comment.', fmtNum(p.comments), false], ['Partages', fmtNum(p.shares), false]].map(([l, v, big]) => (
-                    <div key={l as string}>
-                      <div style={{ fontWeight: 700, fontSize: big ? 22 : 16, color: big ? 'var(--accent-strong)' : undefined }}>{v}</div>
-                      <div className="muted small">{l}</div>
-                    </div>
-                  ))}
-                  <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
-                    <div className="muted small">≈ {p.videoCount ? fmtNum(Math.round(p.views / p.videoCount)) : 0} vues/vidéo · {eng(p)} engagement</div>
+                  <div style={{ flex: 1, minWidth: 50 }}>
+                    <div className="bar"><div style={{ width: `${maxViews ? (p.views / maxViews) * 100 : 0}%` }} /></div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 18, alignItems: 'flex-end' }}>
+                    {[['Vues', fmtNum(p.views), true], ['Likes', fmtNum(p.likes), false], ['Comm.', fmtNum(p.comments), false], ['Part.', fmtNum(p.shares), false]].map(([l, v, big]) => (
+                      <div key={l as string} style={{ textAlign: 'right', minWidth: 34 }}>
+                        <div style={{ fontWeight: 700, fontSize: big ? 18 : 14, color: big ? 'var(--accent-strong)' : undefined }}>{v}</div>
+                        <div className="muted small">{l}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ textAlign: 'right', minWidth: 118 }}>
+                    <div className="muted small" style={{ whiteSpace: 'nowrap' }}>≈ {p.videoCount ? fmtNum(Math.round(p.views / p.videoCount)) : 0}/vidéo · {eng(p)}</div>
                     <div className="small" style={{ color: 'var(--accent)', fontWeight: 600 }}>Voir les vidéos →</div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
 
           <div className="card" style={{ marginTop: 16 }}>
