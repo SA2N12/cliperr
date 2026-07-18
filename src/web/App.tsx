@@ -655,7 +655,7 @@ function Dashboard({ log, go, onRefresh, scope }: { log: string[]; go: (p: Page)
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16, marginTop: 16, alignItems: 'start' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 16, marginTop: 16, alignItems: 'start' }}>
             <div className="card">
               <div className="row">
                 <div>
@@ -682,18 +682,31 @@ function Dashboard({ log, go, onRefresh, scope }: { log: string[]; go: (p: Page)
                     key={p.profile}
                     className="funnel-row"
                     onClick={() => openProfile(p)}
-                    style={{ display: 'flex', gap: 10, alignItems: 'center', cursor: 'pointer', padding: '8px 0', borderTop: i ? '1px solid var(--border)' : 'none' }}
+                    style={{ cursor: 'pointer', padding: '9px 0', borderTop: i ? '1px solid var(--border)' : 'none' }}
                   >
-                    <Avatar url={p.avatarUrl} name={p.profile} size={28} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div className="row" style={{ marginBottom: 5, gap: 6 }}>
-                        <span className="small" style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Avatar url={p.avatarUrl} name={p.profile} size={26} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 700, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {p.handle ? '@' + p.handle : p.profile}
                           {i === 0 && p.views > 0 && ' 🏆'}
-                        </span>
-                        <span className="small muted" style={{ flexShrink: 0 }}>{fmtNum(p.views)}</span>
+                          {p.videoCount > 0 && p.views === 0 && ' ⏳'}
+                        </div>
+                        <div className="muted small" style={{ whiteSpace: 'nowrap' }}>{p.videoCount} vidéo{p.videoCount > 1 ? 's' : ''} · {fmtNum(p.followers)} abonné{p.followers > 1 ? 's' : ''}</div>
                       </div>
-                      <div className="bar"><div style={{ width: `${maxViews ? (p.views / maxViews) * 100 : 0}%` }} /></div>
+                      <Sparkline data={p.timeseries.map((t) => t.value)} />
+                    </div>
+                    <div style={{ display: 'flex', gap: 14, marginTop: 7, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                      {[['Vues', fmtNum(p.views), true], ['Likes', fmtNum(p.likes), false], ['Comment.', fmtNum(p.comments), false], ['Partages', fmtNum(p.shares), false]].map(([l, v, big]) => (
+                        <div key={l as string}>
+                          <div style={{ fontWeight: 700, fontSize: big ? 17 : 13, color: big ? 'var(--accent-strong)' : undefined }}>{v}</div>
+                          <div className="muted small">{l}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="row" style={{ marginTop: 6 }}>
+                      <span className="muted small">≈ {p.videoCount ? fmtNum(Math.round(p.views / p.videoCount)) : 0} vues/vidéo · {eng(p)} eng.</span>
+                      <span className="small" style={{ color: 'var(--accent)', fontWeight: 600, flexShrink: 0 }}>Voir les vidéos →</span>
                     </div>
                   </div>
                 ))}
