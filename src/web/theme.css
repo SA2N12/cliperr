@@ -86,6 +86,9 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
+  /* Annule le gap de la topbar (10px) → le sélecteur de comptes qui suit s'aligne
+     exactement sur le bord droit de la sidebar (x = largeur du rail). */
+  margin-right: -10px;
 }
 .topbar .tb-sep {
   color: var(--muted-2);

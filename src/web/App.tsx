@@ -386,12 +386,9 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
       <header className="topbar">
         {/* Logo centré dans une zone de la largeur du rail → aligné avec les icônes de la sidebar. */}
         <div className="tb-logo"><Logo size={22} /></div>
-        {/* Pas de compte configuré → pas de sélecteur (ni son séparateur). */}
+        {/* Sélecteur de comptes collé au bord droit de la sidebar (pas de « / »). */}
         {(pub?.profiles.length ?? 0) > 0 && (
-          <>
-            <span className="tb-sep">/</span>
-            <ProfilePicker profiles={pub?.profiles ?? []} active={scope} onChange={changeScope} />
-          </>
+          <ProfilePicker profiles={pub?.profiles ?? []} active={scope} onChange={changeScope} />
         )}
         <div style={{ flex: 1 }} />
         <div className="tb-search" title="Recherche (bientôt)">
