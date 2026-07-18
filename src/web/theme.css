@@ -13,7 +13,7 @@
   --muted-2: #a1a1aa;
   --good: #16a34a;
   --bad: #dc2626;
-  --radius: 16px;
+  --radius: 0px; /* cartes à angles droits (pas d'arrondi) */
   /* Design plat : aucune ombre portée. Les surfaces sont délimitées par leur
      bordure. (Variable conservée : elle alimente cartes, segment actif, switch.) */
   --shadow: none;
