@@ -18,7 +18,7 @@
      bordure. (Variable conservée : elle alimente cartes, segment actif, switch.) */
   --shadow: none;
   /* Sidebar : largeur repliée (icônes seules) et déployée (au survol). */
-  --rail: 64px;
+  --rail: 52px;
   --side-w: 250px;
   /* Volet secondaire (réglages d'un compte). */
   --panel-w: 380px;
@@ -198,6 +198,16 @@ button {
 }
 .sidebar .user-card .nav-item {
   width: auto;
+}
+/* Rail replié : icône de nav CENTRÉE (formule indépendante de la largeur du rail —
+   icône 16px, padding sidebar 12px). Au survol : retour à l'inset gauche déployé. */
+.sidebar .nav-item {
+  padding-left: calc(var(--rail) / 2 - 20px);
+  padding-right: 0;
+}
+.sidebar:hover .nav-item {
+  padding-left: 12px;
+  padding-right: 12px;
 }
 /* Les icônes ne doivent jamais être écrasées par le flex quand c'est étroit. */
 .sidebar .nav-item svg,

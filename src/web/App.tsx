@@ -385,7 +385,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
           recherche · compte du dashboard. */}
       <header className="topbar">
         {/* Logo centré dans une zone de la largeur du rail → aligné avec les icônes de la sidebar. */}
-        <div className="tb-logo"><Logo size={26} /></div>
+        <div className="tb-logo"><Logo size={22} /></div>
         {/* Pas de compte configuré → pas de sélecteur (ni son séparateur). */}
         {(pub?.profiles.length ?? 0) > 0 && (
           <>
@@ -414,7 +414,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
             {gi > 0 && <div className="nav-sep-line" />}
             {group.map((n) => (
               <button key={n.id} className={`nav-item ${page === n.id ? 'active' : ''}`} title={n.label} onClick={() => setPage(n.id)}>
-                <Icon name={n.icon} /> <span className="lbl">{n.label}</span>
+                <Icon name={n.icon} size={16} /> <span className="lbl">{n.label}</span>
               </button>
             ))}
           </div>
