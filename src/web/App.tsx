@@ -461,7 +461,7 @@ function AreaChart({ data }: { data: Bucket[] }): JSX.Element {
   const area = `${line} L${x(n - 1).toFixed(1)},${H} L${x(0).toFixed(1)},${H} Z`
   return (
     <div>
-      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: 220, display: 'block' }}>
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: 168, display: 'block' }}>
         <defs>
           <linearGradient id="ag" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.28" />
@@ -609,7 +609,7 @@ function Dashboard({ log, go, onRefresh, scope }: { log: string[]; go: (p: Page)
                 <div className="icon"><Icon name="chart" /></div>
                 <TrendBadge value={viewsTrend} />
               </div>
-              <div className="label" style={{ marginTop: 14 }}>Vues (30 j)</div>
+              <div className="label" style={{ marginTop: 8 }}>Vues (30 j)</div>
               <div className="value">{fmtNum(totals.views)}</div>
               <div className="breakdown">
                 <div className="line"><span className="k">≈ / vidéo</span><span className="v">{fmtNum(avgViewsPerVideo)}</span></div>
@@ -622,7 +622,7 @@ function Dashboard({ log, go, onRefresh, scope }: { log: string[]; go: (p: Page)
                 <div className="icon"><Icon name="spark" /></div>
                 <span className="pill-badge"><span className="dot" /> {engGlobal}</span>
               </div>
-              <div className="label" style={{ marginTop: 14 }}>Likes</div>
+              <div className="label" style={{ marginTop: 8 }}>Likes</div>
               <div className="value">{fmtNum(totals.likes)}</div>
               <div className="breakdown">
                 <div className="line"><span className="k">Commentaires</span><span className="v">{fmtNum(totals.comments)}</span></div>
@@ -634,7 +634,7 @@ function Dashboard({ log, go, onRefresh, scope }: { log: string[]; go: (p: Page)
               <div className="stat-head">
                 <div className="icon"><Icon name="globe" /></div>
               </div>
-              <div className="label" style={{ marginTop: 14 }}>Abonnés</div>
+              <div className="label" style={{ marginTop: 8 }}>Abonnés</div>
               <div className="value">{fmtNum(totals.followers)}</div>
               <div className="breakdown">
                 <div className="line"><span className="k">Comptes</span><span className="v">{profiles.length}</span></div>
@@ -646,7 +646,7 @@ function Dashboard({ log, go, onRefresh, scope }: { log: string[]; go: (p: Page)
               <div className="stat-head">
                 <div className="icon"><Icon name="clips" /></div>
               </div>
-              <div className="label" style={{ marginTop: 14 }}>Vidéos publiées</div>
+              <div className="label" style={{ marginTop: 8 }}>Vidéos publiées</div>
               <div className="value">{totals.videos}</div>
               <div className="breakdown">
                 <div className="line"><span className="k">Engagement</span><span className="v">{engGlobal}</span></div>
@@ -655,7 +655,7 @@ function Dashboard({ log, go, onRefresh, scope }: { log: string[]; go: (p: Page)
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 16, marginTop: 16, alignItems: 'start' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 16, marginTop: 12, alignItems: 'start' }}>
             <div className="card">
               <div className="row">
                 <div>
@@ -682,31 +682,28 @@ function Dashboard({ log, go, onRefresh, scope }: { log: string[]; go: (p: Page)
                     key={p.profile}
                     className="funnel-row"
                     onClick={() => openProfile(p)}
-                    style={{ cursor: 'pointer', padding: '9px 0', borderTop: i ? '1px solid var(--border)' : 'none' }}
+                    style={{ cursor: 'pointer', padding: '7px 0', borderTop: i ? '1px solid var(--border)' : 'none' }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <Avatar url={p.avatarUrl} name={p.profile} size={26} />
+                      <Avatar url={p.avatarUrl} name={p.profile} size={24} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontWeight: 700, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {p.handle ? '@' + p.handle : p.profile}
                           {i === 0 && p.views > 0 && ' 🏆'}
                           {p.videoCount > 0 && p.views === 0 && ' ⏳'}
                         </div>
-                        <div className="muted small" style={{ whiteSpace: 'nowrap' }}>{p.videoCount} vidéo{p.videoCount > 1 ? 's' : ''} · {fmtNum(p.followers)} abonné{p.followers > 1 ? 's' : ''}</div>
+                        <div className="muted small" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.videoCount} vid. · {fmtNum(p.followers)} ab. · ≈{p.videoCount ? fmtNum(Math.round(p.views / p.videoCount)) : 0}/vid · {eng(p)} eng.</div>
                       </div>
                       <Sparkline data={p.timeseries.map((t) => t.value)} />
                     </div>
-                    <div style={{ display: 'flex', gap: 14, marginTop: 7, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                    <div style={{ display: 'flex', gap: 14, marginTop: 4, alignItems: 'flex-end' }}>
                       {[['Vues', fmtNum(p.views), true], ['Likes', fmtNum(p.likes), false], ['Comment.', fmtNum(p.comments), false], ['Partages', fmtNum(p.shares), false]].map(([l, v, big]) => (
                         <div key={l as string}>
-                          <div style={{ fontWeight: 700, fontSize: big ? 17 : 13, color: big ? 'var(--accent-strong)' : undefined }}>{v}</div>
+                          <div style={{ fontWeight: 700, fontSize: big ? 16 : 13, color: big ? 'var(--accent-strong)' : undefined }}>{v}</div>
                           <div className="muted small">{l}</div>
                         </div>
                       ))}
-                    </div>
-                    <div className="row" style={{ marginTop: 6 }}>
-                      <span className="muted small">≈ {p.videoCount ? fmtNum(Math.round(p.views / p.videoCount)) : 0} vues/vidéo · {eng(p)} eng.</span>
-                      <span className="small" style={{ color: 'var(--accent)', fontWeight: 600, flexShrink: 0 }}>Voir les vidéos →</span>
+                      <span className="small" style={{ marginLeft: 'auto', alignSelf: 'center', color: 'var(--accent)', fontWeight: 600, flexShrink: 0 }}>Voir →</span>
                     </div>
                   </div>
                 ))}

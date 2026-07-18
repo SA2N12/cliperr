@@ -317,7 +317,7 @@ button {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  margin-bottom: 22px;
+  margin-bottom: 14px;
   gap: 16px;
 }
 .page-head h1 {
@@ -642,12 +642,12 @@ textarea:focus {
   background: #fdeaea;
 }
 .breakdown {
-  margin-top: 14px;
+  margin-top: 10px;
   border-top: 1px solid var(--border);
-  padding-top: 12px;
+  padding-top: 10px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 .breakdown .line {
   display: flex;
@@ -666,8 +666,8 @@ textarea:focus {
   display: flex;
   gap: 24px;
   border-top: 1px solid var(--border);
-  margin-top: 14px;
-  padding-top: 14px;
+  margin-top: 10px;
+  padding-top: 10px;
 }
 .metric .ml {
   font-size: 11px;
