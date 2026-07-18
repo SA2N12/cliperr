@@ -461,7 +461,7 @@ function AreaChart({ data }: { data: Bucket[] }): JSX.Element {
   const area = `${line} L${x(n - 1).toFixed(1)},${H} L${x(0).toFixed(1)},${H} Z`
   return (
     <div>
-      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: 168, display: 'block' }}>
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: 220, display: 'block' }}>
         <defs>
           <linearGradient id="ag" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.28" />
@@ -603,7 +603,7 @@ function Dashboard({ log, go, onRefresh, scope }: { log: string[]; go: (p: Page)
         <div className="card muted">Aucune donnée de performance. Configure la clé upload-post (Réglages) et publie des vidéos.</div>
       ) : (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(210px,1fr))', gap: 16 }}>
+          <div className="stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(210px,1fr))', gap: 16 }}>
             <div className="card">
               <div className="stat-head">
                 <div className="icon"><Icon name="chart" /></div>
@@ -682,10 +682,10 @@ function Dashboard({ log, go, onRefresh, scope }: { log: string[]; go: (p: Page)
                     key={p.profile}
                     className="funnel-row"
                     onClick={() => openProfile(p)}
-                    style={{ cursor: 'pointer', padding: '7px 0', borderTop: i ? '1px solid var(--border)' : 'none' }}
+                    style={{ cursor: 'pointer', padding: '6px 0', borderTop: i ? '1px solid var(--border)' : 'none' }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <Avatar url={p.avatarUrl} name={p.profile} size={24} />
+                      <Avatar url={p.avatarUrl} name={p.profile} size={22} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontWeight: 700, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {p.handle ? '@' + p.handle : p.profile}
@@ -696,10 +696,10 @@ function Dashboard({ log, go, onRefresh, scope }: { log: string[]; go: (p: Page)
                       </div>
                       <Sparkline data={p.timeseries.map((t) => t.value)} />
                     </div>
-                    <div style={{ display: 'flex', gap: 14, marginTop: 4, alignItems: 'flex-end' }}>
+                    <div style={{ display: 'flex', gap: 14, marginTop: 2, alignItems: 'flex-end' }}>
                       {[['Vues', fmtNum(p.views), true], ['Likes', fmtNum(p.likes), false], ['Comment.', fmtNum(p.comments), false], ['Partages', fmtNum(p.shares), false]].map(([l, v, big]) => (
                         <div key={l as string}>
-                          <div style={{ fontWeight: 700, fontSize: big ? 16 : 13, color: big ? 'var(--accent-strong)' : undefined }}>{v}</div>
+                          <div style={{ fontWeight: 700, fontSize: big ? 15 : 13, color: big ? 'var(--accent-strong)' : undefined }}>{v}</div>
                           <div className="muted small">{l}</div>
                         </div>
                       ))}

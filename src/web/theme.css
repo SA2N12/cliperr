@@ -340,6 +340,30 @@ button {
   box-shadow: var(--shadow);
   padding: 18px;
 }
+/* Cartes de stats (dashboard) : version compacte pour tenir sans scroll */
+.stat-grid > .card {
+  padding: 14px;
+}
+.stat-grid .icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.stat-grid .label {
+  color: var(--muted);
+  font-size: 12px;
+}
+.stat-grid .value {
+  font-size: 25px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  line-height: 1.1;
+}
 .grid-3 {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
