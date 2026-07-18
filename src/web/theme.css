@@ -36,8 +36,8 @@ body,
   margin: 0;
 }
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
-    sans-serif;
+  font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica,
+    Arial, sans-serif;
   background: var(--bg);
   color: var(--text);
   -webkit-font-smoothing: antialiased;
@@ -863,7 +863,7 @@ input[type='checkbox'] {
   --ap-green-deep: #065f46;
   --ap-green-soft: #ecfdf5;
   --ap-green-border: #a7f3d0;
-  --mono: ui-monospace, 'SF Mono', 'Cascadia Mono', 'Roboto Mono', Menlo, Consolas, monospace;
+  --mono: 'Geist Mono', ui-monospace, 'SF Mono', 'Cascadia Mono', 'Roboto Mono', Menlo, Consolas, monospace;
 }
 .btn.green {
   background: var(--ap-green);
