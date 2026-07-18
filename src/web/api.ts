@@ -200,6 +200,15 @@ export const api = {
   setGroqKey: (key: string) => post('/api/settings/groq', { key }),
   providers: () =>
     req<{ voiceProvider: 'openai' | 'elevenlabs'; seriesEngine: string; providers: Record<string, boolean> }>('/api/providers'),
+  analyze: (force?: boolean) =>
+    post<{
+      diagnostic: string
+      levierPrincipal: string
+      recommandations: { titre: string; detail: string; impact: 'fort' | 'moyen' | 'faible'; type: 'systeme' | 'manuel' }[]
+      aArreter: string[]
+      generatedAt?: number
+      cached?: boolean
+    }>('/api/analyze', { force }),
   elevenlabsStatus: () => req<{ has: boolean }>('/api/settings/elevenlabs'),
   setElevenlabsKey: (key: string) => post('/api/settings/elevenlabs', { key }),
   ttsVoices: () => req<{ provider: 'openai' | 'elevenlabs'; voices: { id: string; label: string }[]; error?: string }>('/api/tts/voices'),

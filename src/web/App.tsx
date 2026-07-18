@@ -11,7 +11,7 @@ import {
   type SavedIdea
 } from './api'
 
-type Page = 'dashboard' | 'autopilot' | 'generate' | 'ideas' | 'history' | 'clips' | 'queue' | 'published' | 'providers' | 'settings'
+type Page = 'dashboard' | 'autopilot' | 'analyse' | 'generate' | 'ideas' | 'history' | 'clips' | 'queue' | 'published' | 'providers' | 'settings'
 
 const ICONS: Record<string, string> = {
   dashboard: 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z',
@@ -363,6 +363,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
     [
       { id: 'dashboard', label: 'Tableau de bord', icon: 'dashboard' },
       ...(isAll ? [{ id: 'autopilot' as Page, label: 'Pilote auto', icon: 'bolt' }] : []),
+      ...(isAll ? [{ id: 'analyse' as Page, label: 'Analyse IA', icon: 'chart' }] : []),
       { id: 'queue', label: 'File d’attente', icon: 'clock' }
     ],
     [
@@ -430,6 +431,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
         {page === 'clips' && <Clips clips={clips} sources={sources} onRefresh={refresh} toast={showToast} ttProfile={ttProfile} scope={scope} />}
         {page === 'queue' && <Queue go={setPage} scope={scope} ideaVideo={ideaVideo} toast={showToast} />}
         {page === 'published' && <Published clips={clips} go={setPage} scope={scope} />}
+        {page === 'analyse' && isAll && <Analyse toast={showToast} />}
         {page === 'providers' && <Providers go={setPage} />}
         {page === 'settings' && <Settings toast={showToast} onTtProfile={setTtProfile} />}
       </main>
@@ -2566,6 +2568,104 @@ function Field({ label, children }: { label: string; children: ReactNode }): JSX
       <label className="muted small" style={{ display: 'block', marginBottom: 6 }}>{label}</label>
       {children}
     </div>
+  )
+}
+
+type AnalyseResult = {
+  diagnostic: string
+  levierPrincipal: string
+  recommandations: { titre: string; detail: string; impact: 'fort' | 'moyen' | 'faible'; type: 'systeme' | 'manuel' }[]
+  aArreter: string[]
+  generatedAt?: number
+  cached?: boolean
+}
+
+function Analyse({ toast }: { toast: (m: string) => void }): JSX.Element {
+  const [busy, setBusy] = useState(false)
+  const [res, setRes] = useState<AnalyseResult | null>(null)
+  const run = async (force: boolean): Promise<void> => {
+    setBusy(true)
+    try {
+      setRes(await api.analyze(force))
+    } catch (e) {
+      toast('Erreur : ' + (e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+  const impactColor = (i: string): string => (i === 'fort' ? 'var(--ap-green-strong)' : i === 'moyen' ? '#b45309' : 'var(--muted)')
+
+  return (
+    <>
+      <div className="page-head">
+        <div>
+          <h1>Analyse IA</h1>
+          <p>Claude analyse tes vrais chiffres (comptes + vidéos) et te sort un diagnostic + les actions à mener.</p>
+        </div>
+        {res && <button className="btn" disabled={busy} onClick={() => void run(true)}><Icon name="refresh" size={15} /> Relancer</button>}
+      </div>
+
+      {!res && !busy && (
+        <div className="card" style={{ textAlign: 'center', padding: '40px 20px' }}>
+          <div style={{ fontSize: 40, marginBottom: 10 }}>📊</div>
+          <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>Analyse de croissance</div>
+          <div className="muted small" style={{ maxWidth: 460, margin: '0 auto 18px' }}>
+            L’IA lit les stats réelles de tes 5 comptes (vues, engagement, trajectoire) et les titres de tes vidéos, puis te rend un plan d’action priorisé. Compte ~30 secondes.
+          </div>
+          <button className="btn green" onClick={() => void run(false)}><Icon name="spark" size={16} /> Lancer l’analyse</button>
+        </div>
+      )}
+
+      {busy && (
+        <div className="card" style={{ textAlign: 'center', padding: '40px 20px' }}>
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>⏳ L’IA analyse tes comptes…</div>
+          <div className="muted small">Lecture des stats, des titres et de la trajectoire de chaque compte. ~30 secondes.</div>
+        </div>
+      )}
+
+      {res && !busy && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div className="card ap-banner">
+            <div className="muted small" style={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>Diagnostic</div>
+            <div style={{ fontSize: 15, lineHeight: 1.5 }}>{res.diagnostic}</div>
+          </div>
+
+          <div className="card" style={{ borderColor: 'var(--ap-green-border)' }}>
+            <div className="muted small" style={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>⚡ Levier n°1</div>
+            <div style={{ fontSize: 15, lineHeight: 1.5, fontWeight: 600 }}>{res.levierPrincipal}</div>
+          </div>
+
+          <div>
+            <h3 style={{ margin: '4px 0 10px' }}>Recommandations</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {res.recommandations.map((r, i) => (
+                <div key={i} className="card">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+                    <span style={{ fontWeight: 700 }}>{r.titre}</span>
+                    <span className="chip" style={{ fontSize: 10, color: impactColor(r.impact), background: 'var(--panel-2)' }}>impact {r.impact}</span>
+                    <span className="chip" style={{ fontSize: 10 }}>{r.type === 'systeme' ? '⚙️ système' : '🖐 manuel'}</span>
+                  </div>
+                  <div className="small muted" style={{ lineHeight: 1.5 }}>{r.detail}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {res.aArreter.length > 0 && (
+            <div className="card" style={{ background: '#fef2f2', border: '1px solid #fecaca' }}>
+              <div className="small" style={{ fontWeight: 700, color: '#b91c1c', marginBottom: 6 }}>🛑 À arrêter</div>
+              <ul className="small" style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4, color: '#7f1d1d' }}>
+                {res.aArreter.map((s, i) => <li key={i}>{s}</li>)}
+              </ul>
+            </div>
+          )}
+
+          {res.generatedAt && (
+            <div className="muted small">Analyse du {new Date(res.generatedAt).toLocaleString('fr-FR')}{res.cached ? ' (en cache — « Relancer » pour rafraîchir)' : ''}. Basée sur tes stats réelles ; à recroiser avec ton ressenti terrain.</div>
+          )}
+        </div>
+      )}
+    </>
   )
 }
 

@@ -1567,6 +1567,99 @@ app.get('/api/providers', wrap((_req, res) => {
   })
 }))
 
+// Analyse IA de la croissance : rassemble les VRAIES stats (comptes + titres) et
+// les fait analyser par Claude → diagnostic + recommandations classées. Mise en
+// cache 20 min (appel coûteux) ; `force` pour rafraîchir.
+let analyzeCache: { at: number; data: Record<string, unknown> } | null = null
+app.post('/api/analyze', wrap(async (req, res) => {
+  const apiKey = getApiKey()
+  if (!apiKey) return res.status(400).json({ error: 'Configure d’abord ta clé Claude dans les Réglages.' })
+  const force = (req.body as { force?: unknown })?.force === true
+  if (!force && analyzeCache && Date.now() - analyzeCache.at < 20 * 60 * 1000) {
+    return res.json({ ...analyzeCache.data, generatedAt: analyzeCache.at, cached: true })
+  }
+  const upKey = getEncrypted('uploadpost_key')
+  const profiles = uploadPostProfiles()
+  const comptes: Record<string, unknown>[] = []
+  for (const u of profiles) {
+    const a = upKey ? await fetchTikTokAnalytics(upKey, u) : {}
+    const n = a.videoCount || 0
+    comptes.push({
+      compte: u,
+      niche: nicheForProfile(u),
+      abonnes: a.followers || 0,
+      vues: a.views || 0,
+      videos: n,
+      likes: a.likes || 0,
+      commentaires: a.comments || 0,
+      partages: a.shares || 0,
+      vuesParVideo: n ? Math.round((a.views || 0) / n) : 0,
+      derniers14j: (a.timeseries || []).slice(-14).map((t) => `${t.date.slice(5)}:${t.value}`).join(' ')
+    })
+  }
+  const clips = repo.listClips()
+  const titresRecents: Record<string, string[]> = {}
+  for (const u of profiles) {
+    titresRecents[u] = clips.filter((c) => c.profile === u && c.publishStatus === 'published').slice(0, 15).map((c) => c.title || '').filter(Boolean)
+  }
+  const data = {
+    contexte:
+      'Cliperr : 5 comptes TikTok faceless 100% automatises (video IA : images + voix off TTS + sous-titres, ~20-28s ; series via Veo). Comptes jeunes (~1 mois). Publication auto via upload-post. On cherche a depasser ~300 vues/video (plafond = echec du 2e palier de push : hook OK mais completion/commentaires/PARTAGES ~0). derniers14j = vues par jour recentes (revele les comptes qui tombent a 0).',
+    comptes,
+    titresRecents
+  }
+
+  const tool = {
+    name: 'rendu_analyse',
+    description: 'Rend une analyse de croissance TikTok structuree et actionnable.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        diagnostic: { type: 'string', description: 'Diagnostic global en 2-3 phrases : etat des comptes, pourquoi ils plafonnent ou decollent (base sur CES chiffres).' },
+        levierPrincipal: { type: 'string', description: 'LE levier n°1 a plus fort impact pour depasser 1000 vues, en 1-2 phrases.' },
+        recommandations: {
+          type: 'array',
+          description: '4 a 7 actions concretes, classees de la plus a la moins impactante.',
+          items: {
+            type: 'object',
+            properties: {
+              titre: { type: 'string' },
+              detail: { type: 'string', description: 'Action precise et specifique (pas de generalite), ancree dans les donnees.' },
+              impact: { type: 'string', enum: ['fort', 'moyen', 'faible'] },
+              type: { type: 'string', enum: ['systeme', 'manuel'], description: 'systeme = reglable dans Cliperr (prompt, cadence, voix, CTA…) ; manuel = action humaine sur TikTok.' }
+            },
+            required: ['titre', 'detail', 'impact', 'type']
+          }
+        },
+        aArreter: { type: 'array', items: { type: 'string' }, description: 'Ce qu il faut ARRETER de faire (gaspillages, mauvaises pratiques).' }
+      },
+      required: ['diagnostic', 'levierPrincipal', 'recommandations', 'aArreter']
+    }
+  } satisfies Anthropic.Tool
+
+  const prompt = `Tu es un stratege de croissance TikTok expert, brutalement honnete et specialiste du contenu faceless/IA. Voici les VRAIES statistiques d un projet de 5 comptes :
+
+${JSON.stringify(data, null, 1)}
+
+Analyse RIGOUREUSEMENT ces chiffres reels (cite les comptes/titres precis, pas de generalites). Reperes : le format des titres qui performe vs plafonne, les comptes qui montent vs qui tombent a 0, la conversion abonnes, l engagement (commentaires/partages), la repetition de format. Rends une analyse concrete et priorisee via l outil rendu_analyse. En francais, tutoiement, direct.`
+
+  const client = new Anthropic({ apiKey })
+  const model = scriptModel()
+  const msg = await client.messages.create({
+    model,
+    max_tokens: 3000,
+    tools: [tool],
+    tool_choice: { type: 'tool', name: 'rendu_analyse' },
+    messages: [{ role: 'user', content: prompt }]
+  })
+  if (msg.usage) addSpend(model, { input_tokens: msg.usage.input_tokens, output_tokens: msg.usage.output_tokens })
+  const block = msg.content.find((b) => b.type === 'tool_use')
+  if (!block || block.type !== 'tool_use') return res.status(502).json({ error: 'Analyse indisponible — réessaie.' })
+  const out = block.input as Record<string, unknown>
+  analyzeCache = { at: Date.now(), data: out }
+  res.json({ ...out, generatedAt: analyzeCache.at, cached: false })
+}))
+
 // Clé ElevenLabs (voix off humaines, alternative au TTS OpenAI)
 app.get('/api/settings/elevenlabs', wrap((_req, res) => res.json({ has: !!getEncrypted('elevenlabs_key') })))
 app.post('/api/settings/elevenlabs', wrap(async (req, res) => {
