@@ -326,6 +326,7 @@ button {
   font-weight: 700;
 }
 .page-head p {
+  display: none; /* sous-titres de page masqués (seul le titre h1 reste) */
   margin: 0;
   color: var(--muted);
   font-size: 14px;
