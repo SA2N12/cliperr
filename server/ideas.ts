@@ -140,6 +140,8 @@ export interface InspireOptions {
   niche?: string
   /** Captures d'écran de la vidéo source (JPEG base64) → analyse du style visuel. */
   frames?: string[]
+  /** 'reproduce' = clone fidèle (même sujet/structure/déroulé/style) ; 'inspire' = original. */
+  mode?: 'reproduce' | 'inspire'
 }
 
 /**
@@ -150,24 +152,23 @@ export interface InspireOptions {
 export async function generateInspiredIdea(opts: InspireOptions): Promise<{ idea: ViralIdea | null; usage: Usage | null }> {
   const model = opts.model ?? 'claude-haiku-4-5'
   const client = new Anthropic({ apiKey: opts.apiKey })
+  const reproduce = opts.mode === 'reproduce'
 
   const tool = {
     name: 'propose_idea',
-    description: 'Propose une idée de vidéo TikTok originale inspirée de la mécanique de la source.',
+    description: reproduce ? 'Reconstitue fidèlement la vidéo source pour la reproduire.' : 'Propose une idée de vidéo TikTok originale inspirée de la mécanique de la source.',
     input_schema: {
       type: 'object',
       properties: {
-        title: { type: 'string', description: 'Titre court et accrocheur de la NOUVELLE vidéo' },
-        hook: { type: 'string', description: "Phrase d'accroche des 3 premières secondes" },
-        angle: {
-          type: 'string',
-          description: 'Commence par « Mécanique reprise : … » (ce qui est gardé de la source), puis pourquoi ça peut devenir viral'
-        },
+        title: { type: 'string', description: reproduce ? 'Titre reprenant le sujet de la vidéo source' : 'Titre court et accrocheur de la NOUVELLE vidéo' },
+        hook: { type: 'string', description: reproduce ? "L'accroche des 3 premières secondes de la SOURCE (fidèle)" : "Phrase d'accroche des 3 premières secondes" },
+        angle: { type: 'string', description: reproduce ? 'Résume ce que fait la vidéo source (sujet + structure)' : 'Commence par « Mécanique reprise : … » (ce qui est gardé de la source), puis pourquoi ça peut devenir viral' },
         script: {
           type: 'array',
           items: { type: 'string' },
-          description:
-            'Déroulé plan par plan, 4 à 8 étapes courtes et concrètes. La DERNIÈRE étape doit être une question directe ou une affirmation clivante adressée au spectateur pour déclencher des commentaires.'
+          description: reproduce
+            ? "Le déroulé EXACT de la source, un plan/moment par étape, dans l'ORDRE de la vidéo (autant d'étapes qu'il y a de moments distincts). Reste fidèle au contenu, aux exemples et à la chute de la source ; reformule juste en français oral propre. GARDE le hook d'origine en 1re étape et la chute d'origine en dernière."
+            : 'Déroulé plan par plan, 4 à 8 étapes courtes et concrètes. La DERNIÈRE étape doit être une question directe ou une affirmation clivante adressée au spectateur pour déclencher des commentaires.'
         },
         format: { type: 'string', description: 'Format conseillé : durée, style de montage, sous-titres…' },
         hashtags: { type: 'array', items: { type: 'string' }, description: '5 à 8 hashtags pertinents, sans espace' },
@@ -184,12 +185,27 @@ export async function generateInspiredIdea(opts: InspireOptions): Promise<{ idea
   const s = opts.source
   const transcript = s.transcript.slice(0, 8000)
   const frames = (opts.frames ?? []).slice(0, 5)
-  const prompt = `Tu es un stratège de contenu TikTok expert en viralité. Voici une vidéo TikTok qui fonctionne, dont on veut S'INSPIRER${frames.length ? ' (captures d’écran ci-jointes, dans l’ordre chronologique)' : ''} :
-
-Auteur : ${s.author ?? 'inconnu'}
+  const srcBlock = `Auteur : ${s.author ?? 'inconnu'}
 Titre / légende : ${s.title ?? '(sans titre)'}
 Durée : ${s.durationSec ? `${Math.round(s.durationSec)} s` : 'inconnue'}
-Transcription de la voix : ${transcript ? `« ${transcript} »` : '(aucune parole détectée — vidéo probablement visuelle/musicale : appuie-toi sur la légende et les captures)'}
+Transcription de la voix : ${transcript ? `« ${transcript} »` : '(aucune parole détectée — vidéo probablement visuelle/musicale : appuie-toi sur la légende et les captures)'}`
+
+  const prompt = reproduce
+    ? `Tu es monteur TikTok. On veut REPRODUIRE FIDÈLEMENT cette vidéo qui marche${frames.length ? ' (captures d’écran ci-jointes, dans l’ordre)' : ''} : même sujet, même déroulé, même chute, même style. On ne cherche PAS à faire différent.
+
+${srcBlock}
+
+ÉTAPE 1 — Reconstitue le déroulé EXACT de la source : découpe la transcription en moments/plans successifs, dans l'ordre, sans rien inventer, sans réorganiser, sans « améliorer ». Le champ « script » = ce déroulé (une étape par moment), fidèle au contenu, aux exemples et à la chute. Reformule seulement pour un français oral propre (nombres en toutes lettres, phrases courtes). Garde le hook d'origine et la chute d'origine.
+ÉTAPE 2 — Décris le STYLE VISUEL de la source (champ imageStyle, en anglais)${frames.length ? ', d’après les captures' : ''} pour régénérer des images IA dans CE style à l'identique.
+
+RÈGLES :
+- On REPRODUIT, on ne transforme pas : ne change ni le sujet, ni les exemples, ni la chute. N'ajoute PAS de question/CTA « à la TikTok » si la source n'en a pas.
+- imageStyle : ne décris JAMAIS d'enfant/mineur ni de personne réelle identifiable (le générateur d'images les refuse).
+
+Réponds en français (imageStyle en anglais), uniquement via l'outil propose_idea.`
+    : `Tu es un stratège de contenu TikTok expert en viralité. Voici une vidéo TikTok qui fonctionne, dont on veut S'INSPIRER${frames.length ? ' (captures d’écran ci-jointes, dans l’ordre chronologique)' : ''} :
+
+${srcBlock}
 
 ÉTAPE 1 — Analyse sa MÉCANIQUE virale : type de hook, structure narrative, rythme, levier émotionnel (curiosité, indignation, identification, surprise…), format.
 ÉTAPE 2 — Analyse son STYLE VISUEL${frames.length ? ' à partir des captures' : ' probable (d’après la légende et le thème)'} : type de visuels, palette, éclairage, ambiance, composition → champ imageStyle (en anglais). La nouvelle vidéo sera générée en images IA dans CE style.
@@ -233,7 +249,7 @@ Réponds en français (imageStyle en anglais), uniquement via l'outil propose_id
     if (!block || block.type !== 'tool_use') continue
     const parsed = IdeaSchema.safeParse(block.input)
     if (!parsed.success) continue
-    idea = { ...parsed.data, hashtags: parsed.data.hashtags.map(normTag).filter(Boolean) }
+    idea = { ...parsed.data, hashtags: parsed.data.hashtags.map(normTag).filter(Boolean), reproduce }
   }
   return { idea, usage: hasUsage ? { input_tokens: usageIn, output_tokens: usageOut } : null }
 }

@@ -57,6 +57,8 @@ export interface ViralIdea {
   hashtags: string[]
   /** Style visuel imposé aux images de la vidéo (ex. repris d'une vidéo source en mode inspiration). */
   imageStyle?: string
+  /** Mode « reproduction fidèle » (inspiration) : le storyboard suit la source pas à pas au lieu du template niche. */
+  reproduce?: boolean
 }
 
 export interface SavedIdea extends ViralIdea {

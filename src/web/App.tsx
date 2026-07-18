@@ -759,6 +759,7 @@ const STAGE_LABELS: Record<string, string> = {
 function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
   const [url, setUrl] = useState('')
   const [niche, setNiche] = useState('')
+  const [mode, setMode] = useState<'reproduce' | 'inspire'>('reproduce')
   const [busy, setBusy] = useState(false)
   const [idea, setIdea] = useState<SavedIdea | null>(null)
   const [launched, setLaunched] = useState(false)
@@ -775,7 +776,7 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
     setIdea(null)
     setLaunched(false)
     try {
-      const r = await api.inspireIdea(url.trim(), niche.trim())
+      const r = await api.inspireIdea(url.trim(), mode === 'inspire' ? niche.trim() : '', mode)
       setIdea(r.idea)
     } catch (e) {
       toast('Erreur : ' + (e as Error).message)
@@ -796,29 +797,47 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
 
   return (
     <div>
+      {/* Mode : reproduire fidèlement la source, ou s'en inspirer pour de l'original. */}
+      <div style={{ display: 'inline-flex', gap: 3, background: 'var(--panel-2)', borderRadius: 9, padding: 3, marginBottom: 10 }}>
+        {([['reproduce', '🎬 Reproduire (fidèle)'], ['inspire', '💡 S’inspirer (original)']] as const).map(([m, lbl]) => (
+          <button
+            key={m}
+            onClick={() => setMode(m)}
+            style={{ border: 'none', cursor: 'pointer', borderRadius: 6, padding: '5px 14px', fontSize: 13, fontWeight: mode === m ? 700 : 500, background: mode === m ? '#fff' : 'transparent', color: mode === m ? 'var(--text)' : 'var(--muted)', fontFamily: 'inherit' }}
+          >
+            {lbl}
+          </button>
+        ))}
+      </div>
       <input
         className="input-full"
-        placeholder="Lien de la vidéo TikTok dont t’inspirer — https://www.tiktok.com/@…/video/…"
+        placeholder="Lien de la vidéo TikTok à reproduire — https://www.tiktok.com/@…/video/…"
         value={url}
         onChange={(e) => setUrl(e.target.value)}
         onKeyDown={(e) => e.key === 'Enter' && void inspire()}
       />
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
-        <input
-          className="input-full"
-          style={{ flex: 1, minWidth: 220 }}
-          list="inspire-niches"
-          placeholder="Niche cible (optionnel — sinon même thème que la source)"
-          value={niche}
-          onChange={(e) => setNiche(e.target.value)}
-        />
-        <datalist id="inspire-niches">{niches.map((n) => <option key={n} value={n} />)}</datalist>
-        <button className="btn primary" onClick={() => void inspire()} disabled={busy || !url.trim()}>
-          <Icon name="bulb" size={15} /> {busy ? 'Analyse en cours…' : 'Créer une idée inspirée'}
+        {mode === 'inspire' && (
+          <>
+            <input
+              className="input-full"
+              style={{ flex: 1, minWidth: 220 }}
+              list="inspire-niches"
+              placeholder="Niche cible (optionnel — sinon même thème que la source)"
+              value={niche}
+              onChange={(e) => setNiche(e.target.value)}
+            />
+            <datalist id="inspire-niches">{niches.map((n) => <option key={n} value={n} />)}</datalist>
+          </>
+        )}
+        <button className="btn primary" onClick={() => void inspire()} disabled={busy || !url.trim()} style={mode === 'reproduce' ? { marginLeft: 'auto' } : undefined}>
+          <Icon name="bulb" size={15} /> {busy ? 'Analyse en cours…' : mode === 'reproduce' ? 'Reproduire la vidéo' : 'Créer une idée inspirée'}
         </button>
       </div>
       <p className="muted small" style={{ marginTop: 10 }}>
-        La vidéo est téléchargée et transcrite, puis l’IA écrit une vidéo <b>originale</b> qui reprend sa mécanique virale (hook, structure, émotion) — jamais son contenu. Compte 1 à 2 minutes.
+        {mode === 'reproduce'
+          ? <>La vidéo est téléchargée, transcrite et analysée visuellement, puis l’IA la <b>reproduit fidèlement</b> : même sujet, même déroulé, même chute et même style — sans repasser par le format « niche ». Compte 1 à 2 minutes.</>
+          : <>La vidéo est téléchargée et transcrite, puis l’IA écrit une vidéo <b>originale</b> qui reprend sa mécanique virale (hook, structure, émotion) — jamais son contenu. Compte 1 à 2 minutes.</>}
       </p>
       {busy && (
         <div style={{ marginTop: 6, padding: '12px 14px', borderRadius: 10, background: 'var(--panel-2)', border: '1px solid var(--border)' }}>

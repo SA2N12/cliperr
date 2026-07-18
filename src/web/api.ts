@@ -164,7 +164,7 @@ export const api = {
   // Idées virales + tendances
   generateIdeas: (niche: string, count: number, trends: string[]) =>
     post<{ ideas: SavedIdea[] }>('/api/ideas', { niche, count, trends }),
-  inspireIdea: (url: string, niche: string) => post<{ idea: SavedIdea }>('/api/ideas/inspire', { url, niche }),
+  inspireIdea: (url: string, niche: string, mode: 'reproduce' | 'inspire') => post<{ idea: SavedIdea }>('/api/ideas/inspire', { url, niche, mode }),
   savedIdeas: () => req<{ ideas: SavedIdea[] }>('/api/ideas/saved'),
   deleteIdea: (id: number) => req(`/api/ideas/${id}`, { method: 'DELETE' }),
   generateIdeaVideo: (id: number) => post(`/api/ideas/${id}/video`),

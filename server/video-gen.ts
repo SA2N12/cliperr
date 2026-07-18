@@ -113,7 +113,24 @@ async function buildStoryboard(
     input_schema: { type: 'object', properties, required: dialogue ? ['cast', 'scenes'] : ['scenes'] }
   } as Anthropic.Tool
 
-  const prompt = `Tu es un scénariste TikTok expert en RÉTENTION et en viralité. Transforme cette idée en storyboard de 4 à 5 scènes pour une vidéo verticale « faceless » COURTE de 20 à 28 secondes (la brièveté maximise le taux de complétion — le signal n°1 de l'algorithme TikTok pour être re-poussé au-delà du 1er lot de vues).
+  // Mode reproduction fidèle (inspiration) : on suit la source PAS À PAS, sans le
+  // template « niche » (hook choc / boucle / CTA) qui la dénaturerait.
+  const reproduce = !dialogue && !!idea.reproduce
+  const reproducePrompt = `Tu es monteur TikTok. On REPRODUIT FIDÈLEMENT une vidéo existante : garde son déroulé, son ordre, sa chute et son style. Ne la transforme PAS en vidéo « à la TikTok » (pas de hook choc réinventé, pas de boucle forcée, aucun CTA commentaire/partage si la source n'en a pas).
+Titre : ${idea.title}
+Hook (scène 1, à garder) : ${idea.hook}
+Déroulé à reproduire, une scène par étape, DANS L'ORDRE EXACT :
+${idea.script.map((step, i) => `${i + 1}. ${step}`).join('\n')}
+
+Règles :
+- Produis EXACTEMENT ${idea.script.length} scène(s) : une par étape ci-dessus, dans le même ordre. Ne fusionne pas, ne supprime pas, n'ajoute pas d'étape.
+- La VOIX OFF de chaque scène = l'étape correspondante, en français oral fluide (nombres en toutes lettres, phrases courtes). Reste FIDÈLE au contenu ; ne remplace pas la fin par une question ou un CTA générique.
+${styleHint ? `- STYLE VISUEL IMPOSÉ (celui de la source, à respecter À L'IDENTIQUE d'une scène à l'autre) : ${styleHint}` : "- Garde un style visuel cohérent et proche de la source d'une scène à l'autre."}
+- RÈGLES IMAGE (le générateur refuse sinon) : aucun ENFANT/mineur, aucune personne réelle identifiable, pas de gore ni de contenu sexuel → illustre autrement (objet seul, décor, main d'adulte, document, symbole).
+
+Pour chaque scène : la phrase de VOIX OFF (français) + un IMAGE PROMPT en anglais respectant ${styleHint ? 'STRICTEMENT le style imposé ci-dessus' : 'le style de la source'}, très détaillé, sans aucun texte. Réponds uniquement via l'outil storyboard.`
+
+  const prompt = reproduce ? reproducePrompt : `Tu es un scénariste TikTok expert en RÉTENTION et en viralité. Transforme cette idée en storyboard de 4 à 5 scènes pour une vidéo verticale « faceless » COURTE de 20 à 28 secondes (la brièveté maximise le taux de complétion — le signal n°1 de l'algorithme TikTok pour être re-poussé au-delà du 1er lot de vues).
 Titre : ${idea.title}
 Hook : ${idea.hook}
 Script de départ : ${idea.script.join(' ')}

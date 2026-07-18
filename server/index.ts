@@ -1156,6 +1156,7 @@ app.post('/api/ideas/inspire', wrap(async (req, res) => {
   if (!apiKey) return res.status(400).json({ error: 'Configure d’abord ta clé API Claude dans les Réglages.' })
   const url = String(req.body?.url ?? '').trim()
   const niche = String(req.body?.niche ?? '').trim().slice(0, 120)
+  const mode: 'reproduce' | 'inspire' = (req.body as { mode?: unknown })?.mode === 'inspire' ? 'inspire' : 'reproduce'
   if (!/^https?:\/\/([\w-]+\.)*(tiktok\.com|youtube\.com|youtu\.be)\//i.test(url)) {
     return res.status(400).json({ error: 'Colle un lien TikTok (ou YouTube Short) valide.' })
   }
@@ -1216,18 +1217,20 @@ app.post('/api/ideas/inspire', wrap(async (req, res) => {
       /* pas bloquant : l'IA décrira un style plausible sans captures */
     }
 
-    emitLog('Inspiration : écriture d’une idée originale (IA)…')
+    emitLog(mode === 'reproduce' ? 'Inspiration : reproduction fidèle de la vidéo (IA)…' : 'Inspiration : écriture d’une idée originale (IA)…')
     const model = scriptModel()
     const { idea, usage } = await generateInspiredIdea({
       apiKey,
       model,
       niche: niche || undefined,
       source: { title: meta.title, author: meta.author, durationSec: meta.durationSec, transcript },
-      frames
+      frames,
+      mode
     })
     if (usage) addSpend(model, usage)
     if (!idea) return res.status(502).json({ error: 'L’IA n’a pas réussi à produire une idée — réessaie.' })
-    const saved = repo.createIdea(niche || `Inspiration : ${meta.author || 'TikTok'}`, idea)
+    const label = niche || `${mode === 'reproduce' ? 'Reproduction' : 'Inspiration'} : ${meta.author || 'TikTok'}`
+    const saved = repo.createIdea(label, idea)
     emitLog(`Inspiration : idée créée — « ${idea.title} »`)
     res.json({ idea: saved })
   } finally {
