@@ -464,6 +464,37 @@ function TrendBadge({ value, label }: { value: number; label?: string }): JSX.El
 
 type Bucket = { label: string; count: number }
 
+/** Anime un nombre de sa valeur précédente vers la nouvelle (easing sortie cubique). */
+function useCountUp(value: number, duration = 850): number {
+  const [n, setN] = useState(0)
+  const shown = useRef(0)
+  useEffect(() => {
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      shown.current = value
+      setN(value)
+      return
+    }
+    const from = shown.current
+    const start = performance.now()
+    let raf = 0
+    const tick = (t: number): void => {
+      const p = Math.min(1, (t - start) / duration)
+      const v = Math.round(from + (value - from) * (1 - Math.pow(1 - p, 3)))
+      shown.current = v
+      setN(v)
+      if (p < 1) raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [value, duration])
+  return n
+}
+
+/** Nombre qui « monte » à l'affichage. Composant à part : garde l'ordre des hooks stable. */
+function CountUp({ value }: { value: number }): JSX.Element {
+  return <>{fmtNum(useCountUp(value))}</>
+}
+
 /**
  * Courbe lissée (Catmull-Rom → béziers). Les points de contrôle sont bornés à
  * la zone de tracé : une pointe isolée ne peut pas faire sortir la courbe.
@@ -526,7 +557,7 @@ function AreaChart({ data }: { data: Bucket[] }): JSX.Element {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <div ref={wrapRef} className="chart-wrap" onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
-        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: '100%', display: 'block' }}>
+        <svg className="chart-draw" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: '100%', display: 'block' }}>
           <defs>
             <linearGradient id="ag" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.24" />
@@ -820,7 +851,7 @@ function Dashboard({ scope }: { scope: string }): JSX.Element {
                 <TrendBadge value={viewsTrend} />
               </div>
               <div className="label" style={{ marginTop: 8 }}>Vues (30 j)</div>
-              <div className="value">{fmtNum(totals.views)}</div>
+              <div className="value"><CountUp value={totals.views} /></div>
               <div className="breakdown">
                 <div className="line"><span className="k">≈ / vidéo</span><span className="v">{fmtNum(avgViewsPerVideo)}</span></div>
                 <div className="line"><span className="k">7 derniers jours</span><span className="v">{fmtNum(last7)}</span></div>
@@ -833,7 +864,7 @@ function Dashboard({ scope }: { scope: string }): JSX.Element {
                 <span className="pill-badge"><span className="dot" /> {engGlobal}</span>
               </div>
               <div className="label" style={{ marginTop: 8 }}>Likes</div>
-              <div className="value">{fmtNum(totals.likes)}</div>
+              <div className="value"><CountUp value={totals.likes} /></div>
               <div className="breakdown">
                 <div className="line"><span className="k">Commentaires</span><span className="v">{fmtNum(totals.comments)}</span></div>
                 <div className="line"><span className="k">Partages</span><span className="v">{fmtNum(totals.shares)}</span></div>
@@ -845,7 +876,7 @@ function Dashboard({ scope }: { scope: string }): JSX.Element {
                 <div className="icon"><Icon name="globe" /></div>
               </div>
               <div className="label" style={{ marginTop: 8 }}>Abonnés</div>
-              <div className="value">{fmtNum(totals.followers)}</div>
+              <div className="value"><CountUp value={totals.followers} /></div>
               <div className="breakdown">
                 <div className="line"><span className="k">Comptes</span><span className="v">{profiles.length}</span></div>
                 <div className="line"><span className="k">Top compte</span><span className="v">{profiles[0]?.handle ? '@' + profiles[0].handle : profiles[0]?.profile ?? '—'}</span></div>
@@ -857,7 +888,7 @@ function Dashboard({ scope }: { scope: string }): JSX.Element {
                 <div className="icon"><Icon name="clips" /></div>
               </div>
               <div className="label" style={{ marginTop: 8 }}>Vidéos publiées</div>
-              <div className="value">{totals.videos}</div>
+              <div className="value"><CountUp value={totals.videos} /></div>
               <div className="breakdown">
                 <div className="line"><span className="k">Engagement</span><span className="v">{engGlobal}</span></div>
                 <div className="line"><span className="k">Vues / vidéo</span><span className="v">{fmtNum(avgViewsPerVideo)}</span></div>
@@ -867,7 +898,7 @@ function Dashboard({ scope }: { scope: string }): JSX.Element {
 
           {/* alignItems par défaut (stretch) : les deux cartes finissent à la même hauteur ;
               le graphique s'étire pour remplir la carte de gauche. */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 16, marginTop: 12, flex: 1, minHeight: 0 }}>
+          <div className="dash-row" style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 16, marginTop: 12, flex: 1, minHeight: 0 }}>
             <div className="card" style={{ display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
               <div className="row">
                 <div>
@@ -879,7 +910,8 @@ function Dashboard({ scope }: { scope: string }): JSX.Element {
                   ))}
                 </div>
               </div>
-              <div style={{ marginTop: 12, flex: 1, minHeight: 110 }}><AreaChart data={shown} /></div>
+              {/* `key` sur la période : le graphique se redessine à chaque changement. */}
+              <div style={{ marginTop: 12, flex: 1, minHeight: 110 }}><AreaChart key={range} data={shown} /></div>
               <div className="metrics-row">
                 <div className="metric"><div className="ml">Total période</div><div className="mv">{fmtNum(totalPeriod)}</div></div>
                 <div className="metric"><div className="ml">Moyenne / jour</div><div className="mv">{fmtNum(avgPerDay)}</div></div>

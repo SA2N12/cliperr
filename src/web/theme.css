@@ -434,6 +434,113 @@ button {
   flex-shrink: 0;
 }
 
+/* ── Apparitions du tableau de bord ────────────────────────────────────────
+   `backwards` (et non `both`) : une fois l'animation finie, les styles normaux
+   reprennent la main → les effets de survol (translateY) fonctionnent encore. */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+@keyframes rise-sm {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+@keyframes reveal-x {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.4);
+  }
+}
+
+.stat-grid > .card,
+.dash-row > .card {
+  animation: rise 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
+}
+.stat-grid > .card:nth-child(2) {
+  animation-delay: 60ms;
+}
+.stat-grid > .card:nth-child(3) {
+  animation-delay: 120ms;
+}
+.stat-grid > .card:nth-child(4) {
+  animation-delay: 180ms;
+}
+.dash-row > .card:nth-child(1) {
+  animation-delay: 220ms;
+}
+.dash-row > .card:nth-child(2) {
+  animation-delay: 280ms;
+}
+/* Léger soulèvement au survol des cartes de stats. */
+.stat-grid > .card {
+  transition: transform 0.16s ease, border-color 0.16s ease;
+}
+.stat-grid > .card:hover {
+  transform: translateY(-2px);
+  border-color: var(--muted-2);
+}
+
+/* Le tracé se dévoile de gauche à droite. */
+.chart-draw {
+  animation: reveal-x 0.75s cubic-bezier(0.33, 1, 0.68, 1) 0.28s backwards;
+}
+/* Uniquement le point permanent : celui du survol doit apparaître sans délai. */
+.chart-dot:not(.hover) {
+  animation: pop-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) 0.95s backwards;
+}
+
+/* Les comptes arrivent l'un après l'autre. */
+.funnel-row {
+  animation: rise-sm 0.4s cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
+}
+.funnel-row:nth-child(1) {
+  animation-delay: 340ms;
+}
+.funnel-row:nth-child(2) {
+  animation-delay: 395ms;
+}
+.funnel-row:nth-child(3) {
+  animation-delay: 450ms;
+}
+.funnel-row:nth-child(4) {
+  animation-delay: 505ms;
+}
+.funnel-row:nth-child(5) {
+  animation-delay: 560ms;
+}
+.funnel-row:nth-child(n + 6) {
+  animation-delay: 615ms;
+}
+
+/* Accessibilité : on coupe tout si l'utilisateur réduit les animations. */
+@media (prefers-reduced-motion: reduce) {
+  .stat-grid > .card,
+  .dash-row > .card,
+  .chart-draw,
+  .chart-dot:not(.hover),
+  .funnel-row,
+  .console-panel,
+  .side-panel,
+  .skel {
+    animation: none !important;
+  }
+  .stat-grid > .card:hover {
+    transform: none;
+  }
+}
+
 /* ── Graphique : repères en HTML par-dessus le SVG étiré ── */
 .chart-wrap {
   position: relative;
