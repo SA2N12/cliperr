@@ -1714,7 +1714,7 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-            <span className="chip ap-time">≈ {slot.eta}</span>
+            <span className="ap-time-tag">{slot.eta}</span>
             <button className="btn icon-btn" disabled={busy} title="Fermer" onClick={onClose} style={{ width: 30, height: 30, fontSize: 16 }}>✕</button>
           </div>
         </div>
@@ -2187,12 +2187,12 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
           fontFamily: 'inherit'
         }}
       >
-        <div className="ap-time" style={{ fontWeight: 700, fontSize: 13.5, color: s.failed ? 'var(--bad)' : s.done ? 'var(--ap-green-deep)' : 'var(--text)' }}>
-          {s.done ? s.eta : `≈ ${s.eta}`}
-          {s.failed && <MIcon name="error" size={14} style={{ marginLeft: 4 }} />}
-          {!s.done && !s.failed && (s.pinned || s.type) && <MIcon name="push_pin" size={14} style={{ marginLeft: 4 }} />}
+        <div className={`ap-time-tag${s.failed ? ' failed' : s.done ? ' done' : ''}`}>
+          {s.eta}
+          {s.failed && <MIcon name="error" size={13} />}
+          {!s.done && !s.failed && (s.pinned || s.type) && <MIcon name="push_pin" size={13} />}
           {!s.done && !s.failed && s.music && s.music !== 'auto' && (
-            <MIcon name={s.music === 'none' ? 'music_off' : 'music_note'} size={14} style={{ marginLeft: 4 }} />
+            <MIcon name={s.music === 'none' ? 'music_off' : 'music_note'} size={13} />
           )}
         </div>
         {!opts?.hideAvatar && <Avatar url={s.avatarUrl} name={s.user} size={30} />}
@@ -2217,7 +2217,7 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
             title="Coût estimé de cette vidéo (aperçu — aucun débit pour l’instant)"
             style={{ fontSize: 11, fontWeight: 700, padding: '1px 8px', borderRadius: 999, background: '#fff', border: '1px solid var(--border)', color: 'var(--muted)' }}
           >
-            ≈ {s.credits} cr
+            {s.credits} cr
           </div>
         ) : null}
       </button>
@@ -2271,7 +2271,7 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           {totalCredits > 0 && (
-            <span className="pill-badge" title="Coût estimé total du jour (aperçu — aucun débit pour l’instant)" style={{ fontVariantNumeric: 'tabular-nums' }}>≈ {totalCredits} cr/jour</span>
+            <span className="pill-badge" title="Coût estimé total du jour (aperçu — aucun débit pour l’instant)" style={{ fontVariantNumeric: 'tabular-nums' }}>{totalCredits} cr/jour</span>
           )}
           <span className="ap-pill"><span className="dot" /> {plan.targetPerDay ?? plan.perDay} vidéo{(plan.targetPerDay ?? plan.perDay) > 1 ? 's' : ''}/jour</span>
         </div>
@@ -2295,7 +2295,7 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
                   <Avatar url={a.avatarUrl} name={u} size={32} />
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div className="small" style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.handle ? '@' + a.handle : u}</div>
-                    <div className="muted small">{userSlots.length === 0 ? 'Aucune vidéo prévue' : `${uDone}/${userSlots.length} publiée${uDone > 1 ? 's' : ''}${uCredits > 0 ? ` · ≈ ${uCredits} cr` : ''}`}</div>
+                    <div className="muted small">{userSlots.length === 0 ? 'Aucune vidéo prévue' : `${uDone}/${userSlots.length} publiée${uDone > 1 ? 's' : ''}${uCredits > 0 ? ` · ${uCredits} cr` : ''}`}</div>
                   </div>
                   <button className="btn icon-btn" title="Réglages du compte (cadence, niche, CTA, série)" onClick={() => { setEditSlot(null); setCfgUser(u) }} style={{ width: 30, height: 30, flexShrink: 0 }}>
                     <Icon name="settings" size={14} />
@@ -2423,7 +2423,7 @@ function Queue({ go, scope, ideaVideo, toast }: { go: (p: Page) => void; scope: 
                 {paused
                   ? `${upcoming.length} vidéo${upcoming.length > 1 ? 's' : ''} en attente · reprend quand tu veux`
                   : upcoming.length
-                    ? `${upcoming.length} vidéo${upcoming.length > 1 ? 's' : ''} en attente · prochaine ≈ ${nextSlot?.eta ?? '—'} · le pilote passe toutes les 15 min`
+                    ? `${upcoming.length} vidéo${upcoming.length > 1 ? 's' : ''} en attente · prochaine ${nextSlot?.eta ?? '—'} · le pilote passe toutes les 15 min`
                     : `Toutes les vidéos prévues aujourd’hui sont publiées ✓`}
               </div>
             </div>
@@ -2817,7 +2817,7 @@ function Autopilot({ toast, ideaVideo }: { toast: (m: string) => void; ideaVideo
             </div>
           </div>
           <button
-            className={`switch${enabled ? ' on' : ''}`}
+            className={`ap-switch${enabled ? ' on' : ''}`}
             role="switch"
             aria-checked={enabled}
             aria-label={enabled ? 'Mettre le pilote en pause' : 'Démarrer le pilote'}
