@@ -533,12 +533,131 @@ button {
   .funnel-row,
   .console-panel,
   .side-panel,
-  .skel {
+  .skel,
+  .ap-acc-row,
+  .ap-slots > *,
+  .ap-slot.gen {
     animation: none !important;
   }
-  .stat-grid > .card:hover {
+  .stat-grid > .card:hover,
+  .ap-slot:not(.done):hover,
+  .ap-add:not(:disabled):hover {
     transform: none;
   }
+}
+
+/* ── Pilote automatique : interrupteur marche/pause ── */
+.ap-switch-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+.ap-switch-state {
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1.25;
+}
+.switch {
+  position: relative;
+  width: 46px;
+  height: 26px;
+  border-radius: 999px;
+  background: var(--muted-2);
+  border: 0;
+  padding: 0;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+.switch.on {
+  background: var(--ap-green);
+}
+.switch .knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
+  transition: transform 0.24s cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+.switch.on .knob {
+  transform: translateX(20px);
+}
+.switch:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.switch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Lignes de comptes + blocs horaires : entrées en cascade et survols. */
+.ap-acc-row {
+  animation: rise-sm 0.4s cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
+}
+.ap-acc-row:nth-child(1) {
+  animation-delay: 40ms;
+}
+.ap-acc-row:nth-child(2) {
+  animation-delay: 100ms;
+}
+.ap-acc-row:nth-child(3) {
+  animation-delay: 160ms;
+}
+.ap-acc-row:nth-child(4) {
+  animation-delay: 220ms;
+}
+.ap-acc-row:nth-child(5) {
+  animation-delay: 280ms;
+}
+.ap-acc-row:nth-child(n + 6) {
+  animation-delay: 340ms;
+}
+@keyframes slot-in {
+  from {
+    opacity: 0;
+    transform: scale(0.88);
+  }
+}
+.ap-slots > * {
+  animation: slot-in 0.34s cubic-bezier(0.34, 1.4, 0.64, 1) backwards;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.ap-slots > *:nth-child(2) {
+  animation-delay: 55ms;
+}
+.ap-slots > *:nth-child(3) {
+  animation-delay: 110ms;
+}
+.ap-slots > *:nth-child(4) {
+  animation-delay: 165ms;
+}
+.ap-slots > *:nth-child(n + 5) {
+  animation-delay: 220ms;
+}
+.ap-slot:not(.done):hover {
+  transform: translateY(-2px);
+  border-color: var(--ap-green) !important;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.14);
+}
+.ap-add:not(:disabled):hover {
+  transform: translateY(-2px);
+  border-color: var(--ap-green) !important;
+  color: var(--ap-green-strong) !important;
+}
+/* La vidéo en cours de création respire. */
+@keyframes gen-pulse {
+  50% {
+    box-shadow: 0 0 0 5px rgba(16, 185, 129, 0.14);
+  }
+}
+.ap-slot.gen {
+  animation: gen-pulse 1.6s ease-in-out infinite;
 }
 
 /* ── Graphique : repères en HTML par-dessus le SVG étiré ── */

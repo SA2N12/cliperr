@@ -2159,6 +2159,7 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
     return (
       <button
         key={`${s.user}-${s.ordinal}`}
+        className={`ap-slot${s.done ? ' done' : ''}${generating ? ' gen' : ''}`}
         onClick={() => { if (!s.done) { setCfgUser(null); setEditSlot(s) } }}
         title={s.failed ? `Échec : ${s.error ?? ''} — clique pour changer / retenter` : s.done ? s.niche : `${s.niche} — clique pour personnaliser (heure, type)`}
         style={{
@@ -2172,8 +2173,7 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
           flexDirection: 'column',
           alignItems: 'center',
           gap: 6,
-          fontFamily: 'inherit',
-          transition: 'border-color .15s'
+          fontFamily: 'inherit'
         }}
       >
         <div className="ap-time" style={{ fontWeight: 700, fontSize: 13.5, color: s.failed ? 'var(--bad)' : s.done ? 'var(--ap-green-deep)' : 'var(--text)' }}>
@@ -2271,7 +2271,7 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
             const uDone = userSlots.filter((s) => s.done).length
             const uCredits = userSlots.reduce((sum, s) => sum + (s.credits ?? 0), 0)
             return (
-              <div key={u} style={{ display: 'flex', alignItems: 'center', gap: 12, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+              <div key={u} className="ap-acc-row" style={{ display: 'flex', alignItems: 'center', gap: 12, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
                 <div style={{ width: 176, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Avatar url={a.avatarUrl} name={u} size={32} />
                   <div style={{ minWidth: 0, flex: 1 }}>
@@ -2282,10 +2282,10 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
                     <Icon name="settings" size={14} />
                   </button>
                 </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, flex: 1, alignItems: 'stretch' }}>
+                <div className="ap-slots" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, flex: 1, alignItems: 'stretch' }}>
                   {userSlots.map((s) => renderBlock(s, { hideAvatar: true }))}
                   <button
-                    className="btn"
+                    className="btn ap-add"
                     disabled={userSlots.length >= 5}
                     onClick={() => void addVideo(u, userSlots.length)}
                     title={userSlots.length >= 5 ? 'Maximum atteint (5 vidéos/jour)' : 'Ajouter une vidéo (choix du type et de l’heure)'}
@@ -2782,21 +2782,33 @@ function Autopilot({ toast, ideaVideo }: { toast: (m: string) => void; ideaVideo
     <>
       <div className="page-head">
         <div><h1>Pilote automatique</h1><p>Chaque jour, du contenu adapté à chaque compte selon sa niche — généré et publié sans intervention.</p></div>
-        <button className="btn" onClick={() => void load()}><Icon name="refresh" size={15} /> Actualiser</button>
-      </div>
-
-      <div className={`card ${enabled ? 'ap-banner' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
-        <div style={{ flex: 1, minWidth: 240, display: 'flex', alignItems: 'center', gap: 13 }}>
-          <span style={{ width: 10, height: 10, borderRadius: '50%', flexShrink: 0, background: enabled ? 'var(--ap-green)' : 'var(--muted-2)', boxShadow: enabled ? '0 0 0 4px rgba(16, 185, 129, 0.18)' : 'none' }} />
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 16, color: enabled ? 'var(--ap-green-deep)' : undefined }}>{enabled ? 'Pilote actif' : 'Pilote en pause'}</div>
-            <div className="muted small">{enabled ? `Génère et publie automatiquement selon la cadence de chaque compte — ${totalPerDay} vidéo${totalPerDay > 1 ? 's' : ''}/jour au total.` : 'Active-le pour lancer la production quotidienne 100% autonome.'}</div>
+        <div className="ap-switch-wrap">
+          <button
+            className="btn icon-btn"
+            disabled={!!state?.busy}
+            onClick={() => void runNow()}
+            title="Générer et publier 1 vidéo maintenant (test)"
+          >
+            <Icon name="bolt" size={15} />
+          </button>
+          <div style={{ textAlign: 'right' }}>
+            <div className="ap-switch-state">{state?.busy ? 'Génération…' : enabled ? 'En marche' : 'En pause'}</div>
+            <div className="muted small">
+              {enabled ? `${totalPerDay} vidéo${totalPerDay > 1 ? 's' : ''}/jour` : 'Production suspendue'}
+            </div>
           </div>
+          <button
+            className={`switch${enabled ? ' on' : ''}`}
+            role="switch"
+            aria-checked={enabled}
+            aria-label={enabled ? 'Mettre le pilote en pause' : 'Démarrer le pilote'}
+            title={enabled ? 'Mettre en pause' : 'Démarrer'}
+            disabled={saving}
+            onClick={() => void toggle()}
+          >
+            <span className="knob" />
+          </button>
         </div>
-        <button className={`btn ${enabled ? 'green' : ''}`} disabled={!!state?.busy} onClick={() => void runNow()} title="Génère et publie 1 vidéo maintenant (test)">
-          <Icon name="bolt" size={15} /> {state?.busy ? 'Génération…' : 'Tester maintenant'}
-        </button>
-        <button className={`btn ${enabled ? '' : 'green'}`} disabled={saving} onClick={toggle}>{enabled ? 'Désactiver' : 'Activer'}</button>
       </div>
 
       <TodayPlan ideaVideo={ideaVideo} toast={toast} groupByAccount onConfigSaved={() => void load()} />
