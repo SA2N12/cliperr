@@ -11,7 +11,7 @@ import {
   type SavedIdea
 } from './api'
 
-type Page = 'dashboard' | 'autopilot' | 'analyse' | 'generate' | 'ideas' | 'history' | 'clips' | 'published' | 'providers' | 'settings'
+type Page = 'dashboard' | 'autopilot' | 'analyse' | 'generate' | 'ideas' | 'history' | 'clips' | 'providers' | 'settings'
 
 const ICONS: Record<string, string> = {
   dashboard: 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z',
@@ -31,7 +31,6 @@ const ICONS: Record<string, string> = {
   check: 'M20 6L9 17l-5-5',
   send: 'M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z',
   clock: 'M12 7v5l3 2M12 3a9 9 0 100 18 9 9 0 000-18z',
-  folder: 'M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z',
   list: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
   bolt: 'M13 2L4 14h6l-1 8 9-12h-6l1-8z',
   globe: 'M12 3a9 9 0 100 18 9 9 0 000-18zM3 12h18M12 3c2.6 2.7 2.6 15.3 0 18M12 3c-2.6 2.7-2.6 15.3 0 18',
@@ -379,8 +378,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
     [
       { id: 'ideas', label: 'Idées virales', icon: 'bulb' },
       { id: 'generate', label: 'Générer', icon: 'spark' },
-      { id: 'clips', label: 'Clips', icon: 'clips' },
-      { id: 'published', label: 'Publiés', icon: 'send' }
+      { id: 'clips', label: 'Clips', icon: 'clips' }
     ],
     [
       { id: 'history', label: 'Historique', icon: 'list' },
@@ -448,7 +446,6 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
         {page === 'ideas' && <Ideas toast={showToast} go={setPage} />}
         {page === 'history' && <History sources={sources} clips={clips} progress={progress} onRefresh={refresh} toast={showToast} goClips={() => setPage('clips')} />}
         {page === 'clips' && <Clips clips={clips} sources={sources} onRefresh={refresh} toast={showToast} ttProfile={ttProfile} scope={scope} />}
-        {page === 'published' && <Published clips={clips} go={setPage} scope={scope} />}
         {page === 'analyse' && isAll && <Analyse toast={showToast} />}
         {page === 'providers' && <Providers go={setPage} />}
         {page === 'settings' && <Settings toast={showToast} onTtProfile={setTtProfile} />}
@@ -1338,33 +1335,61 @@ function Switch({ checked, onChange, label }: { checked: boolean; onChange: (v: 
   )
 }
 
-function ClipCard({ c, onReview, onPublish }: { c: ClipDTO; onReview: (id: number, s: ClipDTO['reviewStatus']) => void; onPublish: (c: ClipDTO) => void }): JSX.Element {
+const STATE_LABEL: Record<ClipDTO['publishStatus'], string> = {
+  published: 'Publié',
+  failed: 'Échec',
+  scheduled: 'Programmé',
+  unpublished: 'En stock'
+}
+
+/** Vignette d'un clip : aperçu 9:16, statut et origine en surimpression, actions en pied. */
+function ClipCard({ c, ai, onReview, onPublish }: { c: ClipDTO; ai: boolean; onReview: (id: number, s: ClipDTO['reviewStatus']) => void; onPublish: (c: ClipDTO) => void }): JSX.Element {
+  const published = c.publishStatus === 'published'
+  const account = c.publishedAccount || c.profile
+  const when = new Date(c.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })
   return (
-    <div className="card" style={{ padding: 12 }}>
-      {c.filePath ? (
-        <video src={clipUrl(c.filePath)} controls style={{ width: '100%', borderRadius: 10, background: '#000', aspectRatio: '9 / 16' }} />
-      ) : (
-        <div className="muted small">Pas d’aperçu</div>
-      )}
-      <div style={{ fontWeight: 600, marginTop: 8, fontSize: 14 }}>{c.title || `Clip ${Math.round(c.startSec)}s`}</div>
-      {c.hashtags && <div className="small" style={{ color: 'var(--accent)', marginTop: 2 }}>{c.hashtags}</div>}
-      <div className="row" style={{ marginTop: 8 }}>
-        <span className="small muted">{c.score != null ? `score ${(c.score * 100).toFixed(0)}%` : ''}</span>
-        <span className="chip" style={{ background: c.publishStatus === 'published' ? '#dcfce7' : 'var(--accent-soft)', color: c.publishStatus === 'published' ? 'var(--good)' : 'var(--accent-strong)' }}>{c.publishStatus}</span>
+    <article className="clip-card">
+      <div className="clip-media">
+        {c.filePath ? (
+          <video src={clipUrl(c.filePath)} controls preload="metadata" />
+        ) : (
+          <div className="clip-noprev"><MIcon name="warning" size={18} /> Pas d’aperçu</div>
+        )}
+        <span className={`clip-state${published ? ' ok' : c.publishStatus === 'failed' ? ' bad' : ''}`}>
+          {STATE_LABEL[c.publishStatus]}
+        </span>
+        <span className="clip-kind">{ai ? 'IA' : 'Découpe'}</span>
       </div>
-      <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
-        {c.reviewStatus !== 'approved' && <button className="btn small" onClick={() => onReview(c.id, 'approved')}>Approuver</button>}
-        {c.reviewStatus !== 'rejected' && <button className="btn small" onClick={() => onReview(c.id, 'rejected')}>Rejeter</button>}
-        <button className="btn primary small" onClick={() => onPublish(c)}>{c.publishStatus === 'published' ? 'Republier' : 'Publier'}</button>
+      <div className="clip-body">
+        <div className="clip-title" title={c.title ?? undefined}>{c.title || `Clip ${Math.round(c.startSec)}s`}</div>
+        {c.hashtags && <div className="clip-tags">{c.hashtags}</div>}
+        <div className="clip-meta">
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{account || '—'}</span>
+          <span style={{ flexShrink: 0 }}>{when}</span>
+        </div>
       </div>
-    </div>
+      <div className="clip-actions">
+        {published ? (
+          c.postUrl && (
+            <a className="btn small" href={c.postUrl} target="_blank" rel="noreferrer">Voir le post</a>
+          )
+        ) : (
+          <>
+            {c.reviewStatus !== 'approved' && <button className="btn small" onClick={() => onReview(c.id, 'approved')}>Approuver</button>}
+            {c.reviewStatus !== 'rejected' && <button className="btn small" onClick={() => onReview(c.id, 'rejected')}>Rejeter</button>}
+          </>
+        )}
+        <button className="btn primary small" style={{ marginLeft: 'auto' }} onClick={() => onPublish(c)}>
+          {published ? 'Republier' : 'Publier'}
+        </button>
+      </div>
+    </article>
   )
 }
 
 function Clips({ clips, sources, onRefresh, toast, ttProfile, scope }: { clips: ClipDTO[]; sources: SourceDTO[]; onRefresh: () => Promise<void>; toast: (m: string) => void; ttProfile: { nickname: string | null } | null; scope: string }): JSX.Element {
   const [modal, setModal] = useState<ClipDTO | null>(null)
-  const [open, setOpen] = useState<number | null>(null)
-  const [tab, setTab] = useState<'creator' | 'ai'>('creator')
+  const [tab, setTab] = useState<'stock' | 'published'>('stock')
   const [autoApprove, setAutoApprove] = useState(false)
   useEffect(() => {
     api.getFlag('auto_approve').then((r) => setAutoApprove(r.value === '1')).catch(() => undefined)
@@ -1379,58 +1404,25 @@ function Clips({ clips, sources, onRefresh, toast, ttProfile, scope }: { clips: 
     await onRefresh()
   }
 
-  // Sépare les clips IA (vidéos générées depuis une idée) des clips « créateur ».
+  // Origine du clip (IA depuis une idée, ou découpe d'une vidéo source) — affichée
+  // sur la vignette, ce qui remplace l'ancienne séparation en deux onglets.
   const aiIds = new Set(sources.filter((s) => (s.url ?? '').startsWith('idea:')).map((s) => s.id))
   const isAI = (c: ClipDTO): boolean => aiIds.has(c.sourceId) || c.reason === 'Vidéo générée depuis une idée'
   // Portée : « Tous les comptes » → tout ; sinon uniquement les clips du profil choisi.
-  const forProfile = (c: ClipDTO): boolean => scope === ALL_SCOPE || c.profile === scope
-  const creatorClips = clips.filter((c) => !isAI(c) && forProfile(c))
-  const aiClips = clips.filter((c) => isAI(c) && forProfile(c)).sort((a, b) => b.createdAt - a.createdAt)
-
-  const groups = new Map<number, ClipDTO[]>()
-  for (const c of creatorClips) {
-    const arr = groups.get(c.sourceId) ?? []
-    arr.push(c)
-    groups.set(c.sourceId, arr)
-  }
-  const srcMap = new Map(sources.map((s) => [s.id, s]))
-  const srcTitle = (id: number): string => {
-    const s = srcMap.get(id)
-    return s?.title || s?.url?.split(/[\\/]/).pop() || `Source #${id}`
-  }
-  const gridStyle = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 16 } as const
+  const forProfile = (c: ClipDTO): boolean => scope === ALL_SCOPE || c.profile === scope || c.publishedAccount === scope
+  const mine = clips.filter(forProfile)
+  const byDate = (a: ClipDTO, b: ClipDTO): number => b.createdAt - a.createdAt
+  const published = mine.filter((c) => c.publishStatus === 'published').sort(byDate)
+  const stock = mine.filter((c) => c.publishStatus !== 'published').sort(byDate)
+  const list = tab === 'published' ? published : stock
   const modalNode = modal && <PublishModal clip={modal} ttNickname={ttProfile?.nickname ?? null} onClose={() => setModal(null)} onDone={onRefresh} toast={toast} />
 
-  // Vue détaillée d'un dossier (onglet créateur)
-  if (tab === 'creator' && open !== null) {
-    const list = (groups.get(open) ?? []).slice().sort((a, b) => a.startSec - b.startSec)
-    return (
-      <>
-        <div className="page-head">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <button className="btn icon-btn" onClick={() => setOpen(null)} title="Retour aux dossiers">←</button>
-            <div>
-              <h1 style={{ fontSize: 22 }}>{srcTitle(open)}</h1>
-              <p>{list.length} clip{list.length > 1 ? 's' : ''} découpé{list.length > 1 ? 's' : ''} sur cette vidéo</p>
-            </div>
-          </div>
-        </div>
-        <div style={gridStyle}>
-          {list.map((c) => <ClipCard key={c.id} c={c} onReview={review} onPublish={(x) => setModal(x)} />)}
-        </div>
-        {modalNode}
-      </>
-    )
-  }
-
-  const changeTab = (t: 'creator' | 'ai'): void => { setTab(t); setOpen(null) }
-  const folders = [...groups.entries()].sort((a, b) => b[0] - a[0])
   return (
     <>
       <div className="page-head">
         <div>
           <h1>Clips</h1>
-          <p>Tes clips à valider et publier, séparés par type.</p>
+          <p>Tes clips à valider et publier.</p>
         </div>
         <div className="card" style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
           <Switch checked={autoApprove} onChange={toggleAuto} label="Auto-approuver" />
@@ -1441,37 +1433,31 @@ function Clips({ clips, sources, onRefresh, toast, ttProfile, scope }: { clips: 
       </div>
 
       <div className="tabs" style={{ marginBottom: 16 }}>
-        <button className={`tab ${tab === 'creator' ? 'on' : ''}`} onClick={() => changeTab('creator')}><Icon name="clips" size={16} /> Clips créateur de contenu</button>
-        <button className={`tab ${tab === 'ai' ? 'on' : ''}`} onClick={() => changeTab('ai')}><Icon name="bulb" size={16} /> Clips IA</button>
+        <button className={`tab ${tab === 'stock' ? 'on' : ''}`} onClick={() => setTab('stock')}>
+          <Icon name="clips" size={16} /> En stock <span className="tab-count">{stock.length}</span>
+        </button>
+        <button className={`tab ${tab === 'published' ? 'on' : ''}`} onClick={() => setTab('published')}>
+          <Icon name="send" size={16} /> Publiés <span className="tab-count">{published.length}</span>
+        </button>
       </div>
 
-      {tab === 'creator' ? (
-        folders.length === 0 ? (
-          <div className="card muted">Aucun clip découpé pour l’instant. Va sur « Générer ».</div>
-        ) : (
-          <div className="folder-grid">
-            {folders.map(([sid, list]) => {
-              const pub = list.filter((c) => c.publishStatus === 'published').length
-              return (
-                <div key={sid} className="card folder" onClick={() => setOpen(sid)}>
-                  <div className="fic"><Icon name="folder" /></div>
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{srcTitle(sid)}</div>
-                    <div className="muted small">
-                      {list.length} clip{list.length > 1 ? 's' : ''}
-                      {pub > 0 ? ` · ${pub} publié${pub > 1 ? 's' : ''}` : ''}
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
+      {list.length === 0 ? (
+        <div className="card" style={{ textAlign: 'center', padding: 36 }}>
+          <div className="dz-icon" style={{ margin: '0 auto 12px' }}><Icon name={tab === 'published' ? 'send' : 'clips'} size={24} /></div>
+          <div style={{ fontWeight: 600 }}>
+            {tab === 'published' ? 'Aucun clip publié pour l’instant' : 'Aucun clip en stock'}
           </div>
-        )
-      ) : aiClips.length === 0 ? (
-        <div className="card muted">Aucune vidéo IA. Va sur « Mes idées » et clique « 🎬 Vidéo » sur une idée.</div>
+          <p className="muted small">
+            {tab === 'published'
+              ? 'Les clips que tu publies (à la main ou via le pilote auto) apparaîtront ici.'
+              : 'Génère une vidéo depuis une idée, ou découpe une vidéo depuis « Générer ».'}
+          </p>
+        </div>
       ) : (
-        <div style={gridStyle}>
-          {aiClips.map((c) => <ClipCard key={c.id} c={c} onReview={review} onPublish={(x) => setModal(x)} />)}
+        <div className="clip-grid">
+          {list.map((c) => (
+            <ClipCard key={c.id} c={c} ai={isAI(c)} onReview={review} onPublish={(x) => setModal(x)} />
+          ))}
         </div>
       )}
       {modalNode}
@@ -2334,93 +2320,6 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
   )
 }
 
-const UNKNOWN_ACCOUNT = '__unknown__'
-
-function Published({ clips, go, scope }: { clips: ClipDTO[]; go: (p: Page) => void; scope: string }): JSX.Element {
-  const [open, setOpen] = useState<string | null>(null)
-  const pub = clips.filter(
-    (c) => c.publishStatus === 'published' && (scope === ALL_SCOPE || c.publishedAccount === scope || c.profile === scope)
-  )
-
-  const groups = new Map<string, ClipDTO[]>()
-  for (const c of pub) {
-    const key = c.publishedAccount || UNKNOWN_ACCOUNT
-    const arr = groups.get(key) ?? []
-    arr.push(c)
-    groups.set(key, arr)
-  }
-  const label = (key: string): string => (key === UNKNOWN_ACCOUNT ? 'Compte inconnu' : key)
-
-  const cardGrid = (list: ClipDTO[]): JSX.Element => (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 16 }}>
-      {list.slice().sort((a, b) => b.createdAt - a.createdAt).map((c) => (
-        <div key={c.id} className="card" style={{ padding: 12 }}>
-          {c.filePath ? (
-            <video src={clipUrl(c.filePath)} controls style={{ width: '100%', borderRadius: 10, background: '#000', aspectRatio: '9 / 16' }} />
-          ) : (
-            <div className="muted small">Pas d’aperçu</div>
-          )}
-          <div style={{ fontWeight: 600, marginTop: 8, fontSize: 14 }}>{c.title || `Clip ${Math.round(c.startSec)}s`}</div>
-          {c.hashtags && <div className="small" style={{ color: 'var(--accent)', marginTop: 2 }}>{c.hashtags}</div>}
-          <div className="row" style={{ marginTop: 8 }}>
-            <span className="small muted" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.publishedAccount || '—'}</span>
-            <span className="chip" style={{ background: '#dcfce7', color: 'var(--good)' }}>✓ publié</span>
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-
-  if (pub.length === 0) {
-    return (
-      <>
-        <div className="page-head"><div><h1>Publiés (0)</h1><p>Tes clips publiés, rangés par compte.</p></div></div>
-        <div className="card" style={{ textAlign: 'center', padding: 36 }}>
-          <div className="dz-icon" style={{ margin: '0 auto 12px' }}><Icon name="send" size={24} /></div>
-          <div style={{ fontWeight: 600 }}>Aucun clip publié pour l’instant</div>
-          <p className="muted small">Publie des clips depuis l’onglet Clips (ou via la planification) — ils apparaîtront ici.</p>
-          <button className="btn primary" style={{ marginTop: 6 }} onClick={() => go('clips')}>Aller aux Clips</button>
-        </div>
-      </>
-    )
-  }
-
-  if (open !== null) {
-    const list = groups.get(open) ?? []
-    return (
-      <>
-        <div className="page-head">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <button className="btn icon-btn" onClick={() => setOpen(null)} title="Retour aux dossiers">←</button>
-            <div>
-              <h1 style={{ fontSize: 22 }}>{label(open)}</h1>
-              <p>{list.length} clip{list.length > 1 ? 's' : ''} publié{list.length > 1 ? 's' : ''} sur ce compte</p>
-            </div>
-          </div>
-        </div>
-        {cardGrid(list)}
-      </>
-    )
-  }
-
-  const folders = [...groups.entries()].sort((a, b) => b[1].length - a[1].length)
-  return (
-    <>
-      <div className="page-head"><div><h1>Publiés ({pub.length})</h1><p>Tes clips publiés, rangés par compte. Clique un dossier pour voir ses clips.</p></div></div>
-      <div className="folder-grid">
-        {folders.map(([key, list]) => (
-          <div key={key} className="card folder" onClick={() => setOpen(key)}>
-            <div className="fic"><Icon name="folder" /></div>
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label(key)}</div>
-              <div className="muted small">{list.length} clip{list.length > 1 ? 's' : ''} publié{list.length > 1 ? 's' : ''}</div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </>
-  )
-}
 
 function ideaToText(i: ViralIdea): string {
   return `${i.title}\n\nHook : ${i.hook}\nAngle : ${i.angle}\n\nScript :\n${i.script

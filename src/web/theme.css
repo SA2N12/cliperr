@@ -536,14 +536,149 @@ button {
   .skel,
   .ap-acc-row,
   .ap-slots > *,
-  .ap-slot.gen {
+  .ap-slot.gen,
+  .clip-card {
     animation: none !important;
   }
   .stat-grid > .card:hover,
   .ap-slot:not(.done):hover,
-  .ap-add:not(:disabled):hover {
+  .ap-add:not(:disabled):hover,
+  .clip-card:hover {
     transform: none;
   }
+}
+
+/* ── Clips : grille de vignettes (plus de dossiers) ── */
+.clip-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(208px, 1fr));
+  gap: 14px;
+}
+.clip-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  transition: transform 0.16s ease, border-color 0.16s ease;
+  animation: rise 0.45s cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
+}
+.clip-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--muted-2);
+}
+/* Entrée en cascade (plafonnée : au-delà de 10 vignettes tout arrive ensemble). */
+.clip-card:nth-child(2) { animation-delay: 35ms; }
+.clip-card:nth-child(3) { animation-delay: 70ms; }
+.clip-card:nth-child(4) { animation-delay: 105ms; }
+.clip-card:nth-child(5) { animation-delay: 140ms; }
+.clip-card:nth-child(6) { animation-delay: 175ms; }
+.clip-card:nth-child(7) { animation-delay: 210ms; }
+.clip-card:nth-child(8) { animation-delay: 245ms; }
+.clip-card:nth-child(9) { animation-delay: 280ms; }
+.clip-card:nth-child(n + 10) { animation-delay: 315ms; }
+
+.clip-media {
+  position: relative;
+  aspect-ratio: 9 / 16;
+  background: #000;
+}
+.clip-media video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.clip-noprev {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 100%;
+  color: var(--muted-2);
+  font-size: 12px;
+  background: var(--panel-2);
+}
+.clip-state,
+.clip-kind {
+  position: absolute;
+  top: 8px;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 3px 8px;
+  pointer-events: none;
+}
+.clip-state {
+  left: 8px;
+  background: rgba(255, 255, 255, 0.93);
+  color: var(--text);
+}
+.clip-state.ok {
+  background: var(--ap-green-soft);
+  color: var(--ap-green-deep);
+}
+.clip-state.bad {
+  background: #fee2e2;
+  color: var(--bad);
+}
+.clip-kind {
+  right: 8px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.clip-body {
+  padding: 10px 12px 0;
+  flex: 1;
+}
+.clip-title {
+  font-weight: 600;
+  font-size: 13.5px;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.clip-tags {
+  font-size: 12px;
+  color: var(--accent);
+  margin-top: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.clip-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.clip-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  flex-wrap: wrap;
+}
+/* Compteur dans les onglets */
+.tab-count {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 6px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.tab.on .tab-count {
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--accent-strong);
 }
 
 /* Icônes Google (Material Symbols) — remplacent les emojis. */
@@ -1318,37 +1453,6 @@ textarea:focus {
 }
 
 /* Dossiers (Clips par vidéo) */
-.folder-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-  gap: 14px;
-}
-.folder {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  cursor: pointer;
-  transition: border-color 0.15s, background 0.15s, transform 0.1s;
-}
-.folder:hover {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-}
-.folder:active {
-  transform: scale(0.99);
-}
-.folder .fic {
-  width: 46px;
-  height: 46px;
-  border-radius: 11px;
-  background: var(--accent-soft);
-  color: var(--accent-strong);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
 /* Wizard (Générer) */
 .stepper {
   display: flex;
