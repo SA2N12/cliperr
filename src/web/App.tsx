@@ -435,7 +435,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
 
       <main className="main">
         <TopBar state={pub} />
-        {page === 'dashboard' && <Dashboard log={log} go={setPage} onRefresh={refresh} scope={scope} />}
+        {page === 'dashboard' && <Dashboard scope={scope} />}
         {page === 'autopilot' && isAll && <Autopilot toast={showToast} ideaVideo={ideaVideo} />}
         {page === 'generate' && <Generate sources={sources} progress={progress} onRefresh={refresh} toast={showToast} goHistory={() => setPage('history')} />}
         {page === 'ideas' && <Ideas toast={showToast} go={setPage} />}
@@ -580,7 +580,7 @@ function ConsolePanel({ live, onClose }: { live: string[]; onClose: () => void }
   )
 }
 
-function Dashboard({ log, go, onRefresh, scope }: { log: string[]; go: (p: Page) => void; onRefresh: () => Promise<void>; scope: string }): JSX.Element {
+function Dashboard({ scope }: { scope: string }): JSX.Element {
   const [data, setData] = useState<AnalyticsProfile[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState<AnalyticsProfile | null>(null)
@@ -690,12 +690,6 @@ function Dashboard({ log, go, onRefresh, scope }: { log: string[]; go: (p: Page)
         <div>
           <h1>Tableau de bord</h1>
           <p>Performances de tes comptes TikTok (30 derniers jours).</p>
-        </div>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button className="btn" onClick={() => go('generate')}><Icon name="spark" size={16} /> Générer</button>
-          <button className="btn icon-btn" onClick={() => { void onRefresh(); void loadPerf() }} title="Rafraîchir">
-            <Icon name="refresh" size={16} />
-          </button>
         </div>
       </div>
 
