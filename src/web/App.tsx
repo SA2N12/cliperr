@@ -1868,15 +1868,29 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
   }, [user])
 
   // Écoute un court extrait de la voix sélectionnée (générée à la volée côté serveur).
-  const playVoice = (): void => {
+  // On passe par fetch (et non `new Audio(url)`) pour pouvoir LIRE le message
+  // d'erreur du serveur : un <audio> ne sait dire que « ça n'a pas marché », ce
+  // qui masquait des causes précises (quota de la clé, voix inconnue…).
+  const playVoice = async (): Promise<void> => {
     if (voicePlaying) return
     const v = voice || 'ash'
-    if (!v) { toast('Choisis une voix'); return }
     setVoicePlaying(true)
-    const a = new Audio(`/api/tts/preview?voice=${encodeURIComponent(v)}`)
-    a.onended = () => setVoicePlaying(false)
-    a.onerror = () => { setVoicePlaying(false); toast('Aperçu voix indisponible') }
-    a.play().catch(() => { setVoicePlaying(false); toast('Aperçu voix indisponible') })
+    try {
+      const res = await fetch(`/api/tts/preview?voice=${encodeURIComponent(v)}`)
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string }
+        throw new Error(j.error || `Erreur ${res.status}`)
+      }
+      const url = URL.createObjectURL(await res.blob())
+      const a = new Audio(url)
+      const done = (): void => { setVoicePlaying(false); URL.revokeObjectURL(url) }
+      a.onended = done
+      a.onerror = () => { done(); toast('Lecture impossible') }
+      await a.play()
+    } catch (e) {
+      setVoicePlaying(false)
+      toast(`Aperçu indisponible — ${(e as Error).message}`.slice(0, 220))
+    }
   }
 
   // Champ CTA d'un type de vidéo, rendu au bas de l'onglet correspondant
@@ -1967,7 +1981,7 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
                     </optgroup>
                   )}
                 </select>
-                <button className="btn" type="button" onClick={playVoice} disabled={voicePlaying} title="Écouter un extrait de cette voix" style={{ flexShrink: 0 }}>
+                <button className="btn" type="button" onClick={() => void playVoice()} disabled={voicePlaying} title="Écouter un extrait de cette voix" style={{ flexShrink: 0 }}>
                   {voicePlaying ? <MIcon name="progress_activity" size={14} spin /> : <MIcon name="play_arrow" size={14} />} Écouter
                 </button>
               </div>
