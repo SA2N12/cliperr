@@ -31,6 +31,12 @@ const post = <T>(p: string, body?: unknown): Promise<T> =>
   req<T>(p, { method: 'POST', body: body == null ? undefined : JSON.stringify(body) })
 
 export const api = {
+  // Journal d'activité persistant (console). `before` = id exclusif → page plus ancienne.
+  activity: (before?: number, limit = 200) =>
+    req<{ id: number; message: string; createdAt: number }[]>(
+      `/api/activity?limit=${limit}${before ? `&before=${before}` : ''}`
+    ),
+
   // Auth
   me: () => req<{ authed: boolean }>('/api/me'),
   login: (password: string) => post('/api/login', { password }),

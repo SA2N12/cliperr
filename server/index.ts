@@ -1093,6 +1093,15 @@ const wrap = (fn: (req: Request, res: Response) => unknown) => (req: Request, re
 // Événements temps réel
 app.get('/api/events', sseHandler)
 
+// Historique complet de l'activité (console du dashboard). `before` = id
+// exclusif pour remonter le fil page par page.
+app.get('/api/activity', wrap((req, res) => {
+  const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 200))
+  const beforeRaw = Number(req.query.before)
+  const before = Number.isFinite(beforeRaw) && beforeRaw > 0 ? beforeRaw : undefined
+  res.json(repo.listActivity(limit, before))
+}))
+
 // Sources
 app.get('/api/sources', wrap((_req, res) => res.json(repo.listSources())))
 app.post('/api/sources', wrap((req, res) => {

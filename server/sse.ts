@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express'
+import * as repo from '../src/main/db/repo'
 
 // Bus d'événements simple : le serveur pousse la progression du pipeline et les
 // logs de publication vers les clients connectés via Server-Sent Events.
@@ -36,9 +37,18 @@ export function emitProgress(ev: unknown): void {
   broadcastRaw('progress', ev)
 }
 
-/** Ligne de journal (publication, planification, etc.). Aussi en console (docker logs). */
+/**
+ * Ligne de journal (publication, planification, etc.). Aussi en console (docker
+ * logs) et **persistée en base** : la console du dashboard peut ainsi relire
+ * tout l'historique, pas seulement les événements reçus depuis l'ouverture.
+ */
 export function emitLog(message: string): void {
   console.log(`[log] ${message}`)
+  try {
+    repo.addActivity(message)
+  } catch {
+    /* base pas encore prête (démarrage) : on ne bloque jamais un log */
+  }
   broadcastRaw('log', { message })
 }
 

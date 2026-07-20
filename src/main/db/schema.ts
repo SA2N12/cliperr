@@ -56,6 +56,14 @@ export const ideas = sqliteTable('ideas', {
   createdAt: integer('created_at').notNull()
 })
 
+// Journal d'activité persistant : chaque ligne poussée en SSE y est aussi
+// écrite, pour garder tout l'historique (la console du dashboard le relit).
+export const activityLog = sqliteTable('activity_log', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  message: text('message').notNull(),
+  createdAt: integer('created_at').notNull()
+})
+
 export const schedules = sqliteTable('schedules', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   cron: text('cron').notNull(),
@@ -118,6 +126,12 @@ CREATE TABLE IF NOT EXISTS ideas (
   data TEXT NOT NULL,
   created_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS activity_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  message TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_activity_log_id ON activity_log (id DESC);
 CREATE TABLE IF NOT EXISTS schedules (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   cron TEXT NOT NULL,

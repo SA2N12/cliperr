@@ -1,6 +1,6 @@
-import { eq, desc } from 'drizzle-orm'
+import { eq, desc, lt } from 'drizzle-orm'
 import { db } from './client'
-import { sources, clips, settings, ideas } from './schema'
+import { sources, clips, settings, ideas, activityLog } from './schema'
 import type { SourceDTO, ClipDTO, JobStatus, ViralIdea, SavedIdea } from '../../shared/types'
 
 type SourceRow = typeof sources.$inferSelect
@@ -178,4 +178,23 @@ export function getIdea(id: number): SavedIdea | null {
 
 export function deleteIdea(id: number): void {
   db().delete(ideas).where(eq(ideas.id, id)).run()
+}
+
+// ── Journal d'activité (console du dashboard) ──
+export type ActivityRow = { id: number; message: string; createdAt: number }
+
+export function addActivity(message: string): void {
+  db().insert(activityLog).values({ message, createdAt: Date.now() }).run()
+}
+
+/**
+ * Page d'historique, du plus récent au plus ancien. `before` = id exclusif
+ * (pagination « charger plus ancien » en remontant le fil).
+ */
+export function listActivity(limit = 200, before?: number): ActivityRow[] {
+  const q = db().select().from(activityLog)
+  const rows = before
+    ? q.where(lt(activityLog.id, before)).orderBy(desc(activityLog.id)).limit(limit).all()
+    : q.orderBy(desc(activityLog.id)).limit(limit).all()
+  return rows
 }

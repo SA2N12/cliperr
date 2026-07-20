@@ -397,29 +397,15 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
         <div className="tb-search" title="Recherche (bientôt)">
           <Icon name="search" size={14} /> Rechercher <span className="kbd">Ctrl K</span>
         </div>
-        {/* Console d'activité (style bouton « console » de Supabase) : panneau
-            déroulant ancré à droite, hors du flux de la page. */}
-        <div className="tb-console-wrap">
-          <button
-            className={`tb-console${consoleOpen ? ' open' : ''}`}
-            title="Activité en direct"
-            onClick={() => setConsoleOpen((v) => !v)}
-          >
-            <Icon name="terminal" size={14} /> Console
-          </button>
-          {consoleOpen && (
-            <>
-              <div className="tb-console-backdrop" onClick={() => setConsoleOpen(false)} />
-              <div className="tb-console-panel">
-                <div className="row" style={{ marginBottom: 8 }}>
-                  <strong style={{ fontSize: 13 }}>Activité en direct</strong>
-                  <span className="chip">SSE</span>
-                </div>
-                <pre>{log.join('\n') || 'En attente…'}</pre>
-              </div>
-            </>
-          )}
-        </div>
+        {/* Console d'activité (style bouton « console » de Supabase) : ouvre un
+            volet latéral venant de la droite (rendu hors du header). */}
+        <button
+          className={`tb-console${consoleOpen ? ' open' : ''}`}
+          title="Activité — historique complet"
+          onClick={() => setConsoleOpen((v) => !v)}
+        >
+          <Icon name="terminal" size={14} /> Console
+        </button>
         {/* Compte du dashboard : tuile dégradé bleu → vert pastel, sans bordure. */}
         <button
           className="tb-account"
@@ -428,6 +414,8 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
           style={{ background: 'linear-gradient(135deg, #bae6fd 0%, #99f6e4 55%, #bbf7d0 100%)' }}
         />
       </header>
+
+      {consoleOpen && <ConsolePanel live={log} onClose={() => setConsoleOpen(false)} />}
 
       {/* Barre repliée en colonne d'icônes ; se déploie au survol par-dessus le
           contenu (les libellés `.lbl` apparaissent en fondu). */}
@@ -503,6 +491,92 @@ function AreaChart({ data }: { data: Bucket[] }): JSX.Element {
         <span className="small muted">{data[n - 1]?.label}</span>
       </div>
     </div>
+  )
+}
+
+/**
+ * Console d'activité : volet latéral qui arrive de la DROITE. Affiche tout
+ * l'historique persisté en base (pagination « plus ancien »), plus les lignes
+ * reçues en direct depuis l'ouverture du volet.
+ */
+function ConsolePanel({ live, onClose }: { live: string[]; onClose: () => void }): JSX.Element {
+  const [rows, setRows] = useState<{ id: number; message: string; createdAt: number }[]>([])
+  const [loading, setLoading] = useState(true)
+  const [more, setMore] = useState(false)
+  const [end, setEnd] = useState(false)
+  // `live` est trié du plus récent au plus ancien : les nouveautés arrivent en tête.
+  const baseLen = useRef(live.length)
+  const fresh = live.slice(0, Math.max(0, live.length - baseLen.current))
+
+  useEffect(() => {
+    api
+      .activity()
+      .then((r) => {
+        setRows(r)
+        if (r.length < 200) setEnd(true)
+      })
+      .catch(() => undefined)
+      .finally(() => setLoading(false))
+  }, [])
+
+  const loadOlder = async (): Promise<void> => {
+    const last = rows[rows.length - 1]
+    if (!last) return
+    setMore(true)
+    try {
+      const r = await api.activity(last.id)
+      setRows((cur) => [...cur, ...r])
+      if (r.length < 200) setEnd(true)
+    } catch {
+      /* ignoré */
+    } finally {
+      setMore(false)
+    }
+  }
+
+  const fmtTime = (ts: number): string =>
+    new Date(ts).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+
+  return (
+    <>
+      <div className="console-backdrop" onClick={onClose} />
+      <aside className="console-panel">
+        <div className="cp-head">
+          <div className="row">
+            <strong>Activité</strong>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <span className="chip">SSE</span>
+              <button className="btn icon-btn" onClick={onClose} title="Fermer" style={{ width: 28, height: 28, fontSize: 14 }}>✕</button>
+            </div>
+          </div>
+          <p className="muted small" style={{ margin: '4px 0 0' }}>Historique complet de Cliperr</p>
+        </div>
+        <div className="cp-body">
+          {fresh.map((l, i) => (
+            <div key={`live-${i}`} className="cp-line live">{l}</div>
+          ))}
+          {loading && <div className="muted small">Chargement de l'historique…</div>}
+          {!loading && rows.length === 0 && fresh.length === 0 && (
+            <div className="muted small">Aucune activité enregistrée pour l'instant.</div>
+          )}
+          {rows.map((r) => (
+            <div key={r.id} className="cp-line">
+              <span className="cp-time">{fmtTime(r.createdAt)}</span>
+              {r.message}
+            </div>
+          ))}
+        </div>
+        <div className="cp-foot">
+          {end ? (
+            <span className="muted small">Début de l'historique</span>
+          ) : (
+            <button className="btn" disabled={more || loading} onClick={() => void loadOlder()}>
+              {more ? 'Chargement…' : 'Charger plus ancien'}
+            </button>
+          )}
+        </div>
+      </aside>
+    </>
   )
 }
 
