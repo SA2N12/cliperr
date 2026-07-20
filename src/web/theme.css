@@ -144,6 +144,56 @@ button {
 .topbar .tb-search:hover {
   border-color: var(--muted-2);
 }
+/* Bouton « Console » (activité en direct) à droite de la recherche + panneau. */
+.tb-console-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+.tb-console {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 7px 11px;
+  color: var(--muted-2);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.tb-console:hover,
+.tb-console.open {
+  border-color: var(--muted-2);
+  color: var(--text);
+}
+.tb-console-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+}
+.tb-console-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 61;
+  width: 460px;
+  max-width: 80vw;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+}
+.tb-console-panel pre {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 12px;
+  color: var(--muted);
+  max-height: 320px;
+  overflow: auto;
+  font-family: var(--mono, ui-monospace, Menlo, monospace);
+}
+
 .topbar .tb-search .kbd {
   margin-left: auto;
   font-size: 11px;

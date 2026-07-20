@@ -35,7 +35,8 @@ const ICONS: Record<string, string> = {
   list: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
   bolt: 'M13 2L4 14h6l-1 8 9-12h-6l1-8z',
   globe: 'M12 3a9 9 0 100 18 9 9 0 000-18zM3 12h18M12 3c2.6 2.7 2.6 15.3 0 18M12 3c-2.6 2.7-2.6 15.3 0 18',
-  plug: 'M4 5h16v5H4zM4 14h16v5H4zM7.5 7h.01M7.5 16h.01'
+  plug: 'M4 5h16v5H4zM4 14h16v5H4zM7.5 7h.01M7.5 16h.01',
+  terminal: 'M4 17l6-5-6-5M12 19h8'
 }
 
 // Valeur spéciale du sélecteur en haut à droite : « Tous les comptes » (vue globale).
@@ -282,6 +283,8 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
   const [log, setLog] = useState<string[]>([])
   const [ttProfile, setTtProfile] = useState<{ nickname: string | null; avatarUrl: string | null } | null>(null)
   const [toast, setToast] = useState('')
+  // Console « Activité en direct » : ouverte depuis la topbar (à droite de la recherche).
+  const [consoleOpen, setConsoleOpen] = useState(false)
   const [progress, setProgress] = useState<Record<number, ProgressEvent>>({})
   const [ideaVideo, setIdeaVideo] = useState<Record<number, { status: 'running' | 'done' | 'error'; message: string }>>({})
   const [pub, setPub] = useState<PublishStateT | null>(null)
@@ -393,6 +396,29 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
         <div style={{ flex: 1 }} />
         <div className="tb-search" title="Recherche (bientôt)">
           <Icon name="search" size={14} /> Rechercher <span className="kbd">Ctrl K</span>
+        </div>
+        {/* Console d'activité (style bouton « console » de Supabase) : panneau
+            déroulant ancré à droite, hors du flux de la page. */}
+        <div className="tb-console-wrap">
+          <button
+            className={`tb-console${consoleOpen ? ' open' : ''}`}
+            title="Activité en direct"
+            onClick={() => setConsoleOpen((v) => !v)}
+          >
+            <Icon name="terminal" size={14} /> Console
+          </button>
+          {consoleOpen && (
+            <>
+              <div className="tb-console-backdrop" onClick={() => setConsoleOpen(false)} />
+              <div className="tb-console-panel">
+                <div className="row" style={{ marginBottom: 8 }}>
+                  <strong style={{ fontSize: 13 }}>Activité en direct</strong>
+                  <span className="chip">SSE</span>
+                </div>
+                <pre>{log.join('\n') || 'En attente…'}</pre>
+              </div>
+            </>
+          )}
         </div>
         {/* Compte du dashboard : tuile dégradé bleu → vert pastel, sans bordure. */}
         <button
@@ -656,29 +682,17 @@ function Dashboard({ log, go, onRefresh, scope }: { log: string[]; go: (p: Page)
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 16, marginTop: 12, alignItems: 'start' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
-              <div className="card">
-                <div className="row">
-                  <div>
-                    <strong>Vues dans le temps</strong>
-                  </div>
-                </div>
-                <div style={{ marginTop: 14 }}><AreaChart data={buckets} /></div>
-                <div className="metrics-row">
-                  <div className="metric"><div className="ml">Total période</div><div className="mv">{fmtNum(totalPeriod)}</div></div>
-                  <div className="metric"><div className="ml">Moyenne / jour</div><div className="mv">{fmtNum(avgPerDay)}</div></div>
-                  <div className="metric"><div className="ml">Pic</div><div className="mv">{fmtNum(peak.count)} · {peak.label}</div></div>
+            <div className="card">
+              <div className="row">
+                <div>
+                  <strong>Vues dans le temps</strong>
                 </div>
               </div>
-
-              <div className="card">
-                <div className="row" style={{ marginBottom: 8 }}>
-                  <strong>Activité en direct</strong>
-                  <span className="chip">SSE</span>
-                </div>
-                <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: 12, color: 'var(--muted)', maxHeight: 84, overflow: 'auto', fontFamily: 'ui-monospace, Menlo, monospace' }}>
-                  {log.join('\n') || 'En attente…'}
-                </pre>
+              <div style={{ marginTop: 14 }}><AreaChart data={buckets} /></div>
+              <div className="metrics-row">
+                <div className="metric"><div className="ml">Total période</div><div className="mv">{fmtNum(totalPeriod)}</div></div>
+                <div className="metric"><div className="ml">Moyenne / jour</div><div className="mv">{fmtNum(avgPerDay)}</div></div>
+                <div className="metric"><div className="ml">Pic</div><div className="mv">{fmtNum(peak.count)} · {peak.label}</div></div>
               </div>
             </div>
 
@@ -708,14 +722,14 @@ function Dashboard({ log, go, onRefresh, scope }: { log: string[]; go: (p: Page)
                       </div>
                       <Sparkline data={p.timeseries.map((t) => t.value)} />
                     </div>
-                    <div style={{ display: 'flex', gap: 14, marginTop: 2, alignItems: 'flex-end', lineHeight: 1.25 }}>
-                      {[['Vues', fmtNum(p.views), true], ['Likes', fmtNum(p.likes), false], ['Comment.', fmtNum(p.comments), false], ['Partages', fmtNum(p.shares), false]].map(([l, v, big]) => (
-                        <div key={l as string}>
-                          <div style={{ fontWeight: 700, fontSize: big ? 15 : 13, color: big ? 'var(--accent-strong)' : undefined }}>{v}</div>
-                          <div className="muted small">{l}</div>
-                        </div>
+                    <div style={{ display: 'flex', gap: 11, marginTop: 1, alignItems: 'baseline', lineHeight: 1.25 }}>
+                      {[['vues', fmtNum(p.views), true], ['likes', fmtNum(p.likes), false], ['com.', fmtNum(p.comments), false], ['part.', fmtNum(p.shares), false]].map(([l, v, big]) => (
+                        <span key={l as string} style={{ whiteSpace: 'nowrap' }}>
+                          <b style={{ fontWeight: 700, fontSize: big ? 15 : 13, color: big ? 'var(--accent-strong)' : undefined }}>{v}</b>
+                          <span className="muted small" style={{ marginLeft: 3 }}>{l}</span>
+                        </span>
                       ))}
-                      <span className="small" style={{ marginLeft: 'auto', alignSelf: 'center', color: 'var(--accent)', fontWeight: 600, flexShrink: 0 }}>Voir →</span>
+                      <span className="small" style={{ marginLeft: 'auto', color: 'var(--accent)', fontWeight: 600, flexShrink: 0 }}>Voir →</span>
                     </div>
                   </div>
                 ))}
