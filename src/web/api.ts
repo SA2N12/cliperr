@@ -216,7 +216,12 @@ export const api = {
     }>('/api/analyze', { force }),
   elevenlabsStatus: () => req<{ has: boolean }>('/api/settings/elevenlabs'),
   setElevenlabsKey: (key: string) => post('/api/settings/elevenlabs', { key }),
-  ttsVoices: () => req<{ provider: 'openai' | 'elevenlabs'; voices: { id: string; label: string }[]; error?: string }>('/api/tts/voices'),
+  ttsVoices: () =>
+    req<{
+      voices: { id: string; label: string; provider: 'openai' | 'elevenlabs' }[]
+      elevenlabs: boolean
+      error?: string
+    }>('/api/tts/voices'),
   rapidApiStatus: () => req<{ has: boolean }>('/api/settings/rapidapi'),
   setRapidApiKey: (key: string) => post('/api/settings/rapidapi', { key }),
   cookiesStatus: () => req<{ has: boolean }>('/api/settings/cookies'),

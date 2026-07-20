@@ -1809,8 +1809,8 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
   const [tracks, setTracks] = useState<string[]>([])
   const [voice, setVoice] = useState('')
   const [voicePlaying, setVoicePlaying] = useState(false)
-  const [voiceList, setVoiceList] = useState<{ id: string; label: string }[]>([])
-  const [voiceProvider, setVoiceProvider] = useState<'openai' | 'elevenlabs'>('openai')
+  const [elevenVoices, setElevenVoices] = useState<{ id: string; label: string }[]>([])
+  const [hasEleven, setHasEleven] = useState(false)
   const [clipChannels, setClipChannels] = useState('')
   const [serie, setSerie] = useState<SeriesCfg>({ enabled: false, title: '', universe: '', episode: 1 })
   const [tab, setTab] = useState<'niche' | 'serie' | 'custom' | 'clips'>('niche')
@@ -1861,13 +1861,16 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
       setSerie(p.series)
     }).catch(() => undefined)
     api.musicList().then((r) => setTracks(r.tracks)).catch(() => undefined)
-    api.ttsVoices().then((r) => { setVoiceProvider(r.provider); setVoiceList(r.voices) }).catch(() => undefined)
+    api.ttsVoices().then((r) => {
+      setHasEleven(r.elevenlabs)
+      setElevenVoices(r.voices.filter((v) => v.provider === 'elevenlabs').map((v) => ({ id: v.id, label: v.label })))
+    }).catch(() => undefined)
   }, [user])
 
   // Écoute un court extrait de la voix sélectionnée (générée à la volée côté serveur).
   const playVoice = (): void => {
     if (voicePlaying) return
-    const v = voice || (voiceProvider === 'elevenlabs' ? voiceList[0]?.id ?? '' : 'ash')
+    const v = voice || 'ash'
     if (!v) { toast('Choisis une voix'); return }
     setVoicePlaying(true)
     const a = new Audio(`/api/tts/preview?voice=${encodeURIComponent(v)}`)
@@ -1953,16 +1956,27 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
             {/* Voix off du compte : une voix différente par compte diversifie le "son"
                 (utile contre la détection de contenu IA) et casse l'effet monotone. */}
             <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
-              <label className="muted small" style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>Voix off du compte {voiceProvider === 'elevenlabs' && <span className="chip" style={{ marginLeft: 4 }}>ElevenLabs</span>}</label>
+              <label className="muted small" style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>Voix off du compte</label>
               <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
+                {/* Les deux familles cohabitent : le fournisseur découle de la voix choisie. */}
                 <select className="input-full" style={{ flex: 1 }} value={voice} onChange={(e) => setVoice(e.target.value)}>
-                  {(voiceProvider === 'elevenlabs' ? [{ id: '', label: 'Par défaut (1re voix ElevenLabs)' }, ...voiceList] : TTS_VOICES).map((v) => <option key={v.id || 'default'} value={v.id}>{v.label}</option>)}
+                  {TTS_VOICES.map((v) => <option key={v.id || 'default'} value={v.id}>{v.label}</option>)}
+                  {elevenVoices.length > 0 && (
+                    <optgroup label="ElevenLabs — voix humaines">
+                      {elevenVoices.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}
+                    </optgroup>
+                  )}
                 </select>
                 <button className="btn" type="button" onClick={playVoice} disabled={voicePlaying} title="Écouter un extrait de cette voix" style={{ flexShrink: 0 }}>
                   {voicePlaying ? <MIcon name="progress_activity" size={14} spin /> : <MIcon name="play_arrow" size={14} />} Écouter
                 </button>
               </div>
-              <div className="muted small" style={{ marginTop: 4 }}>{voiceProvider === 'elevenlabs' ? 'Voix humaine ElevenLabs.' : "Voix OpenAI (bascule sur ElevenLabs dans Réglages pour des voix plus organiques)."} S'applique à la narration (niche, sujet libre) ; les séries gardent la voix native Veo.</div>
+              <div className="muted small" style={{ marginTop: 4 }}>
+                {hasEleven
+                  ? 'Voix OpenAI et ElevenLabs dans la même liste — le fournisseur suit la voix choisie.'
+                  : 'Voix OpenAI. Ajoute ta clé ElevenLabs dans les Réglages pour voir aussi ses voix humaines ici.'}
+                {' '}S’applique à la narration (niche, sujet libre) ; les séries gardent la voix native Veo.
+              </div>
             </div>
 
             {/* Playlist : réglage du COMPTE (elle sert aussi aux vidéos « Sujet libre »

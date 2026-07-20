@@ -397,11 +397,13 @@ async function runVideoGen(
         }
       }
     }
-    // Voix off : ElevenLabs (voix humaines) si activé + clé présente, sinon OpenAI TTS.
+    // Voix off : le fournisseur suit la VOIX choisie sur le compte (un id ElevenLabs
+    // ⇒ ElevenLabs), sinon le réglage global. Sans clé ElevenLabs → OpenAI.
     const elevenKey = getEncrypted('elevenlabs_key')
-    const useEleven = (repo.getSetting('voice_provider') || 'openai') === 'elevenlabs' && !!elevenKey
+    const globalEleven = (repo.getSetting('voice_provider') || 'openai') === 'elevenlabs' && !!elevenKey
     const acctVoice = profileVoice()[targetProfile]
-    const narrationVoice = acctVoice || (useEleven ? repo.getSetting('elevenlabs_default_voice') || '' : repo.getSetting('tts_voice') || 'ash')
+    const narrationVoice = acctVoice || (globalEleven ? repo.getSetting('elevenlabs_default_voice') || '' : repo.getSetting('tts_voice') || 'ash')
+    const useEleven = !!elevenKey && (globalEleven || providerForVoice(narrationVoice) === 'elevenlabs')
     const { filePath, durationSec, usage } = await generateVideoFromIdea(ctx, {
       anthropicKey,
       anthropicModel: model,
@@ -2133,7 +2135,9 @@ app.post('/api/autopilot/account', wrap((req, res) => {
   if (b.voice !== undefined) {
     const v = String(b.voice ?? '').trim()
     const m = profileVoice()
-    if (v && OPENAI_VOICES.includes(v)) m[user] = v
+    // Voix OpenAI OU id de voix ElevenLabs (alphanumérique) : sans ce second cas,
+    // choisir une voix ElevenLabs sur un compte l'effaçait silencieusement.
+    if (v && (OPENAI_VOICES.includes(v) || /^[A-Za-z0-9]{12,48}$/.test(v))) m[user] = v
     else delete m[user] // vide / inconnue → voix par défaut
     repo.setSetting('profile_voice', JSON.stringify(m))
   }
@@ -2199,30 +2203,40 @@ app.post('/api/autopilot/account', wrap((req, res) => {
   res.json({ ok: true })
 }))
 
-// Fournisseur de voix off actif : elevenlabs (voix humaines) si activé + clé présente.
-function activeVoiceProvider(): 'openai' | 'elevenlabs' {
-  return (repo.getSetting('voice_provider') || 'openai') === 'elevenlabs' && !!getEncrypted('elevenlabs_key') ? 'elevenlabs' : 'openai'
+/**
+ * Fournisseur déduit de la VOIX elle-même : un id ElevenLabs n'est pas une voix
+ * OpenAI. Permet de choisir une voix ElevenLabs sur un compte sans toucher au
+ * réglage global.
+ */
+function providerForVoice(voice: string): 'openai' | 'elevenlabs' {
+  return voice && !OPENAI_VOICES.includes(voice) ? 'elevenlabs' : 'openai'
 }
-// Liste des voix du fournisseur actif (pour le sélecteur par compte). OpenAI : liste
-// fixe côté client ; ElevenLabs : voix du compte de l'utilisateur.
+// Voix disponibles pour le sélecteur par compte : les voix OpenAI ET, si la clé
+// ElevenLabs est présente, celles du compte ElevenLabs — dans une seule liste.
 app.get('/api/tts/voices', wrap(async (_req, res) => {
-  if (activeVoiceProvider() === 'elevenlabs') {
-    try {
-      const voices = await listElevenVoices(getEncrypted('elevenlabs_key') as string)
-      return res.json({ provider: 'elevenlabs', voices: voices.map((v) => ({ id: v.id, label: v.name })) })
-    } catch (e) {
-      return res.json({ provider: 'elevenlabs', voices: [], error: e instanceof Error ? e.message : String(e) })
-    }
+  const openai = OPENAI_VOICES.map((v) => ({ id: v, label: v, provider: 'openai' as const }))
+  const key = getEncrypted('elevenlabs_key')
+  if (!key) return res.json({ voices: openai, elevenlabs: false })
+  try {
+    const el = await listElevenVoices(key)
+    res.json({
+      voices: [...openai, ...el.map((v) => ({ id: v.id, label: v.name, provider: 'elevenlabs' as const }))],
+      elevenlabs: true
+    })
+  } catch (e) {
+    res.json({ voices: openai, elevenlabs: false, error: e instanceof Error ? e.message : String(e) })
   }
-  res.json({ provider: 'openai', voices: [] })
 }))
 // Aperçu d'une voix : renvoie un court extrait mp3 (bouton « Écouter » des réglages).
 app.get('/api/tts/preview', wrap(async (req, res) => {
   const voice = String(req.query.voice ?? '').trim()
-  const provider = activeVoiceProvider()
   const openaiKey = getEncrypted('openai_key')
   const elevenKey = getEncrypted('elevenlabs_key')
-  if (provider === 'openai' && !OPENAI_VOICES.includes(voice)) return res.status(400).json({ error: 'Voix inconnue' })
+  // Le fournisseur découle de la voix demandée (même règle qu'à la génération).
+  const provider = providerForVoice(voice) === 'elevenlabs' && elevenKey ? 'elevenlabs' : 'openai'
+  if (provider === 'openai' && !OPENAI_VOICES.includes(voice)) {
+    return res.status(400).json({ error: elevenKey ? 'Voix inconnue' : 'Voix ElevenLabs : ajoute d’abord la clé ElevenLabs dans les Réglages.' })
+  }
   if (provider === 'openai' && !openaiKey) return res.status(400).json({ error: 'Clé OpenAI manquante (Réglages).' })
   if (provider === 'elevenlabs' && !voice) return res.status(400).json({ error: 'Choisis une voix.' })
   try {
