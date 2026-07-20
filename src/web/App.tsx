@@ -11,7 +11,7 @@ import {
   type SavedIdea
 } from './api'
 
-type Page = 'dashboard' | 'autopilot' | 'analyse' | 'generate' | 'ideas' | 'history' | 'clips' | 'queue' | 'published' | 'providers' | 'settings'
+type Page = 'dashboard' | 'autopilot' | 'analyse' | 'generate' | 'ideas' | 'history' | 'clips' | 'published' | 'providers' | 'settings'
 
 const ICONS: Record<string, string> = {
   dashboard: 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z',
@@ -374,8 +374,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
     [
       { id: 'dashboard', label: 'Tableau de bord', icon: 'dashboard' },
       ...(isAll ? [{ id: 'autopilot' as Page, label: 'Pilote auto', icon: 'bolt' }] : []),
-      ...(isAll ? [{ id: 'analyse' as Page, label: 'Analyse IA', icon: 'chart' }] : []),
-      { id: 'queue', label: 'File d’attente', icon: 'clock' }
+      ...(isAll ? [{ id: 'analyse' as Page, label: 'Analyse IA', icon: 'chart' }] : [])
     ],
     [
       { id: 'ideas', label: 'Idées virales', icon: 'bulb' },
@@ -449,7 +448,6 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
         {page === 'ideas' && <Ideas toast={showToast} go={setPage} />}
         {page === 'history' && <History sources={sources} clips={clips} progress={progress} onRefresh={refresh} toast={showToast} goClips={() => setPage('clips')} />}
         {page === 'clips' && <Clips clips={clips} sources={sources} onRefresh={refresh} toast={showToast} ttProfile={ttProfile} scope={scope} />}
-        {page === 'queue' && <Queue go={setPage} scope={scope} ideaVideo={ideaVideo} toast={showToast} />}
         {page === 'published' && <Published clips={clips} go={setPage} scope={scope} />}
         {page === 'analyse' && isAll && <Analyse toast={showToast} />}
         {page === 'providers' && <Providers go={setPage} />}
@@ -2115,6 +2113,11 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
   const [editSlot, setEditSlot] = useState<AutopilotSlot | null>(null)
   const [cfgUser, setCfgUser] = useState<string | null>(null)
   const [day, setDay] = useState(0) // 0 = aujourd'hui, 1 = demain
+  const [now, setNow] = useState(Date.now()) // horloge du compte à rebours
+  useEffect(() => {
+    const t = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(t)
+  }, [])
   const load = useCallback((): void => {
     api.autopilotPlan(day).then(setPlan).catch(() => undefined)
     api.schedulerStatus().then((s) => setPaused(s.paused)).catch(() => undefined)
@@ -2134,6 +2137,10 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
 
   const resume = async (): Promise<void> => {
     await api.setFlag('queue_paused', '0')
+    load()
+  }
+  const togglePause = async (): Promise<void> => {
+    await api.setFlag('queue_paused', paused ? '0' : '1')
     load()
   }
 
@@ -2156,6 +2163,9 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
 
   const slots = (plan?.slots ?? []).filter((s) => !scope || scope === ALL_SCOPE || s.user === scope)
   const doneCount = slots.filter((s) => s.done).length
+  const upcomingCount = slots.length - doneCount
+  // Le pilote passe toutes les 15 min (cron */15) : temps jusqu'au prochain passage.
+  const remaining = Math.ceil((now + 1) / (15 * 60 * 1000)) * (15 * 60 * 1000) - now
   const totalCredits = slots.reduce((sum, s) => sum + (s.credits ?? 0), 0)
   const nextIdx = slots.findIndex((s) => !s.done)
   const nextKey = nextIdx >= 0 ? `${slots[nextIdx].user}-${slots[nextIdx].ordinal}` : null
@@ -2270,6 +2280,18 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {/* Compte à rebours + pause : repris de l'ancienne page « File d'attente ». */}
+          {day === 0 && (
+            <>
+              <span className="ap-pill" title="Le pilote auto passe toutes les 15 minutes">
+                <MIcon name="schedule" size={14} />
+                {paused ? 'En pause' : upcomingCount > 0 ? `Passage dans ${fmtCountdown(remaining)}` : 'Journée terminée'}
+              </span>
+              <button className="btn small" onClick={() => void togglePause()} title={paused ? 'Reprendre la production' : 'Suspendre la production'}>
+                <MIcon name={paused ? 'play_arrow' : 'pause'} size={14} /> {paused ? 'Reprendre' : 'Pause'}
+              </button>
+            </>
+          )}
           {totalCredits > 0 && (
             <span className="pill-badge" title="Coût estimé total du jour (aperçu — aucun débit pour l’instant)" style={{ fontVariantNumeric: 'tabular-nums' }}>{totalCredits} cr/jour</span>
           )}
@@ -2355,85 +2377,6 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
         />
       )}
     </div>
-  )
-}
-
-function Queue({ go, scope, ideaVideo, toast }: { go: (p: Page) => void; scope: string; ideaVideo: IdeaVideoMap; toast: (m: string) => void }): JSX.Element {
-  const [plan, setPlan] = useState<AutopilotPlan | null>(null)
-  const [now, setNow] = useState(Date.now())
-  const load = useCallback((): void => {
-    api.autopilotPlan().then(setPlan).catch(() => undefined)
-  }, [])
-  useEffect(() => {
-    load()
-    const poll = window.setInterval(load, 20000)
-    const tick = window.setInterval(() => setNow(Date.now()), 1000)
-    return () => {
-      window.clearInterval(poll)
-      window.clearInterval(tick)
-    }
-  }, [load])
-
-  const enabled = !!plan?.enabled
-  const paused = !!plan?.paused
-  const togglePause = async (): Promise<void> => {
-    await api.setFlag('queue_paused', paused ? '0' : '1')
-    load()
-  }
-
-  // La « file » = les vidéos que le pilote va produire+publier aujourd'hui (non encore faites).
-  const upcoming = (plan?.slots ?? []).filter((s) => !s.done && (!scope || scope === ALL_SCOPE || s.user === scope))
-  const nextSlot = upcoming[0]
-  // Le pilote passe toutes les 15 min (cron */15) : compte à rebours jusqu'au prochain passage.
-  const remaining = Math.ceil((now + 1) / (15 * 60 * 1000)) * (15 * 60 * 1000) - now
-
-  return (
-    <>
-      <div className="page-head">
-        <div>
-          <h1>File d’attente</h1>
-          <p>Le pilote auto crée et publie tes vidéos automatiquement, une par une, selon le planning du jour.</p>
-        </div>
-        {enabled && (
-          <button className={`btn${paused ? ' primary' : ''}`} onClick={togglePause}>
-            <Icon name={paused ? 'play' : 'pause'} size={16} />
-            {paused ? 'Reprendre' : 'Mettre en pause'}
-          </button>
-        )}
-      </div>
-
-      <TodayPlan ideaVideo={ideaVideo} toast={toast} scope={scope} />
-
-      {!enabled ? (
-        <div className="card" style={{ textAlign: 'center', padding: 36 }}>
-          <div className="dz-icon" style={{ margin: '0 auto 12px' }}><Icon name="clock" size={24} /></div>
-          <div style={{ fontWeight: 600 }}>Pilote auto désactivé</div>
-          <p className="muted small">Active le pilote auto pour qu’il crée et publie tes vidéos automatiquement.</p>
-          <button className="btn primary" style={{ marginTop: 6 }} onClick={() => go('autopilot')}>Aller au Pilote auto</button>
-        </div>
-      ) : (
-        <div className="card" style={{ marginBottom: 16 }}>
-          <div className="row">
-            <div>
-              <div className="muted small">{paused || !upcoming.length ? 'Pilote auto' : 'Prochaine publication dans'}</div>
-              <div style={{ fontSize: 40, fontWeight: 700, letterSpacing: '-0.5px', color: paused || !upcoming.length ? 'var(--muted)' : 'var(--accent-strong)' }}>
-                {paused ? 'En pause' : upcoming.length ? fmtCountdown(remaining) : 'Terminé ✓'}
-              </div>
-              <div className="muted small">
-                {paused
-                  ? `${upcoming.length} vidéo${upcoming.length > 1 ? 's' : ''} en attente · reprend quand tu veux`
-                  : upcoming.length
-                    ? `${upcoming.length} vidéo${upcoming.length > 1 ? 's' : ''} en attente · prochaine ${nextSlot?.eta ?? '—'} · le pilote passe toutes les 15 min`
-                    : `Toutes les vidéos prévues aujourd’hui sont publiées ✓`}
-              </div>
-            </div>
-            {paused
-              ? <span className="chip">⏸ En pause</span>
-              : <span className="pill-badge"><span className="dot" /> Pilote actif</span>}
-          </div>
-        </div>
-      )}
-    </>
   )
 }
 
