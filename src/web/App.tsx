@@ -656,17 +656,29 @@ function Dashboard({ log, go, onRefresh, scope }: { log: string[]; go: (p: Page)
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 16, marginTop: 12, alignItems: 'start' }}>
-            <div className="card">
-              <div className="row">
-                <div>
-                  <strong>Vues dans le temps</strong>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
+              <div className="card">
+                <div className="row">
+                  <div>
+                    <strong>Vues dans le temps</strong>
+                  </div>
+                </div>
+                <div style={{ marginTop: 14 }}><AreaChart data={buckets} /></div>
+                <div className="metrics-row">
+                  <div className="metric"><div className="ml">Total période</div><div className="mv">{fmtNum(totalPeriod)}</div></div>
+                  <div className="metric"><div className="ml">Moyenne / jour</div><div className="mv">{fmtNum(avgPerDay)}</div></div>
+                  <div className="metric"><div className="ml">Pic</div><div className="mv">{fmtNum(peak.count)} · {peak.label}</div></div>
                 </div>
               </div>
-              <div style={{ marginTop: 14 }}><AreaChart data={buckets} /></div>
-              <div className="metrics-row">
-                <div className="metric"><div className="ml">Total période</div><div className="mv">{fmtNum(totalPeriod)}</div></div>
-                <div className="metric"><div className="ml">Moyenne / jour</div><div className="mv">{fmtNum(avgPerDay)}</div></div>
-                <div className="metric"><div className="ml">Pic</div><div className="mv">{fmtNum(peak.count)} · {peak.label}</div></div>
+
+              <div className="card">
+                <div className="row" style={{ marginBottom: 8 }}>
+                  <strong>Activité en direct</strong>
+                  <span className="chip">SSE</span>
+                </div>
+                <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: 12, color: 'var(--muted)', maxHeight: 84, overflow: 'auto', fontFamily: 'ui-monospace, Menlo, monospace' }}>
+                  {log.join('\n') || 'En attente…'}
+                </pre>
               </div>
             </div>
 
@@ -686,7 +698,7 @@ function Dashboard({ log, go, onRefresh, scope }: { log: string[]; go: (p: Page)
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <Avatar url={p.avatarUrl} name={p.profile} size={22} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ flex: 1, minWidth: 0, lineHeight: 1.25 }}>
                         <div style={{ fontWeight: 700, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {p.handle ? '@' + p.handle : p.profile}
                           {i === 0 && p.views > 0 && ' 🏆'}
@@ -696,7 +708,7 @@ function Dashboard({ log, go, onRefresh, scope }: { log: string[]; go: (p: Page)
                       </div>
                       <Sparkline data={p.timeseries.map((t) => t.value)} />
                     </div>
-                    <div style={{ display: 'flex', gap: 14, marginTop: 2, alignItems: 'flex-end' }}>
+                    <div style={{ display: 'flex', gap: 14, marginTop: 2, alignItems: 'flex-end', lineHeight: 1.25 }}>
                       {[['Vues', fmtNum(p.views), true], ['Likes', fmtNum(p.likes), false], ['Comment.', fmtNum(p.comments), false], ['Partages', fmtNum(p.shares), false]].map(([l, v, big]) => (
                         <div key={l as string}>
                           <div style={{ fontWeight: 700, fontSize: big ? 15 : 13, color: big ? 'var(--accent-strong)' : undefined }}>{v}</div>
@@ -711,15 +723,6 @@ function Dashboard({ log, go, onRefresh, scope }: { log: string[]; go: (p: Page)
             </div>
           </div>
 
-          <div className="card" style={{ marginTop: 12 }}>
-            <div className="row" style={{ marginBottom: 8 }}>
-              <strong>Activité en direct</strong>
-              <span className="chip">SSE</span>
-            </div>
-            <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: 12, color: 'var(--muted)', maxHeight: 84, overflow: 'auto', fontFamily: 'ui-monospace, Menlo, monospace' }}>
-              {log.join('\n') || 'En attente…'}
-            </pre>
-          </div>
         </>
       )}
     </>
@@ -2477,7 +2480,7 @@ function fmtNum(n: number): string {
 }
 function Sparkline({ data }: { data: number[] }): JSX.Element | null {
   if (data.length < 2) return null
-  const w = 120, h = 34, max = Math.max(1, ...data)
+  const w = 110, h = 26, max = Math.max(1, ...data)
   const pts = data.map((v, i) => `${((i / (data.length - 1)) * w).toFixed(1)},${(h - (v / max) * (h - 3) - 1.5).toFixed(1)}`).join(' ')
   return (
     <svg width={w} height={h} style={{ flexShrink: 0 }} aria-hidden>
