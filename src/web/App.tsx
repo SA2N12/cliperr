@@ -486,8 +486,8 @@ function AreaChart({ data }: { data: Bucket[] }): JSX.Element {
   const line = data.map((d, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(d.count).toFixed(1)}`).join(' ')
   const area = `${line} L${x(n - 1).toFixed(1)},${H} L${x(0).toFixed(1)},${H} Z`
   return (
-    <div>
-      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: 220, display: 'block' }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', flex: 1, minHeight: 0, display: 'block' }}>
         <defs>
           <linearGradient id="ag" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.28" />
@@ -681,14 +681,16 @@ function Dashboard({ log, go, onRefresh, scope }: { log: string[]; go: (p: Page)
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 16, marginTop: 12, alignItems: 'start' }}>
-            <div className="card">
+          {/* alignItems par défaut (stretch) : les deux cartes finissent à la même hauteur ;
+              le graphique s'étire pour remplir la carte de gauche. */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 16, marginTop: 12 }}>
+            <div className="card" style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
               <div className="row">
                 <div>
                   <strong>Vues dans le temps</strong>
                 </div>
               </div>
-              <div style={{ marginTop: 14 }}><AreaChart data={buckets} /></div>
+              <div style={{ marginTop: 14, flex: 1, minHeight: 168 }}><AreaChart data={buckets} /></div>
               <div className="metrics-row">
                 <div className="metric"><div className="ml">Total période</div><div className="mv">{fmtNum(totalPeriod)}</div></div>
                 <div className="metric"><div className="ml">Moyenne / jour</div><div className="mv">{fmtNum(avgPerDay)}</div></div>
