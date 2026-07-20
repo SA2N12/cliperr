@@ -682,8 +682,10 @@ function Dashboard({ log, go, onRefresh, scope }: { log: string[]; go: (p: Page)
   const engGlobal = eng(totals)
   const maxViews = Math.max(1, ...profiles.map((p) => p.views))
 
+  // `dash-fit` : le dashboard occupe exactement la hauteur dispo de `.main`
+  // (qui est le conteneur de défilement) → aucune barre de scroll verticale.
   return (
-    <>
+    <div className="dash-fit">
       <div className="page-head">
         <div>
           <h1>Tableau de bord</h1>
@@ -757,14 +759,14 @@ function Dashboard({ log, go, onRefresh, scope }: { log: string[]; go: (p: Page)
 
           {/* alignItems par défaut (stretch) : les deux cartes finissent à la même hauteur ;
               le graphique s'étire pour remplir la carte de gauche. */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 16, marginTop: 12 }}>
-            <div className="card" style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 16, marginTop: 12, flex: 1, minHeight: 0 }}>
+            <div className="card" style={{ display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
               <div className="row">
                 <div>
                   <strong>Vues dans le temps</strong>
                 </div>
               </div>
-              <div style={{ marginTop: 14, flex: 1, minHeight: 168 }}><AreaChart data={buckets} /></div>
+              <div style={{ marginTop: 14, flex: 1, minHeight: 110 }}><AreaChart data={buckets} /></div>
               <div className="metrics-row">
                 <div className="metric"><div className="ml">Total période</div><div className="mv">{fmtNum(totalPeriod)}</div></div>
                 <div className="metric"><div className="ml">Moyenne / jour</div><div className="mv">{fmtNum(avgPerDay)}</div></div>
@@ -772,13 +774,13 @@ function Dashboard({ log, go, onRefresh, scope }: { log: string[]; go: (p: Page)
               </div>
             </div>
 
-            <div className="card">
+            <div className="card" style={{ display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
               <div className="row" style={{ marginBottom: 2 }}>
                 <strong>Répartition des vues</strong>
                 <span className="small muted">Eng. <b style={{ color: 'var(--accent-strong)' }}>{engGlobal}</b></span>
               </div>
               <p className="muted small" style={{ margin: '0 0 2px' }}>Par compte · clique pour le détail</p>
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflowY: 'auto' }}>
                 {profiles.map((p, i) => (
                   <div
                     key={p.profile}
@@ -815,7 +817,7 @@ function Dashboard({ log, go, onRefresh, scope }: { log: string[]; go: (p: Page)
 
         </>
       )}
-    </>
+    </div>
   )
 }
 
