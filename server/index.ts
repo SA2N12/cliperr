@@ -708,11 +708,56 @@ async function ensureSeriesRef(user: string, series: SeriesState, geminiKey: str
 let autopilotBusy = false
 let autopilotTask: ScheduledTask | null = null
 
+/**
+ * Planning FIXE de la journée : chaque créneau reçoit une heure stable, calculée
+ * indépendamment de l'heure courante. C'est la condition pour que « la vidéo part
+ * à l'heure affichée » soit vrai : si on repartait de `maintenant`, l'heure des
+ * blocs se décalerait à chaque rafraîchissement.
+ *
+ * Ordre : round-robin entre comptes (le compte avec le plus de vidéos restantes
+ * passe en premier). Heures : réparties uniformément dans la fenêtre 9h–23h,
+ * au centre de chaque tranche. Une heure épinglée sur un bloc la remplace.
+ */
+function dailySchedule(): { user: string; ordinal: number; hm: number; pinned: boolean }[] {
+  const profiles = uploadPostProfiles()
+  const ov = slotOverrides()
+  const left = new Map<string, number>()
+  const nextOrd = new Map<string, number>()
+  let total = 0
+  for (const u of profiles) {
+    const n = perDayForProfile(u)
+    left.set(u, n)
+    nextOrd.set(u, 1)
+    total += n
+  }
+  const step = total > 0 ? (PUB_END_HOUR - PUB_START_HOUR) / total : 0
+  const out: { user: string; ordinal: number; hm: number; pinned: boolean }[] = []
+  for (let i = 0; i < total; i++) {
+    let best: string | null = null
+    let bestLeft = 0
+    for (const u of profiles) {
+      const r = left.get(u) ?? 0
+      if (r > bestLeft) { bestLeft = r; best = u }
+    }
+    if (!best) break
+    left.set(best, (left.get(best) ?? 0) - 1)
+    const ordinal = nextOrd.get(best) ?? 1
+    nextOrd.set(best, ordinal + 1)
+    const p = ov[`${best}:${ordinal}`]
+    out.push({
+      user: best,
+      ordinal,
+      hm: p?.hm != null ? p.hm : PUB_START_HOUR + step * i + step / 2,
+      pinned: p?.hm != null
+    })
+  }
+  return out.sort((a, b) => a.hm - b.hm)
+}
+
 /** Un cycle : choisit le compte le PLUS EN RETARD (round-robin) et lui produit + publie 1 vidéo. */
 async function runAutopilotTick(force = false): Promise<void> {
   if (!force && repo.getSetting('autopilot_enabled') !== '1') return
   if (autopilotBusy) return
-  if (repo.getSetting('queue_paused') === '1') return
   const today = dayKey()
   const profiles = uploadPostProfiles()
   if (!profiles.length) return
@@ -796,63 +841,21 @@ async function runAutopilotTick(force = false): Promise<void> {
   const skipOrdOf = (u: string): Set<number> =>
     new Set<number>([...doneOrdOf(u), ...Object.keys(failedMapOf(u)).map(Number)])
 
-  // ── Créneau ÉPINGLÉ arrivé à échéance ? (heure choisie à la main sur un bloc du
-  // planning — prioritaire sur le lissage, respectée à SON heure quel que soit son
-  // ordre parmi les blocs, et valable même hors fenêtre 9h-23h). ──
+  // ── Sélection : le premier créneau du planning fixe dont l'heure est arrivée ──
+  // Plus de lissage ni de fenêtre de tolérance : un bloc part à SON heure. Un bloc
+  // dont l'heure est passée (pilote éteint, serveur redémarré) est rattrapé, sinon
+  // rallumer le pilote en cours de journée ne produirait plus rien.
+  // En mode test (« force »), on ignore l'heure et on prend le premier créneau dû.
   let picked: { user: string; ordinal: number } | null = null
-  if (!force) {
-    let bestHm = Infinity
-    for (const u of profiles) {
-      if (!quotaOk(u)) continue
-      if (doneOf(u) >= perDayFor(u)) continue
-      const skip = skipOrdOf(u)
-      for (let j = 1; j <= perDayFor(u); j++) {
-        if (skip.has(j)) continue
-        const o = ovToday[`${u}:${j}`]
-        if (o?.hm != null && o.hm <= nowHm && o.hm < bestHm) {
-          picked = { user: u, ordinal: j }
-          bestHm = o.hm
-        }
-      }
-    }
+  for (const s of dailySchedule()) {
+    if (!force && s.hm > nowHm) continue
+    if (!quotaOk(s.user)) continue
+    if (doneOf(s.user) >= perDayFor(s.user)) continue
+    if (skipOrdOf(s.user).has(s.ordinal)) continue
+    picked = { user: s.user, ordinal: s.ordinal }
+    break
   }
-
-  if (!picked) {
-    // ── Lissage horaire (ignoré en mode test « force ») ──
-    // On ne poste que dans la fenêtre Paris, et on étale : à un instant t, on
-    // n'a le droit d'avoir produit que « part de la fenêtre écoulée × objectif ».
-    if (!force) {
-      if (nowHm < PUB_START_HOUR || nowHm >= PUB_END_HOUR) return
-      const windowLen = PUB_END_HOUR - PUB_START_HOUR
-      const target = profiles.reduce((s, u) => s + perDayFor(u), 0)
-      const producedToday = profiles.reduce((s, u) => s + doneOf(u), 0)
-      const expected = Math.ceil(((nowHm - PUB_START_HOUR) / windowLen) * target)
-      if (producedToday >= expected) return // en avance sur le planning → on attend
-    }
-
-    // Comptes éligibles : prochain créneau NON épinglé encore à produire (les blocs
-    // épinglés sont gérés ci-dessus, à leur heure, et sautés ici).
-    const eligible: { user: string; ordinal: number; done: number }[] = []
-    for (const user of profiles) {
-      if (!quotaOk(user)) continue
-      const done = doneOf(user)
-      if (done >= perDayFor(user)) continue
-      const skip = skipOrdOf(user)
-      let ord: number | null = null
-      for (let j = 1; j <= perDayFor(user); j++) {
-        if (skip.has(j)) continue
-        if (!force && ovToday[`${user}:${j}`]?.hm != null) continue // épinglé → géré à son heure
-        ord = j
-        break
-      }
-      if (ord == null) continue
-      eligible.push({ user, ordinal: ord, done })
-    }
-    if (!eligible.length) return
-    // Round-robin : on sert d'abord le compte qui a le MOINS publié aujourd'hui.
-    eligible.sort((a, b) => a.done - b.done)
-    picked = { user: eligible[0].user, ordinal: eligible[0].ordinal }
-  }
+  if (!picked) return
 
   const { user, ordinal } = picked
   const done = doneOf(user)
@@ -1029,14 +1032,14 @@ function reloadAutopilot(): void {
     autopilotTask = null
   }
   if (repo.getSetting('autopilot_enabled') !== '1') return
-  // Toutes les 15 min : au plus 1 vidéo/cycle, en round-robin sur les comptes,
-  // et lissée sur la fenêtre 9h-23h (Paris) → publication étalée sur la journée.
-  const expr = repo.getSetting('autopilot_cron') || '*/15 * * * *'
+  // Passage CHAQUE MINUTE : le tick ne fait rien tant qu'aucun créneau n'est dû,
+  // et démarre un créneau à la minute exacte de son heure prévue.
+  const expr = repo.getSetting('autopilot_cron') || '* * * * *'
   if (!cron.validate(expr)) return
   autopilotTask = cron.schedule(expr, () => {
     void runAutopilotTick().catch((e) => emitLog(`Pilote auto : ${e instanceof Error ? e.message : String(e)}`))
   })
-  emitLog(`Pilote auto activé (cron « ${expr} »).`)
+  emitLog('Pilote auto activé — chaque vidéo part à son heure prévue.')
 }
 
 // ── Bootstrap ──
@@ -1819,12 +1822,11 @@ app.post('/api/scheduler/reload', wrap((_req, res) => {
 }))
 app.get('/api/scheduler/status', wrap((_req, res) => {
   const enabled = repo.getSetting('schedule_enabled') === '1'
-  const paused = repo.getSetting('queue_paused') === '1'
   const cron = repo.getSetting('schedule_cron') || '*/30 * * * *'
   const lastRunAt = Number(repo.getSetting('schedule_last_run')) || null
   let nextRunAt: number | null = null
   let intervalSec: number | null = null
-  if (enabled && !paused) {
+  if (enabled) {
     const n1 = cronNext(cron, new Date())
     if (n1) {
       nextRunAt = n1.getTime()
@@ -1832,7 +1834,7 @@ app.get('/api/scheduler/status', wrap((_req, res) => {
       if (n2) intervalSec = Math.round((n2.getTime() - n1.getTime()) / 1000)
     }
   }
-  res.json({ enabled, paused, cron, nextRunAt, intervalSec, lastRunAt })
+  res.json({ enabled, cron, nextRunAt, intervalSec, lastRunAt })
 }))
 
 // Pilote automatique : contenu quotidien par compte selon sa niche
@@ -1938,11 +1940,10 @@ app.post('/api/autopilot/run-now', wrap((_req, res) => {
   void runAutopilotTick(true).catch((e) => emitLog(`Pilote auto : ${e instanceof Error ? e.message : String(e)}`))
   res.json({ ok: true })
 }))
-// Planning du jour : vidéos DÉJÀ publiées (heure réelle) + À VENIR (estimées de
-// maintenant jusqu'à la fin de la fenêtre, dans l'ordre round-robin du pilote).
+// Planning du jour : vidéos DÉJÀ publiées (heure réelle) + À VENIR, aux heures
+// FIXES du planning (dailySchedule) — la même source que le pilote.
 app.get('/api/autopilot/plan', wrap(async (req, res) => {
   const enabled = repo.getSetting('autopilot_enabled') === '1'
-  const paused = repo.getSetting('queue_paused') === '1'
   const perDay = Math.max(1, Number(repo.getSetting('autopilot_per_day')) || 1)
   const profiles = uploadPostProfiles()
   const n = profiles.length
@@ -1952,7 +1953,7 @@ app.get('/api/autopilot/plan', wrap(async (req, res) => {
   const { hm: realNowHm } = parisClock()
   const nowHm = dayOffset > 0 ? 0 : realNowHm // un jour futur n'a pas d'« heure actuelle »
   const win = { start: PUB_START_HOUR, end: PUB_END_HOUR }
-  if (!n) return res.json({ enabled, paused, perDay, window: win, nowHm, day: dayOffset, accounts: [], slots: [] })
+  if (!n) return res.json({ enabled, perDay, window: win, nowHm, day: dayOffset, accounts: [], slots: [] })
   const meta = new Map((await cachedUploadPostProfiles()).map((p) => [p.username, p]))
   const today = dayKey(dayOffset)
   const fmt = (h: number): string => {
@@ -1993,7 +1994,6 @@ app.get('/api/autopilot/plan', wrap(async (req, res) => {
   }
   for (const arr of doneTimes.values()) arr.sort((a, b) => a.at - b.at)
 
-  const remaining = new Map<string, number>()
   profiles.forEach((user) => {
     const done = Number(repo.getSetting(`autopilot_count_${user}_${today}`)) || 0
     const m = meta.get(user)
@@ -2019,8 +2019,6 @@ app.get('/api/autopilot/plan', wrap(async (req, res) => {
         credits: estimateCredits(ovToday[`${user}:${j}`]?.type)
       })
     }
-    // Quota individuel par compte (0 à 5 vidéos/jour, séries incluses).
-    remaining.set(user, Math.max(0, perDayForProfile(user) - done))
   })
 
   // Créneaux EN ÉCHEC aujourd'hui : écartés de la production (retentés demain), mais
@@ -2037,7 +2035,6 @@ app.get('/api/autopilot/plan', wrap(async (req, res) => {
   profiles.forEach((user) => {
     const m = meta.get(user)
     const confSerie = seriesConfiguredFor(user)
-    let nFailed = 0
     for (const [ordStr, error] of Object.entries(failedOf(user))) {
       const ordinal = Number(ordStr)
       const ov = ovToday[`${user}:${ordinal}`]
@@ -2064,20 +2061,14 @@ app.get('/api/autopilot/plan', wrap(async (req, res) => {
         failed: true,
         error
       })
-      nFailed++
     }
-    remaining.set(user, Math.max(0, (remaining.get(user) ?? 0) - nFailed))
   })
 
-  // À venir : étalées régulièrement de maintenant → fin de fenêtre, en servant
-  // à chaque pas le compte le PLUS en retard (même logique que le pilote).
-  let remainingTotal = 0
-  for (const v of remaining.values()) remainingTotal += v
-  const winStart = Math.min(PUB_END_HOUR, Math.max(nowHm, PUB_START_HOUR))
-  const step = remainingTotal > 0 ? (PUB_END_HOUR - winStart) / remainingTotal : 0
-  // Ordinaux encore à produire par compte (on saute ceux déjà faits : un bloc
-  // épinglé a pu s'exécuter hors ordre), consommés au fil de l'affichage.
-  const pendingOrd = new Map<string, number[]>()
+  // À venir : on prend les heures du planning FIXE, la même source que le pilote
+  // → l'heure affichée est EXACTEMENT celle à laquelle la vidéo partira.
+  // Ordinaux encore à produire par compte (on saute ceux déjà faits — un bloc
+  // épinglé a pu s'exécuter hors ordre — et ceux en échec).
+  const pendingOrd = new Map<string, Set<number>>()
   profiles.forEach((u) => {
     let doneArr: number[] = []
     try {
@@ -2090,40 +2081,31 @@ app.get('/api/autopilot/plan', wrap(async (req, res) => {
     const cnt = Number(repo.getSetting(`autopilot_count_${u}_${today}`)) || 0
     for (let j = 1; set.size < cnt && j <= perDayForProfile(u); j++) set.add(j)
     for (const k of Object.keys(failedOf(u))) set.add(Number(k)) // échecs : ni faits, ni à re-produire aujourd'hui
-    const list: number[] = []
-    for (let j = 1; j <= perDayForProfile(u); j++) if (!set.has(j)) list.push(j)
+    const list = new Set<number>()
+    for (let j = 1; j <= perDayForProfile(u); j++) if (!set.has(j)) list.add(j)
     pendingOrd.set(u, list)
   })
-  for (let i = 0; i < remainingTotal; i++) {
-    let best: string | null = null
-    let bestRem = 0
-    for (const u of profiles) {
-      const r = remaining.get(u) ?? 0
-      if (r > bestRem) { bestRem = r; best = u }
-    }
-    if (!best) break
-    remaining.set(best, (remaining.get(best) ?? 0) - 1)
-    const m = meta.get(best)
-    const ordinal = pendingOrd.get(best)?.shift() ?? 1
-    const ov = ovToday[`${best}:${ordinal}`]
-    const confSerie = seriesConfiguredFor(best)
+  for (const sc of dailySchedule()) {
+    if (!pendingOrd.get(sc.user)?.has(sc.ordinal)) continue
+    const m = meta.get(sc.user)
+    const ov = ovToday[`${sc.user}:${sc.ordinal}`]
+    const confSerie = seriesConfiguredFor(sc.user)
     // Libellé selon le type du créneau (niche par défaut).
     let label: string
     if (ov?.type === 'custom' && (ov.subject ?? '').trim()) label = `Sujet : ${(ov.subject ?? '').trim()}`
     else if (ov?.type === 'clip') label = `Clip : ${(ov.subject ?? '').trim().replace(/^https?:\/\/(www\.)?/, '').slice(0, 50) || 'choix auto (IA)'}`
     else if (ov?.type === 'serie' && confSerie) label = `Série : ${confSerie.title} — Ép. ${confSerie.episode}`
-    else label = nicheForProfile(best)
-    const etaHm = ov?.hm != null ? ov.hm : winStart + step * i
+    else label = nicheForProfile(sc.user)
     slots.push({
-      user: best,
+      user: sc.user,
       handle: m?.tiktokHandle ?? null,
       avatarUrl: m?.avatarUrl ?? null,
       niche: label,
-      ordinal,
-      etaHm,
-      eta: fmt(etaHm),
+      ordinal: sc.ordinal,
+      etaHm: sc.hm,
+      eta: fmt(sc.hm),
       done: false,
-      pinned: ov?.hm != null,
+      pinned: sc.pinned,
       type: ov?.type,
       subject: ov?.subject,
       hasSeries: !!confSerie,
@@ -2140,7 +2122,7 @@ app.get('/api/autopilot/plan', wrap(async (req, res) => {
     const m = meta.get(user)
     return { user, handle: m?.tiktokHandle ?? null, avatarUrl: m?.avatarUrl ?? null }
   })
-  res.json({ enabled, paused, perDay, targetPerDay, window: win, nowHm, today, day: dayOffset, accounts, slots })
+  res.json({ enabled, perDay, targetPerDay, window: win, nowHm, today, day: dayOffset, accounts, slots })
 }))
 // Réglages d'UN SEUL compte (fusion dans les maps existantes — pas de remplacement
 // global) : utilisé par la fenêtre ⚙️ des lignes du planning.

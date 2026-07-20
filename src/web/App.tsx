@@ -1586,16 +1586,6 @@ function PublishModal({ clip, ttNickname, onClose, onDone, toast }: { clip: Clip
   )
 }
 
-function fmtCountdown(ms: number): string {
-  if (ms <= 0) return 'imminent…'
-  const s = Math.floor(ms / 1000)
-  const h = Math.floor(s / 3600)
-  const m = Math.floor((s % 3600) / 60)
-  const sec = s % 60
-  if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m ${String(sec).padStart(2, '0')}s`
-  return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
-}
-
 const CRON_LABELS: Record<string, string> = {
   '*/5 * * * *': 'toutes les 5 min',
   '*/15 * * * *': 'toutes les 15 min',
@@ -1626,7 +1616,7 @@ const TTS_VOICES: { id: string; label: string }[] = [
 ]
 
 type AutopilotAccount = { user: string; handle: string | null; avatarUrl: string | null }
-type AutopilotPlan = { enabled: boolean; paused?: boolean; perDay: number; targetPerDay?: number; window: { start: number; end: number }; nowHm: number; day?: number; accounts?: AutopilotAccount[]; slots: AutopilotSlot[] }
+type AutopilotPlan = { enabled: boolean; perDay: number; targetPerDay?: number; window: { start: number; end: number }; nowHm: number; day?: number; accounts?: AutopilotAccount[]; slots: AutopilotSlot[] }
 
 // Fenêtre d'édition d'un créneau du planning : heure + type de contenu.
 // `quota` = nb de vidéos/jour actuel du compte (pour le bouton Supprimer).
@@ -2109,18 +2099,11 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
 // sinon grille chronologique unique (File d'attente).
 function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: { ideaVideo: IdeaVideoMap; toast: (m: string) => void; scope?: string; groupByAccount?: boolean; onConfigSaved?: () => void }): JSX.Element | null {
   const [plan, setPlan] = useState<AutopilotPlan | null>(null)
-  const [paused, setPaused] = useState(false)
   const [editSlot, setEditSlot] = useState<AutopilotSlot | null>(null)
   const [cfgUser, setCfgUser] = useState<string | null>(null)
   const [day, setDay] = useState(0) // 0 = aujourd'hui, 1 = demain
-  const [now, setNow] = useState(Date.now()) // horloge du compte à rebours
-  useEffect(() => {
-    const t = window.setInterval(() => setNow(Date.now()), 1000)
-    return () => window.clearInterval(t)
-  }, [])
   const load = useCallback((): void => {
     api.autopilotPlan(day).then(setPlan).catch(() => undefined)
-    api.schedulerStatus().then((s) => setPaused(s.paused)).catch(() => undefined)
   }, [day])
   useEffect(() => {
     load()
@@ -2135,14 +2118,6 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
   const genKey = activeGen ? activeGen.message : (Object.keys(ideaVideo).length ? 'idle' : 'none')
   useEffect(() => { if (genKey === 'idle') load() }, [genKey, load])
 
-  const resume = async (): Promise<void> => {
-    await api.setFlag('queue_paused', '0')
-    load()
-  }
-  const togglePause = async (): Promise<void> => {
-    await api.setFlag('queue_paused', paused ? '0' : '1')
-    load()
-  }
 
   // Bouton « + » : ajoute une vidéo/jour au compte puis ouvre directement le
   // choix du type (niche / épisode de série / sujet) et de l'heure.
@@ -2163,9 +2138,7 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
 
   const slots = (plan?.slots ?? []).filter((s) => !scope || scope === ALL_SCOPE || s.user === scope)
   const doneCount = slots.filter((s) => s.done).length
-  const upcomingCount = slots.length - doneCount
-  // Le pilote passe toutes les 15 min (cron */15) : temps jusqu'au prochain passage.
-  const remaining = Math.ceil((now + 1) / (15 * 60 * 1000)) * (15 * 60 * 1000) - now
+  const nextSlot = slots.find((s) => !s.done && !s.failed)
   const totalCredits = slots.reduce((sum, s) => sum + (s.credits ?? 0), 0)
   const nextIdx = slots.findIndex((s) => !s.done)
   const nextKey = nextIdx >= 0 ? `${slots[nextIdx].user}-${slots[nextIdx].ordinal}` : null
@@ -2280,17 +2253,11 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          {/* Compte à rebours + pause : repris de l'ancienne page « File d'attente ». */}
           {day === 0 && (
-            <>
-              <span className="ap-pill" title="Le pilote auto passe toutes les 15 minutes">
-                <MIcon name="schedule" size={14} />
-                {paused ? 'En pause' : upcomingCount > 0 ? `Passage dans ${fmtCountdown(remaining)}` : 'Journée terminée'}
-              </span>
-              <button className="btn small" onClick={() => void togglePause()} title={paused ? 'Reprendre la production' : 'Suspendre la production'}>
-                <MIcon name={paused ? 'play_arrow' : 'pause'} size={14} /> {paused ? 'Reprendre' : 'Pause'}
-              </button>
-            </>
+            <span className="ap-pill" title="Heure de la prochaine vidéo (elle part à cette heure-là)">
+              <MIcon name="schedule" size={14} />
+              {nextSlot ? `Prochaine ${nextSlot.eta}` : 'Journée terminée'}
+            </span>
           )}
           {totalCredits > 0 && (
             <span className="pill-badge" title="Coût estimé total du jour (aperçu — aucun débit pour l’instant)" style={{ fontVariantNumeric: 'tabular-nums' }}>{totalCredits} cr/jour</span>
@@ -2298,12 +2265,6 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
           <span className="ap-pill"><span className="dot" /> {plan.targetPerDay ?? plan.perDay} vidéo{(plan.targetPerDay ?? plan.perDay) > 1 ? 's' : ''}/jour</span>
         </div>
       </div>
-      {paused && (
-        <div style={{ marginTop: 10, padding: '10px 12px', background: '#fef3c7', color: '#b45309', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-          <div className="small"><b><MIcon name="pause" size={14} /> En pause</b> — aucune vidéo n’est produite ni publiée tant que c’est en pause.</div>
-          <button className="btn small" onClick={() => void resume()}>Reprendre</button>
-        </div>
-      )}
       {groupByAccount ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 14 }}>
           {accountList.map((a) => {
