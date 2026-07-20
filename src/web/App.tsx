@@ -1759,8 +1759,8 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
               onClick={() => !uploading && musicInputRef.current?.click()}
               className="muted small"
               style={{
-                border: `1.5px dashed ${dragOver ? 'var(--accent-strong)' : 'var(--border)'}`,
-                borderRadius: 10,
+                border: `1.5px solid ${dragOver ? 'var(--accent-strong)' : 'var(--border)'}`,
+                borderRadius: 0,
                 padding: 12,
                 textAlign: 'center',
                 cursor: uploading ? 'default' : 'pointer',
@@ -2167,7 +2167,7 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
           padding: '12px 8px',
           borderRadius: 0,
           background: s.failed ? 'rgba(220,38,38,0.06)' : s.done ? 'var(--ap-green-soft)' : '#fff',
-          border: s.failed ? '1.5px solid var(--bad)' : s.done ? '1.5px solid var(--ap-green-border)' : `2px dashed ${generating || s.pinned || s.type ? 'var(--ap-green)' : '#d6d6db'}`,
+          border: s.failed ? '1.5px solid var(--bad)' : s.done ? '1.5px solid var(--ap-green-border)' : `1.5px solid ${generating || s.pinned || s.type ? 'var(--ap-green)' : 'var(--border)'}`,
           cursor: s.done ? 'default' : 'pointer',
           display: 'flex',
           flexDirection: 'column',
@@ -2289,7 +2289,7 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
                     disabled={userSlots.length >= 5}
                     onClick={() => void addVideo(u, userSlots.length)}
                     title={userSlots.length >= 5 ? 'Maximum atteint (5 vidéos/jour)' : 'Ajouter une vidéo (choix du type et de l’heure)'}
-                    style={{ width: 44, borderRadius: 0, justifyContent: 'center', padding: 0, fontSize: 20, border: '2px dashed var(--border)', background: 'transparent', color: 'var(--muted)' }}
+                    style={{ width: 44, borderRadius: 0, justifyContent: 'center', padding: 0, fontSize: 20, border: '1.5px solid var(--border)', background: 'transparent', color: 'var(--muted)' }}
                   >
                     +
                   </button>
