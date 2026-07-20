@@ -2138,7 +2138,6 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
 
   const slots = (plan?.slots ?? []).filter((s) => !scope || scope === ALL_SCOPE || s.user === scope)
   const doneCount = slots.filter((s) => s.done).length
-  const nextSlot = slots.find((s) => !s.done && !s.failed)
   const totalCredits = slots.reduce((sum, s) => sum + (s.credits ?? 0), 0)
   const nextIdx = slots.findIndex((s) => !s.done)
   const nextKey = nextIdx >= 0 ? `${slots[nextIdx].user}-${slots[nextIdx].ordinal}` : null
@@ -2253,12 +2252,6 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          {day === 0 && (
-            <span className="ap-pill" title="Heure de la prochaine vidéo (elle part à cette heure-là)">
-              <MIcon name="schedule" size={14} />
-              {nextSlot ? `Prochaine ${nextSlot.eta}` : 'Journée terminée'}
-            </span>
-          )}
           {totalCredits > 0 && (
             <span className="pill-badge" title="Coût estimé total du jour (aperçu — aucun débit pour l’instant)" style={{ fontVariantNumeric: 'tabular-nums' }}>{totalCredits} cr/jour</span>
           )}
