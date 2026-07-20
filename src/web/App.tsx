@@ -2165,7 +2165,7 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
         style={{
           width: opts?.hideAvatar ? 104 : 116,
           padding: '12px 8px',
-          borderRadius: 14,
+          borderRadius: 0,
           background: s.failed ? 'rgba(220,38,38,0.06)' : s.done ? 'var(--ap-green-soft)' : '#fff',
           border: s.failed ? '1.5px solid var(--bad)' : s.done ? '1.5px solid var(--ap-green-border)' : `2px dashed ${generating || s.pinned || s.type ? 'var(--ap-green)' : '#d6d6db'}`,
           cursor: s.done ? 'default' : 'pointer',
@@ -2221,14 +2221,14 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
     <div className="card" style={{ marginBottom: 16 }}>
       <div className="row" style={{ marginBottom: 4 }}>
         <div>
-          <div style={{ display: 'inline-flex', gap: 3, background: 'var(--panel-2)', borderRadius: 9, padding: 3, marginBottom: 7 }}>
+          <div style={{ display: 'inline-flex', gap: 3, background: 'var(--panel-2)', borderRadius: 0, padding: 3, marginBottom: 7 }}>
             {([[0, 'Aujourd’hui'], [1, 'Demain']] as const).map(([d, lbl]) => (
               <button
                 key={d}
                 onClick={() => setDay(d)}
                 style={{
                   cursor: 'pointer',
-                  borderRadius: 6,
+                  borderRadius: 0,
                   padding: '4px 14px',
                   fontSize: 13,
                   fontWeight: day === d ? 700 : 500,
@@ -2258,7 +2258,7 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
         </div>
       </div>
       {paused && (
-        <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 10, background: '#fef3c7', color: '#b45309', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+        <div style={{ marginTop: 10, padding: '10px 12px', background: '#fef3c7', color: '#b45309', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
           <div className="small"><b>⏸ En pause</b> — aucune vidéo n’est produite ni publiée tant que c’est en pause.</div>
           <button className="btn small" onClick={() => void resume()}>Reprendre</button>
         </div>
@@ -2289,7 +2289,7 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
                     disabled={userSlots.length >= 5}
                     onClick={() => void addVideo(u, userSlots.length)}
                     title={userSlots.length >= 5 ? 'Maximum atteint (5 vidéos/jour)' : 'Ajouter une vidéo (choix du type et de l’heure)'}
-                    style={{ width: 44, borderRadius: 14, justifyContent: 'center', padding: 0, fontSize: 20, border: '2px dashed var(--border)', background: 'transparent', color: 'var(--muted)' }}
+                    style={{ width: 44, borderRadius: 0, justifyContent: 'center', padding: 0, fontSize: 20, border: '2px dashed var(--border)', background: 'transparent', color: 'var(--muted)' }}
                   >
                     +
                   </button>
@@ -2813,7 +2813,6 @@ function Autopilot({ toast, ideaVideo }: { toast: (m: string) => void; ideaVideo
 
       <TodayPlan ideaVideo={ideaVideo} toast={toast} groupByAccount onConfigSaved={() => void load()} />
       {profiles.length === 0 && <div className="card muted">Aucun compte upload-post connecté. Ajoute-les dans Réglages.</div>}
-      <div className="muted small" style={{ margin: '4px 2px' }}>⚙️ sur une ligne = réglages du compte (cadence, niche, CTA, série) · clic sur un bloc = heure et type de cette vidéo.</div>
     </>
   )
 }
