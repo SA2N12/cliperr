@@ -434,6 +434,143 @@ button {
   flex-shrink: 0;
 }
 
+/* ── Graphique : repères en HTML par-dessus le SVG étiré ── */
+.chart-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+.chart-ymax {
+  position: absolute;
+  top: 0;
+  left: 0;
+  font-size: 11px;
+  color: var(--muted-2);
+  background: var(--panel);
+  padding-right: 5px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+.chart-dot {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--panel);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.chart-dot.hover {
+  width: 11px;
+  height: 11px;
+}
+.chart-tip {
+  position: absolute;
+  top: 2px;
+  transform: translateX(-50%);
+  background: #1f2430;
+  color: #fff;
+  font-size: 11.5px;
+  padding: 5px 9px;
+  border-radius: 6px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 2;
+  font-variant-numeric: tabular-nums;
+}
+.chart-tip .dim {
+  color: #b9c0cc;
+}
+
+/* Sélecteur de période (7 / 14 / 30 j) */
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.seg button {
+  background: var(--panel);
+  border: 0;
+  padding: 4px 9px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.seg button:hover {
+  background: var(--panel-2);
+  color: var(--text);
+}
+.seg button + button {
+  border-left: 1px solid var(--border);
+}
+.seg button.on {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-weight: 600;
+}
+
+/* Lignes de la répartition : rang, survol, lien « Voir » */
+.funnel-row {
+  padding: 6px 8px;
+  margin: 0 -8px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.funnel-row:hover {
+  background: var(--panel-2);
+}
+.funnel-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.funnel-row .rank {
+  font-size: 11px;
+  color: var(--muted-2);
+  width: 12px;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+.funnel-row .go {
+  color: var(--muted-2);
+  font-weight: 600;
+  transition: color 0.12s ease;
+}
+.funnel-row:hover .go {
+  color: var(--accent);
+}
+.chip.warn {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+/* Chiffres alignés (pas de sautillement des colonnes) */
+.stat-grid .value,
+.metric .mv,
+.funnel-row b {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Squelettes de chargement */
+.skel {
+  background: linear-gradient(90deg, var(--panel-2) 25%, var(--border) 37%, var(--panel-2) 63%);
+  background-size: 400% 100%;
+  animation: skel 1.3s ease infinite;
+  border-radius: 6px;
+}
+@keyframes skel {
+  from {
+    background-position: 100% 50%;
+  }
+  to {
+    background-position: 0 50%;
+  }
+}
+
 /* Cartes de stats (dashboard) : version compacte pour tenir sans scroll */
 .stat-grid > .card {
   padding: 14px;

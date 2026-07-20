@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type MouseEvent, type ReactNode } from 'react'
 import {
   api,
   subscribe,
@@ -464,27 +464,121 @@ function TrendBadge({ value, label }: { value: number; label?: string }): JSX.El
 
 type Bucket = { label: string; count: number }
 
+/**
+ * Courbe lissée (Catmull-Rom → béziers). Les points de contrôle sont bornés à
+ * la zone de tracé : une pointe isolée ne peut pas faire sortir la courbe.
+ */
+function smoothLine(pts: { x: number; y: number }[], top: number, bottom: number): string {
+  if (pts.length === 0) return ''
+  if (pts.length === 1) return `M${pts[0].x},${pts[0].y}`
+  const clamp = (v: number): number => Math.max(top, Math.min(bottom, v))
+  const t = 0.18
+  let d = `M${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)}`
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] ?? pts[i]
+    const p1 = pts[i]
+    const p2 = pts[i + 1]
+    const p3 = pts[i + 2] ?? p2
+    const c1x = p1.x + (p2.x - p0.x) * t
+    const c1y = clamp(p1.y + (p2.y - p0.y) * t)
+    const c2x = p2.x - (p3.x - p1.x) * t
+    const c2y = clamp(p2.y - (p3.y - p1.y) * t)
+    d += ` C${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`
+  }
+  return d
+}
+
+/**
+ * Graphique d'aires : grille, courbe lissée, point final, et au survol un
+ * repère vertical + infobulle (valeur du jour).
+ *
+ * Le SVG est étiré (`preserveAspectRatio="none"`) pour remplir la carte → tout
+ * ce qui ne doit PAS être déformé (textes, points, infobulle) est rendu en HTML
+ * par-dessus, positionné en pourcentage.
+ */
 function AreaChart({ data }: { data: Bucket[] }): JSX.Element {
   const W = 600
   const H = 200
-  const max = Math.max(1, ...data.map((d) => d.count))
+  const PAD_T = 12
+  const PAD_B = 4
   const n = data.length
-  const x = (i: number): number => (n === 1 ? W / 2 : (i / (n - 1)) * W)
-  const y = (v: number): number => H - 6 - (v / max) * (H - 16)
-  const line = data.map((d, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(d.count).toFixed(1)}`).join(' ')
-  const area = `${line} L${x(n - 1).toFixed(1)},${H} L${x(0).toFixed(1)},${H} Z`
+  const max = Math.max(1, ...data.map((d) => d.count))
+  const [hover, setHover] = useState<number | null>(null)
+  const wrapRef = useRef<HTMLDivElement>(null)
+
+  const x = (i: number): number => (n <= 1 ? W / 2 : (i / (n - 1)) * W)
+  const y = (v: number): number => PAD_T + (1 - v / max) * (H - PAD_T - PAD_B)
+  const pts = data.map((d, i) => ({ x: x(i), y: y(d.count) }))
+  const line = smoothLine(pts, PAD_T, H - PAD_B)
+  const area = n ? `${line} L${W},${H} L0,${H} Z` : ''
+
+  const onMove = (e: MouseEvent<HTMLDivElement>): void => {
+    const r = wrapRef.current?.getBoundingClientRect()
+    if (!r || n < 2) return
+    const rel = (e.clientX - r.left) / r.width
+    setHover(Math.max(0, Math.min(n - 1, Math.round(rel * (n - 1)))))
+  }
+
+  const hv = hover != null ? data[hover] : null
+  const hoverPct = hover != null && n > 1 ? (hover / (n - 1)) * 100 : 0
+  const last = data[n - 1]
+
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', flex: 1, minHeight: 0, display: 'block' }}>
-        <defs>
-          <linearGradient id="ag" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.28" />
-            <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        <path d={area} fill="url(#ag)" />
-        <path d={line} fill="none" stroke="var(--accent)" strokeWidth={2.5} vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
-      </svg>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <div ref={wrapRef} className="chart-wrap" onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
+        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: '100%', display: 'block' }}>
+          <defs>
+            <linearGradient id="ag" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.24" />
+              <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          {[0, 0.25, 0.5, 0.75, 1].map((f) => (
+            <line
+              key={f}
+              x1="0"
+              x2={W}
+              y1={PAD_T + f * (H - PAD_T - PAD_B)}
+              y2={PAD_T + f * (H - PAD_T - PAD_B)}
+              stroke="var(--border)"
+              strokeWidth={1}
+              vectorEffect="non-scaling-stroke"
+            />
+          ))}
+          <path d={area} fill="url(#ag)" />
+          <path
+            d={line}
+            fill="none"
+            stroke="var(--accent)"
+            strokeWidth={2.5}
+            vectorEffect="non-scaling-stroke"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+          {hover != null && (
+            <line
+              x1={x(hover)}
+              x2={x(hover)}
+              y1={PAD_T}
+              y2={H - PAD_B}
+              stroke="var(--muted-2)"
+              strokeWidth={1}
+              strokeDasharray="3 3"
+              vectorEffect="non-scaling-stroke"
+            />
+          )}
+        </svg>
+        <span className="chart-ymax">{fmtNum(max)}</span>
+        {last && <span className="chart-dot" style={{ left: '100%', top: `${(y(last.count) / H) * 100}%` }} />}
+        {hv && (
+          <>
+            <span className="chart-dot hover" style={{ left: `${hoverPct}%`, top: `${(y(hv.count) / H) * 100}%` }} />
+            <div className="chart-tip" style={{ left: `${Math.min(90, Math.max(10, hoverPct))}%` }}>
+              <b>{fmtNum(hv.count)}</b> vues <span className="dim">· {hv.label}</span>
+            </div>
+          </>
+        )}
+      </div>
       <div className="row" style={{ marginTop: 6 }}>
         <span className="small muted">{data[0]?.label}</span>
         <span className="small muted">{data[Math.floor(n / 2)]?.label}</span>
@@ -586,6 +680,8 @@ function Dashboard({ scope }: { scope: string }): JSX.Element {
   const [open, setOpen] = useState<AnalyticsProfile | null>(null)
   const [posts, setPosts] = useState<PostStat[] | null>(null)
   const [pLoading, setPLoading] = useState(false)
+  // Fenêtre du graphique, en jours (ne touche pas aux totaux 30 j du haut).
+  const [range, setRange] = useState(30)
 
   const loadPerf = useCallback(async (): Promise<void> => {
     setLoading(true)
@@ -671,9 +767,11 @@ function Dashboard({ scope }: { scope: string }): JSX.Element {
     const d = date.split('-')
     return { label: d.length === 3 ? `${d[2]}/${d[1]}` : date, count: v }
   })
-  const totalPeriod = buckets.reduce((a, b) => a + b.count, 0)
-  const avgPerDay = buckets.length ? Math.round(totalPeriod / buckets.length) : 0
-  const peak = buckets.reduce((m, b) => (b.count > m.count ? b : m), { label: '—', count: 0 })
+  // Période affichée par le graphique (les 4 cartes du haut restent sur 30 j).
+  const shown = range >= buckets.length ? buckets : buckets.slice(-range)
+  const totalPeriod = shown.reduce((a, b) => a + b.count, 0)
+  const avgPerDay = shown.length ? Math.round(totalPeriod / shown.length) : 0
+  const peak = shown.reduce((m, b) => (b.count > m.count ? b : m), { label: '—', count: 0 })
   const vals = buckets.map((b) => b.count)
   const last7 = vals.slice(-7).reduce((a, b) => a + b, 0)
   const prev7 = vals.slice(-14, -7).reduce((a, b) => a + b, 0)
@@ -694,7 +792,23 @@ function Dashboard({ scope }: { scope: string }): JSX.Element {
       </div>
 
       {loading && !data ? (
-        <div className="card muted">Chargement des performances…</div>
+        <>
+          <div className="stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(210px,1fr))', gap: 16 }}>
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="card">
+                <div className="skel" style={{ width: 32, height: 32 }} />
+                <div className="skel" style={{ width: '45%', height: 11, marginTop: 12 }} />
+                <div className="skel" style={{ width: '60%', height: 26, marginTop: 8 }} />
+                <div className="skel" style={{ width: '100%', height: 11, marginTop: 16 }} />
+                <div className="skel" style={{ width: '85%', height: 11, marginTop: 8 }} />
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 16, marginTop: 12, flex: 1, minHeight: 0 }}>
+            <div className="card"><div className="skel" style={{ width: '100%', height: '100%' }} /></div>
+            <div className="card"><div className="skel" style={{ width: '100%', height: '100%' }} /></div>
+          </div>
+        </>
       ) : profiles.length === 0 ? (
         <div className="card muted">Aucune donnée de performance. Configure la clé upload-post (Réglages) et publie des vidéos.</div>
       ) : (
@@ -759,8 +873,13 @@ function Dashboard({ scope }: { scope: string }): JSX.Element {
                 <div>
                   <strong>Vues dans le temps</strong>
                 </div>
+                <div className="seg">
+                  {[7, 14, 30].map((d) => (
+                    <button key={d} className={range === d ? 'on' : ''} onClick={() => setRange(d)}>{d} j</button>
+                  ))}
+                </div>
               </div>
-              <div style={{ marginTop: 14, flex: 1, minHeight: 110 }}><AreaChart data={buckets} /></div>
+              <div style={{ marginTop: 12, flex: 1, minHeight: 110 }}><AreaChart data={shown} /></div>
               <div className="metrics-row">
                 <div className="metric"><div className="ml">Total période</div><div className="mv">{fmtNum(totalPeriod)}</div></div>
                 <div className="metric"><div className="ml">Moyenne / jour</div><div className="mv">{fmtNum(avgPerDay)}</div></div>
@@ -774,21 +893,24 @@ function Dashboard({ scope }: { scope: string }): JSX.Element {
                 <span className="small muted">Eng. <b style={{ color: 'var(--accent-strong)' }}>{engGlobal}</b></span>
               </div>
               <p className="muted small" style={{ margin: '0 0 2px' }}>Par compte · clique pour le détail</p>
-              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflowY: 'auto' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
                 {profiles.map((p, i) => (
                   <div
                     key={p.profile}
                     className="funnel-row"
                     onClick={() => openProfile(p)}
-                    style={{ cursor: 'pointer', padding: '6px 0', borderTop: i ? '1px solid var(--border)' : 'none' }}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); void openProfile(p) } }}
+                    style={{ borderTop: i ? '1px solid var(--border)' : 'none' }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span className="rank">{i + 1}</span>
                       <Avatar url={p.avatarUrl} name={p.profile} size={22} />
                       <div style={{ flex: 1, minWidth: 0, lineHeight: 1.25 }}>
                         <div style={{ fontWeight: 700, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {p.handle ? '@' + p.handle : p.profile}
-                          {i === 0 && p.views > 0 && ' 🏆'}
-                          {p.videoCount > 0 && p.views === 0 && ' ⏳'}
+                          {p.videoCount > 0 && p.views === 0 && <span className="chip warn" style={{ marginLeft: 6 }}>en attente</span>}
                         </div>
                         <div className="muted small" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.videoCount} vid. · {fmtNum(p.followers)} ab. · ≈{p.videoCount ? fmtNum(Math.round(p.views / p.videoCount)) : 0}/vid · {eng(p)} eng.</div>
                       </div>
@@ -799,9 +921,12 @@ function Dashboard({ scope }: { scope: string }): JSX.Element {
                         <span key={l as string} style={{ whiteSpace: 'nowrap' }}>
                           <b style={{ fontWeight: 700, fontSize: big ? 15 : 13, color: big ? 'var(--accent-strong)' : undefined }}>{v}</b>
                           <span className="muted small" style={{ marginLeft: 3 }}>{l}</span>
+                          {big === true && totals.views > 0 && (
+                            <span className="muted small" style={{ marginLeft: 4 }}>({Math.round((p.views / totals.views) * 100)}%)</span>
+                          )}
                         </span>
                       ))}
-                      <span className="small" style={{ marginLeft: 'auto', color: 'var(--accent)', fontWeight: 600, flexShrink: 0 }}>Voir →</span>
+                      <span className="small go" style={{ marginLeft: 'auto', flexShrink: 0 }}>Voir →</span>
                     </div>
                   </div>
                 ))}
