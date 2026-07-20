@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type MouseEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type MouseEvent, type ReactNode } from 'react'
 import {
   api,
   subscribe,
@@ -41,6 +41,14 @@ const ICONS: Record<string, string> = {
 
 // Valeur spéciale du sélecteur en haut à droite : « Tous les comptes » (vue globale).
 const ALL_SCOPE = '__all__'
+/**
+ * Icône Google (Material Symbols). La police est chargée en sous-ensemble dans
+ * index.html : n'utiliser QUE des noms listés dans son paramètre `icon_names`.
+ */
+function MIcon({ name, size = 15, spin, style }: { name: string; size?: number; spin?: boolean; style?: CSSProperties }): JSX.Element {
+  return <span className={spin ? 'msym spin' : 'msym'} style={{ fontSize: size, ...style }} aria-hidden>{name}</span>
+}
+
 function Icon({ name, size = 18 }: { name: string; size?: number }): JSX.Element {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1723,7 +1731,7 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
           <option value="clip">Clip (rediff live / reportage YouTube)</option>
           <option value="custom">Sujet personnalisé…</option>
         </select>
-        {!slot.hasSeries && <div className="muted small" style={{ marginTop: -4, marginBottom: 10 }}>Pour proposer « Épisode de série » : configure la série du compte (⚙️ de la ligne → onglet Série).</div>}
+        {!slot.hasSeries && <div className="muted small" style={{ marginTop: -4, marginBottom: 10 }}>Pour proposer « Épisode de série » : configure la série du compte (<MIcon name="settings" size={13} /> de la ligne → onglet Série).</div>}
         {type === 'custom' && (
           <input className="input-full" value={subject} placeholder="Sujet exact de la vidéo — ex. le mystère du vol MH370" onChange={(e) => setSubject(e.target.value)} style={{ marginBottom: 10 }} />
         )}
@@ -1748,7 +1756,7 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
             </select>
             {music === 'auto' && (
               <div className="muted small" style={{ marginBottom: 8 }}>
-                Prend la piste suivante de la playlist du compte (⚙️ de la ligne → onglet <b>Vidéos de niche</b>), pour que les vidéos alternent. Si aucune piste n’y est cochée, l’IA choisit selon l’ambiance.
+                Prend la piste suivante de la playlist du compte (<MIcon name="settings" size={13} /> de la ligne → onglet <b>Vidéos de niche</b>), pour que les vidéos alternent. Si aucune piste n’y est cochée, l’IA choisit selon l’ambiance.
               </div>
             )}
             {type === 'serie' && music === 'auto' && <div className="muted small" style={{ marginTop: -4, marginBottom: 8 }}>Exception : les épisodes de série n’ont pas de musique de fond (dialogues seuls). Choisis une piste précise ci-dessus pour en imposer une.</div>}
@@ -1769,7 +1777,9 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
                 transition: 'border-color .15s, background .15s'
               }}
             >
-              {uploading ? '⏳ Import en cours…' : '⬆️ Importer un MP3 — glisse-dépose un fichier ou clique'}
+              {uploading
+                ? <><MIcon name="progress_activity" size={14} spin /> Import en cours…</>
+                : <><MIcon name="upload" size={14} /> Importer un MP3 — glisse-dépose un fichier ou clique</>}
               <input
                 ref={musicInputRef}
                 type="file"
@@ -1845,20 +1855,21 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
       setTesting(false)
     }
   }
+  // `icon` = nom d'un glyphe Material Symbols (cf. icon_names dans index.html).
   const chanLine = (r: { status: string; videos: number; longCount: number; sample?: string }): { icon: string; text: string; color?: string } => {
     switch (r.status) {
       case 'ok':
-        return { icon: '✅', text: `Compatible — ${r.videos} vidéo${r.videos > 1 ? 's' : ''} trouvée${r.videos > 1 ? 's' : ''} dont ${r.longCount} longue${r.longCount > 1 ? 's' : ''} (15-120 min)${r.sample ? ` · ex. « ${r.sample.slice(0, 60)} »` : ''}`, color: 'var(--good)' }
+        return { icon: 'check_circle', text: `Compatible — ${r.videos} vidéo${r.videos > 1 ? 's' : ''} trouvée${r.videos > 1 ? 's' : ''} dont ${r.longCount} longue${r.longCount > 1 ? 's' : ''} (15-120 min)${r.sample ? ` · ex. « ${r.sample.slice(0, 60)} »` : ''}`, color: 'var(--good)' }
       case 'aucune_longue':
-        return { icon: '⚠️', text: 'Chaîne trouvée mais aucune vidéo de 15-120 min dans les premiers résultats — le choix auto risque de l’ignorer', color: '#b45309' }
+        return { icon: 'warning', text: 'Chaîne trouvée mais aucune vidéo de 15-120 min dans les premiers résultats — le choix auto risque de l’ignorer', color: '#b45309' }
       case 'protege':
-        return { icon: '⛔', text: 'Vidéos protégées : téléchargement impossible via l’API — chaîne inutilisable', color: 'var(--bad)' }
+        return { icon: 'block', text: 'Vidéos protégées : téléchargement impossible via l’API — chaîne inutilisable', color: 'var(--bad)' }
       case 'introuvable':
-        return { icon: '❌', text: 'Introuvable — vérifie l’orthographe exacte du nom de la chaîne', color: 'var(--bad)' }
+        return { icon: 'cancel', text: 'Introuvable — vérifie l’orthographe exacte du nom de la chaîne', color: 'var(--bad)' }
       case 'quota':
-        return { icon: '⛔', text: 'Quota mensuel RapidAPI épuisé — le test, le choix auto et les téléchargements sont bloqués jusqu’à la remise à zéro (ou passe au plan supérieur sur rapidapi.com)', color: 'var(--bad)' }
+        return { icon: 'block', text: 'Quota mensuel RapidAPI épuisé — le test, le choix auto et les téléchargements sont bloqués jusqu’à la remise à zéro (ou passe au plan supérieur sur rapidapi.com)', color: 'var(--bad)' }
       default:
-        return { icon: '⚠️', text: 'Erreur pendant le test — réessaie', color: '#b45309' }
+        return { icon: 'warning', text: 'Erreur pendant le test — réessaie', color: '#b45309' }
     }
   }
 
@@ -1974,7 +1985,7 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
                   {(voiceProvider === 'elevenlabs' ? [{ id: '', label: 'Par défaut (1re voix ElevenLabs)' }, ...voiceList] : TTS_VOICES).map((v) => <option key={v.id || 'default'} value={v.id}>{v.label}</option>)}
                 </select>
                 <button className="btn" type="button" onClick={playVoice} disabled={voicePlaying} title="Écouter un extrait de cette voix" style={{ flexShrink: 0 }}>
-                  {voicePlaying ? '⏳' : '▶'} Écouter
+                  {voicePlaying ? <MIcon name="progress_activity" size={14} spin /> : <MIcon name="play_arrow" size={14} />} Écouter
                 </button>
               </div>
               <div className="muted small" style={{ marginTop: 4 }}>{voiceProvider === 'elevenlabs' ? 'Voix humaine ElevenLabs.' : "Voix OpenAI (bascule sur ElevenLabs dans Réglages pour des voix plus organiques)."} S'applique à la narration (niche, sujet libre) ; les séries gardent la voix native Veo.</div>
@@ -2073,7 +2084,7 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
                   const l = chanLine(r)
                   return (
                     <div key={r.channel} className="small" style={{ padding: '8px 10px', borderRadius: 8, background: 'var(--panel-2)', border: '1px solid var(--border)' }}>
-                      <span style={{ fontWeight: 600 }}>{l.icon} {r.channel}</span>{' '}
+                      <span style={{ fontWeight: 600, color: l.color }}><MIcon name={l.icon} size={14} /> {r.channel}</span>{' '}
                       <span style={{ color: l.color }}>{l.text}</span>
                     </div>
                   )
@@ -2177,7 +2188,12 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
         }}
       >
         <div className="ap-time" style={{ fontWeight: 700, fontSize: 13.5, color: s.failed ? 'var(--bad)' : s.done ? 'var(--ap-green-deep)' : 'var(--text)' }}>
-          {s.done ? s.eta : `≈ ${s.eta}`}{s.failed ? ' ⚠' : (s.pinned || s.type) && !s.done ? ' 📌' : ''}{!s.done && !s.failed && s.music && s.music !== 'auto' ? (s.music === 'none' ? ' 🔇' : ' 🎵') : ''}
+          {s.done ? s.eta : `≈ ${s.eta}`}
+          {s.failed && <MIcon name="error" size={14} style={{ marginLeft: 4 }} />}
+          {!s.done && !s.failed && (s.pinned || s.type) && <MIcon name="push_pin" size={14} style={{ marginLeft: 4 }} />}
+          {!s.done && !s.failed && s.music && s.music !== 'auto' && (
+            <MIcon name={s.music === 'none' ? 'music_off' : 'music_note'} size={14} style={{ marginLeft: 4 }} />
+          )}
         </div>
         {!opts?.hideAvatar && <Avatar url={s.avatarUrl} name={s.user} size={30} />}
         {!opts?.hideAvatar && (
@@ -2186,7 +2202,10 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
           </div>
         )}
         <div className="small" style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: s.done || s.failed ? 700 : 500, color: s.failed ? 'var(--bad)' : s.done ? 'var(--ap-green-strong)' : generating ? 'var(--ap-green-strong)' : 'var(--muted)' }}>
-          {s.done ? '✓ Publiée' : s.failed ? '⚠ Échec' : generating ? '⚙️ création…' : s.niche.split(' (')[0]}
+          {s.done ? <><MIcon name="check_circle" size={13} /> Publiée</>
+            : s.failed ? <><MIcon name="error" size={13} /> Échec</>
+              : generating ? <><MIcon name="progress_activity" size={13} spin /> création…</>
+                : s.niche.split(' (')[0]}
         </div>
         {s.failed && s.error ? (
           <div title={s.error} style={{ fontSize: 10, color: 'var(--bad)', maxWidth: '100%', whiteSpace: 'normal', lineHeight: 1.2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
@@ -2259,7 +2278,7 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
       </div>
       {paused && (
         <div style={{ marginTop: 10, padding: '10px 12px', background: '#fef3c7', color: '#b45309', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-          <div className="small"><b>⏸ En pause</b> — aucune vidéo n’est produite ni publiée tant que c’est en pause.</div>
+          <div className="small"><b><MIcon name="pause" size={14} /> En pause</b> — aucune vidéo n’est produite ni publiée tant que c’est en pause.</div>
           <button className="btn small" onClick={() => void resume()}>Reprendre</button>
         </div>
       )}
