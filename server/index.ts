@@ -1158,6 +1158,53 @@ app.post('/api/ideas', wrap(async (req, res) => {
   const saved = ideas.map((idea) => repo.createIdea(niche, idea))
   res.json({ ideas: saved })
 }))
+/** Suit les redirections et renvoie l'URL finale (les liens courts la masquent). */
+async function resolveRedirect(url: string): Promise<string> {
+  try {
+    const ctl = new AbortController()
+    const t = setTimeout(() => ctl.abort(), 8000)
+    const r = await fetch(url, {
+      redirect: 'follow',
+      signal: ctl.signal,
+      headers: { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+    })
+    clearTimeout(t)
+    void r.body?.cancel() // on ne veut que l'URL finale, pas le HTML
+    return r.url || url
+  } catch {
+    return url // pas de réseau / timeout : on laisse le pipeline tenter sa chance
+  }
+}
+
+/**
+ * Traduit un échec yt-dlp en message exploitable. Le code de sortie seul
+ * (« a terminé avec le code 1 ») n'apprend rien : la cause est dans la ligne
+ * « ERROR: … » du stderr, qui suit dans le message d'erreur.
+ */
+function downloadFailureReason(raw: string): string {
+  const errLine =
+    raw
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l.startsWith('ERROR:'))
+      .pop() ?? ''
+  const detail = errLine.replace(/^ERROR:\s*/, '')
+
+  // Cas le plus fréquent avec TikTok : le lien pointe un diaporama photo.
+  if (/tiktok\.com\/@[^/\s]+\/photo\//i.test(raw)) {
+    return 'ce lien TikTok est un diaporama photo, pas une vidéo : il n’y a aucune vidéo à télécharger. Copie le lien d’une vraie vidéo.'
+  }
+  if (/Sign in to confirm|not a bot/i.test(raw)) {
+    return 'YouTube demande une confirmation anti-bot — mets à jour les cookies YouTube dans les Réglages.'
+  }
+  if (/private video/i.test(raw)) return 'la vidéo est privée.'
+  if (/video unavailable|no longer available|removed/i.test(raw)) return 'la vidéo n’est plus disponible.'
+  if (/age.?restricted|confirm your age/i.test(raw)) return 'la vidéo est limitée par l’âge — des cookies sont nécessaires.'
+  if (/unsupported url/i.test(raw)) return `lien non pris en charge par le téléchargeur. ${detail}`.slice(0, 300)
+
+  return (detail || raw.split('\n')[0]).slice(0, 260)
+}
+
 // Inspiration : télécharge un TikTok (ou Short) qui marche, le transcrit, et écrit
 // une idée ORIGINALE reprenant sa mécanique virale (structure, hook, levier) — pas son contenu.
 app.post('/api/ideas/inspire', wrap(async (req, res) => {
@@ -1168,6 +1215,17 @@ app.post('/api/ideas/inspire', wrap(async (req, res) => {
   const mode: 'reproduce' | 'inspire' = (req.body as { mode?: unknown })?.mode === 'inspire' ? 'inspire' : 'reproduce'
   if (!/^https?:\/\/([\w-]+\.)*(tiktok\.com|youtube\.com|youtu\.be)\//i.test(url)) {
     return res.status(400).json({ error: 'Colle un lien TikTok (ou YouTube Short) valide.' })
+  }
+  // Les liens courts vm.tiktok.com masquent parfois un DIAPORAMA PHOTO (/photo/),
+  // que yt-dlp ne sait pas télécharger. On résout la redirection d'abord :
+  // l'utilisateur a l'erreur tout de suite au lieu d'un échec après téléchargement.
+  if (/tiktok\.com/i.test(url)) {
+    const finalUrl = await resolveRedirect(url)
+    if (/tiktok\.com\/@[^/\s]+\/photo\//i.test(finalUrl)) {
+      return res.status(400).json({
+        error: 'Ce lien TikTok est un diaporama photo, pas une vidéo — il n’y a rien à reproduire. Copie le lien d’une vraie vidéo.'
+      })
+    }
   }
   const ctx = await getContext()
   const cookiesFile = repo.getSetting('ytdlp_cookies_file') || null
@@ -1186,7 +1244,7 @@ app.post('/api/ideas/inspire', wrap(async (req, res) => {
       filePath = await downloadVideo(ctx, url, tmpId, undefined, null, cookiesFile)
     } catch (e) {
       const m = e instanceof Error ? e.message : String(e)
-      throw new Error(`Téléchargement impossible : ${m.split('\n')[0].slice(0, 220)}`)
+      throw new Error(`Téléchargement impossible — ${downloadFailureReason(m)}`)
     }
 
     // Transcription de la voix : Groq (rapide) si configuré, sinon whisper local.
