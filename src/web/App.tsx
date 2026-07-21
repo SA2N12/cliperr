@@ -1740,6 +1740,11 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
               <option value="auto">Automatique — playlist du compte</option>
               <option value="none">Aucune musique</option>
               {tracks.map((t) => <option key={t} value={t}>{trackLabel(t)}</option>)}
+              {/* Piste enregistrée mais absente du dossier : sans cette option, le
+                  <select> retomberait sur « Automatique » et le choix semblerait perdu. */}
+              {music !== 'auto' && music !== 'none' && !tracks.includes(music) && (
+                <option value={music}>{trackLabel(music)} — fichier introuvable</option>
+              )}
             </select>
             {music === 'auto' && (
               <div className="muted small" style={{ marginBottom: 8 }}>
