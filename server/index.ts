@@ -10,7 +10,7 @@ import { appPaths, config, assertConfig, type AppPaths } from './config'
 import { handleLogin, handleLogout, isAuthed, requireAuth } from './auth'
 import { sseHandler, emitProgress, emitLog, emitIdeaVideo } from './sse'
 import { generateVideoFromIdea, chooseMusicTrack, genImageGemini, ttsPreview, listElevenVoices, OPENAI_VOICES } from './video-gen'
-import { generateCarousel } from './carousel-gen'
+import { generateCarousel, assembleSlideshow } from './carousel-gen'
 import { uploadPostTikTokPhotos } from '../src/main/publish/uploadpost'
 import {
   getApiKey,
@@ -96,7 +96,7 @@ function scriptModel(): string {
  */
 function estimateCredits(type: string | undefined): number {
   if (type === 'clip') return 15
-  if (type === 'carousel') return 40 // 6 images IA, pas de voix off ni de montage
+  if (type === 'carousel' || type === 'slideshow') return 40 // 6 images IA, pas de voix off
   if (type === 'serie') return getEncrypted('fal_key') ? 140 : 70 // fal/Veo, ou repli Ken Burns
   return scriptModel().includes('opus') ? 50 : 45 // vidéo simple (niche / sujet)
 }
@@ -961,7 +961,8 @@ async function runAutopilotTick(force = false): Promise<void> {
 
     // ── Type « carrousel » : un post PHOTO (images qu'on fait défiler), écrit et
     // illustré dans la niche du compte, publié via l'endpoint photos d'upload-post.
-    if (slotOv.type === 'carousel') {
+    if (slotOv.type === 'carousel' || slotOv.type === 'slideshow') {
+      const asVideo = slotOv.type === 'slideshow'
       const openaiKey = getEncrypted('openai_key')
       if (!openaiKey) { failReason = 'clé OpenAI manquante'; emitLog('Pilote auto : clé OpenAI manquante (images du carrousel).'); return }
       const upKey = getEncrypted('uploadpost_key')
@@ -979,6 +980,40 @@ async function runAutopilotTick(force = false): Promise<void> {
       })
       if (usage) addSpend(model, usage)
       const caption = [carousel.caption, carousel.hashtags.join(' ')].filter(Boolean).join('\n\n')
+
+      // ── Diaporama VIDÉO : le seul mode où l'on impose sa musique (TikTok ne
+      // laisse joindre aucun audio à un post photo natif). Même sélection de
+      // piste que les vidéos : piste du bloc > 'none' > rotation de la playlist.
+      if (asVideo) {
+        const tracks = musicTracks()
+        let musicPath: string | undefined
+        if (slotOv.music && slotOv.music !== 'auto' && slotOv.music !== 'none' && tracks.includes(slotOv.music)) {
+          musicPath = join(musicDir, slotOv.music)
+        } else if (slotOv.music !== 'none') {
+          const rotated = nextMusicForProfile(user, tracks)
+          if (rotated) musicPath = join(musicDir, rotated)
+        }
+        const { filePath, durationSec } = await assembleSlideshow(cctx, files, musicPath)
+        const src = repo.createSource(`idea:slideshow-${Date.now()}`)
+        repo.updateSource(src.id, { status: 'done', title: carousel.title, durationSec, filePath })
+        const clip = repo.createClip({
+          sourceId: src.id,
+          startSec: 0,
+          endSec: durationSec,
+          filePath,
+          title: carousel.title,
+          description: carousel.caption,
+          hashtags: carousel.hashtags.join(' '),
+          profile: user
+        })
+        repo.setClipReview(clip.id, 'approved')
+        await publishClipById(clip.id, paths, emitLog, { uploadPostUser: user, videoType: 'niche' })
+        markDone(user, ordinal)
+        produced = true
+        emitLog(`Pilote auto : diaporama de ${files.length} images publié sur « ${user} »${musicPath ? ` (musique : ${basename(musicPath)})` : ' (sans musique)'}.`)
+        return
+      }
+
       const { url, postId } = await uploadPostTikTokPhotos({
         apiKey: upKey,
         user,
@@ -2099,7 +2134,7 @@ app.get('/api/autopilot/plan', wrap(async (req, res) => {
       const ov = ovToday[`${user}:${ordinal}`]
       let label: string
       if (ov?.type === 'custom' && (ov.subject ?? '').trim()) label = `Sujet : ${(ov.subject ?? '').trim()}`
-      else if (ov?.type === 'carousel') label = `Carrousel : ${(ov.subject ?? '').trim() || nicheForProfile(user)}`
+      else if (ov?.type === 'carousel' || ov?.type === 'slideshow') label = `${ov.type === 'slideshow' ? 'Diaporama' : 'Carrousel'} : ${(ov.subject ?? '').trim() || nicheForProfile(user)}`
       else if (ov?.type === 'clip') label = `Clip : ${(ov.subject ?? '').trim().replace(/^https?:\/\/(www\.)?/, '').slice(0, 50) || 'choix auto (IA)'}`
       else if (ov?.type === 'serie' && confSerie) label = `Série : ${confSerie.title}`
       else label = nicheForProfile(user)
@@ -2153,7 +2188,7 @@ app.get('/api/autopilot/plan', wrap(async (req, res) => {
     // Libellé selon le type du créneau (niche par défaut).
     let label: string
     if (ov?.type === 'custom' && (ov.subject ?? '').trim()) label = `Sujet : ${(ov.subject ?? '').trim()}`
-    else if (ov?.type === 'carousel') label = `Carrousel : ${(ov.subject ?? '').trim() || nicheForProfile(sc.user)}`
+    else if (ov?.type === 'carousel' || ov?.type === 'slideshow') label = `${ov.type === 'slideshow' ? 'Diaporama' : 'Carrousel'} : ${(ov.subject ?? '').trim() || nicheForProfile(sc.user)}`
     else if (ov?.type === 'clip') label = `Clip : ${(ov.subject ?? '').trim().replace(/^https?:\/\/(www\.)?/, '').slice(0, 50) || 'choix auto (IA)'}`
     else if (ov?.type === 'serie' && confSerie) label = `Série : ${confSerie.title} — Ép. ${confSerie.episode}`
     else label = nicheForProfile(sc.user)
@@ -2369,7 +2404,7 @@ app.post('/api/autopilot/slot', wrap((req, res) => {
       if (!t || t === 'auto') {
         delete o.type
         delete o.subject
-      } else if (['niche', 'serie', 'custom', 'clip', 'carousel'].includes(t)) {
+      } else if (['niche', 'serie', 'custom', 'clip', 'carousel', 'slideshow'].includes(t)) {
         o.type = t
       }
     }

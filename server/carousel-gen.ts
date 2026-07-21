@@ -128,6 +128,63 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 Dialogue: 0,0:00:00.00,0:00:10.00,Def,,0,0,0,,${assEscape(text)}`
 }
 
+/**
+ * Assemble les diapos en MP4 vertical (léger zoom sur chaque image) avec LA
+ * musique choisie. C'est le seul moyen d'imposer sa musique : TikTok n'accepte
+ * aucun audio sur un post photo natif, il pose le sien.
+ */
+export async function assembleSlideshow(
+  ctx: PipelineContext,
+  files: string[],
+  musicTrack: string | undefined,
+  secPerSlide = 3.2
+): Promise<{ filePath: string; durationSec: number }> {
+  const stamp = Date.now()
+  const work = join(ctx.dirs.downloads, `slideshow-${stamp}`)
+  await mkdir(work, { recursive: true })
+  try {
+    const segs: string[] = []
+    const frames = Math.round(secPerSlide * 30)
+    for (let i = 0; i < files.length; i++) {
+      const seg = join(work, `p${i}.mp4`)
+      await run(ctx.bin.ffmpeg, [
+        '-y', '-loglevel', 'error',
+        '-loop', '1', '-t', String(secPerSlide), '-i', files[i],
+        '-vf',
+        `scale=1188:2112:force_original_aspect_ratio=increase,crop=1188:2112,zoompan=z='min(zoom+0.0005,1.12)':d=${frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30,setsar=1`,
+        '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-r', '30',
+        seg
+      ])
+      segs.push(seg)
+    }
+    const list = join(work, 'list.txt')
+    await writeFile(list, segs.map((s) => `file '${s.replace(/'/g, "'\\''")}'`).join('\n'))
+    const concatPath = join(work, 'concat.mp4')
+    await run(ctx.bin.ffmpeg, ['-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', list, '-c', 'copy', concatPath])
+
+    const total = files.length * secPerSlide
+    const dest = join(ctx.dirs.clips, `slideshow-${stamp}.mp4`)
+    if (musicTrack) {
+      // Pas de voix off ici → pas de ducking : musique pleine, fondu de sortie.
+      const fadeSt = Math.max(0, total - 2)
+      await run(ctx.bin.ffmpeg, [
+        '-y', '-loglevel', 'error',
+        '-i', concatPath,
+        '-stream_loop', '-1', '-i', musicTrack,
+        '-filter_complex', `[1:a]volume=0.85,afade=t=out:st=${fadeSt.toFixed(2)}:d=2,alimiter=limit=0.96[a]`,
+        '-map', '0:v', '-map', '[a]',
+        '-c:v', 'copy', '-c:a', 'aac', '-b:a', '160k', '-t', String(total),
+        dest
+      ])
+    } else {
+      await run(ctx.bin.ffmpeg, ['-y', '-loglevel', 'error', '-i', concatPath, '-an', '-c', 'copy', dest])
+    }
+    return { filePath: dest, durationSec: total }
+  } finally {
+    await rm(work, { recursive: true, force: true }).catch(() => undefined)
+  }
+}
+
 export interface CarouselGenOptions {
   anthropicKey: string
   anthropicModel?: string

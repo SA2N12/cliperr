@@ -1666,7 +1666,7 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
           ordinal: slot.ordinal,
           hm: Number.isFinite(h) && Number.isFinite(m) ? h + m / 60 : null,
           type: type === 'auto' ? null : type,
-          subject: type === 'custom' || type === 'clip' || type === 'carousel' ? subject : null,
+          subject: ['custom', 'clip', 'carousel', 'slideshow'].includes(type) ? subject : null,
           music
         })
         toast('Créneau personnalisé ✓')
@@ -1706,15 +1706,19 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
         <select className="input-full" value={type === 'niche' ? 'auto' : type} onChange={(e) => setType(e.target.value)} style={{ marginBottom: 10 }}>
           <option value="auto">Vidéo de niche (défaut)</option>
           {slot.hasSeries && <option value="serie">Épisode de série</option>}
-          <option value="carousel">Carrousel photo (images à faire défiler)</option>
+          <option value="carousel">Carrousel photo — musique imposée par TikTok</option>
+          <option value="slideshow">Diaporama vidéo — ta musique</option>
           <option value="clip">Clip (rediff live / reportage YouTube)</option>
           <option value="custom">Sujet personnalisé…</option>
         </select>
-        {type === 'carousel' && (
+        {(type === 'carousel' || type === 'slideshow') && (
           <>
-            <input className="input-full" value={subject} placeholder="Sujet du carrousel — ou laisse vide : l'IA suit la niche du compte" onChange={(e) => setSubject(e.target.value)} style={{ marginBottom: 4 }} />
+            <input className="input-full" value={subject} placeholder="Sujet — ou laisse vide : l'IA suit la niche du compte" onChange={(e) => setSubject(e.target.value)} style={{ marginBottom: 4 }} />
             <div className="muted small" style={{ marginBottom: 10 }}>
-              6 diapos écrites par l’IA (hook → contenu → chute) avec une image par diapo et le texte incrusté. TikTok ajoute la musique automatiquement.
+              6 diapos écrites par l’IA (hook → contenu → chute), une image par diapo, texte incrusté.{' '}
+              {type === 'slideshow'
+                ? 'Publié en vidéo → la musique ci-dessous s’applique.'
+                : 'Publié en post photo natif : TikTok choisit lui-même la musique (impossible d’en joindre une).'}
             </div>
           </>
         )}
