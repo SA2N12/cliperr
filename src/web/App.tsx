@@ -372,8 +372,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
   const navGroups: { id: Page; label: string; icon: string }[][] = [
     [
       { id: 'dashboard', label: 'Tableau de bord', icon: 'dashboard' },
-      ...(isAll ? [{ id: 'autopilot' as Page, label: 'Pilote auto', icon: 'bolt' }] : []),
-      ...(isAll ? [{ id: 'analyse' as Page, label: 'Analyse IA', icon: 'chart' }] : [])
+      ...(isAll ? [{ id: 'autopilot' as Page, label: 'Pilote auto', icon: 'bolt' }] : [])
     ],
     [
       { id: 'generate', label: 'Générer', icon: 'spark' },
@@ -444,7 +443,6 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
         {page === 'generate' && <Generate sources={sources} progress={progress} onRefresh={refresh} toast={showToast} goHistory={() => setPage('history')} />}
         {page === 'history' && <History sources={sources} clips={clips} progress={progress} onRefresh={refresh} toast={showToast} goClips={() => setPage('clips')} />}
         {page === 'clips' && <Clips clips={clips} sources={sources} onRefresh={refresh} toast={showToast} ttProfile={ttProfile} scope={scope} />}
-        {page === 'analyse' && isAll && <Analyse toast={showToast} />}
         {page === 'providers' && <Providers go={setPage} />}
         {page === 'settings' && <Settings toast={showToast} onTtProfile={setTtProfile} />}
       </main>
