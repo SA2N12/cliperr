@@ -379,6 +379,11 @@ async function runVideoGen(
       // Choix manuel d'une piste précise pour ce bloc (prioritaire sur l'IA).
       musicTrack = join(musicDir, opts.music)
       emitIdeaVideo({ ideaId, status: 'running', message: `Musique : ${cleanName(opts.music)}` })
+    } else if (idea.reproduce) {
+      // Reproduction fidèle : la bande-son fait partie de ce qu'on reproduit.
+      // Plaquer une piste de la playlist par-dessus dénature la source — on ne
+      // met donc AUCUNE musique, sauf demande explicite d'une piste précise.
+      emitIdeaVideo({ ideaId, status: 'running', message: 'Reproduction fidèle : pas de musique ajoutée.' })
     } else if (tracks.length && !opts.noMusic) {
       // Playlist du compte : on prend la piste suivante (rotation) → les vidéos
       // d'un même compte alternent. Prioritaire sur le choix IA.
@@ -424,7 +429,10 @@ async function runVideoGen(
       characterRefPath: opts.characterRefPath,
       falKey: getEncrypted('fal_key'),
       falVideoModel: repo.getSetting('fal_video_model') || undefined,
-      animateScenes: opts.animateScenes,
+      // Reproduction fidèle : la source est une VIDÉO, pas un diaporama. On anime
+      // donc les scènes (fal.ai) si la clé est là, au lieu d'un simple Ken Burns
+      // sur des images fixes.
+      animateScenes: opts.animateScenes ?? (idea.reproduce && !!getEncrypted('fal_key')),
       dialogue: opts.dialogue,
       videoEngine: repo.getSetting('series_video_engine') || 'seedance',
       onProgress: (m) => emitIdeaVideo({ ideaId, status: 'running', message: m })
