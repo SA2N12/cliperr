@@ -1028,6 +1028,7 @@ async function runAutopilotTick(force = false): Promise<void> {
         user,
         filePaths: files,
         caption,
+        title: carousel.title,
         // `carousel_privacy` : confidentialité PROPRE aux carrousels (le réglage
         // global vaut pour les vidéos). Permet de publier un carrousel en
         // « Moi uniquement » pour le relire avant de le rendre public à la main.

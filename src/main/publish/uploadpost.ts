@@ -107,6 +107,8 @@ export interface UploadPhotosParams {
   /** JPEG dans l'ordre des diapos — le premier sert de couverture. */
   filePaths: string[]
   caption: string
+  /** Titre court du post. TikTok le limite à 90 caractères sur les posts photo. */
+  title?: string
   privacyLevel?: string
   disableComment?: boolean
   onNote?: (m: string) => void
@@ -130,8 +132,11 @@ export async function uploadPostTikTokPhotos(p: UploadPhotosParams): Promise<{ u
   form.append('platform[]', 'tiktok')
   form.append('post_mode', 'DIRECT_POST')
   const caption = p.caption.slice(0, 2200)
-  form.append('title', caption || 'carrousel')
-  form.append('tiktok_title', caption)
+  // TikTok refuse un titre > 90 caractères sur les posts PHOTO (contrairement aux
+  // vidéos). Le texte long va dans la description ; le titre est court et propre.
+  const title = (p.title || caption).replace(/\s+/g, ' ').trim().slice(0, 90) || 'carrousel'
+  form.append('title', title)
+  form.append('tiktok_title', title)
   form.append('tiktok_description', caption)
   form.append('privacy_level', p.privacyLevel || 'PUBLIC_TO_EVERYONE')
   form.append('auto_add_music', 'true')
