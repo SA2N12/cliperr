@@ -1349,8 +1349,13 @@ function ClipCard({ c, ai, onReview, onPublish }: { c: ClipDTO; ai: boolean; onR
   return (
     <article className="clip-card">
       <div className="clip-media">
+        {/* Un carrousel photo stocke sa couverture (JPEG) : <video> ne l'afficherait pas. */}
         {c.filePath ? (
-          <video src={clipUrl(c.filePath)} controls preload="metadata" />
+          /\.(jpe?g|png|webp)$/i.test(c.filePath) ? (
+            <img src={clipUrl(c.filePath)} alt="" loading="lazy" />
+          ) : (
+            <video src={clipUrl(c.filePath)} controls preload="metadata" />
+          )
         ) : (
           <div className="clip-noprev"><MIcon name="warning" size={18} /> Pas d’aperçu</div>
         )}
@@ -1661,7 +1666,7 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
           ordinal: slot.ordinal,
           hm: Number.isFinite(h) && Number.isFinite(m) ? h + m / 60 : null,
           type: type === 'auto' ? null : type,
-          subject: type === 'custom' || type === 'clip' ? subject : null,
+          subject: type === 'custom' || type === 'clip' || type === 'carousel' ? subject : null,
           music
         })
         toast('Créneau personnalisé ✓')
@@ -1701,9 +1706,18 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
         <select className="input-full" value={type === 'niche' ? 'auto' : type} onChange={(e) => setType(e.target.value)} style={{ marginBottom: 10 }}>
           <option value="auto">Vidéo de niche (défaut)</option>
           {slot.hasSeries && <option value="serie">Épisode de série</option>}
+          <option value="carousel">Carrousel photo (images à faire défiler)</option>
           <option value="clip">Clip (rediff live / reportage YouTube)</option>
           <option value="custom">Sujet personnalisé…</option>
         </select>
+        {type === 'carousel' && (
+          <>
+            <input className="input-full" value={subject} placeholder="Sujet du carrousel — ou laisse vide : l'IA suit la niche du compte" onChange={(e) => setSubject(e.target.value)} style={{ marginBottom: 4 }} />
+            <div className="muted small" style={{ marginBottom: 10 }}>
+              6 diapos écrites par l’IA (hook → contenu → chute) avec une image par diapo et le texte incrusté. TikTok ajoute la musique automatiquement.
+            </div>
+          </>
+        )}
         {!slot.hasSeries && <div className="muted small" style={{ marginTop: -4, marginBottom: 10 }}>Pour proposer « Épisode de série » : configure la série du compte (<MIcon name="settings" size={13} /> de la ligne → onglet Série).</div>}
         {type === 'custom' && (
           <input className="input-full" value={subject} placeholder="Sujet exact de la vidéo — ex. le mystère du vol MH370" onChange={(e) => setSubject(e.target.value)} style={{ marginBottom: 10 }} />

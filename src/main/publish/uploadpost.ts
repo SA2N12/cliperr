@@ -86,6 +86,76 @@ export async function uploadPostTikTok(p: UploadPostParams): Promise<{ url: stri
   throw new Error(`upload-post : ${json.error || `HTTP ${res.status}`}`)
 }
 
+export interface UploadPhotosParams {
+  apiKey: string
+  user: string
+  /** JPEG dans l'ordre des diapos — le premier sert de couverture. */
+  filePaths: string[]
+  caption: string
+  privacyLevel?: string
+  disableComment?: boolean
+  onNote?: (m: string) => void
+}
+
+/**
+ * Poste un CARROUSEL PHOTO sur TikTok (endpoint `/api/upload_photos`).
+ * TikTok n'accepte que JPG/JPEG/WEBP et ajoute lui-même la musique de fond
+ * (`auto_add_music`) — on ne peut pas joindre de piste audio ici.
+ */
+export async function uploadPostTikTokPhotos(p: UploadPhotosParams): Promise<{ url: string | null; postId: string | null }> {
+  if (!p.apiKey) throw new Error('Clé API upload-post manquante')
+  if (!p.user) throw new Error('Identifiant de profil upload-post (« user ») manquant')
+  if (!p.filePaths.length) throw new Error('Aucune image à publier')
+
+  const form = new FormData()
+  for (const f of p.filePaths) {
+    form.append('photos[]', await openAsBlob(f, { type: 'image/jpeg' }), basename(f))
+  }
+  form.append('user', p.user)
+  form.append('platform[]', 'tiktok')
+  form.append('post_mode', 'DIRECT_POST')
+  const caption = p.caption.slice(0, 2200)
+  form.append('title', caption || 'carrousel')
+  form.append('tiktok_title', caption)
+  form.append('tiktok_description', caption)
+  form.append('privacy_level', p.privacyLevel || 'PUBLIC_TO_EVERYONE')
+  form.append('auto_add_music', 'true')
+  form.append('photo_cover_index', '0')
+  if (p.disableComment) form.append('disable_comment', 'true')
+
+  let res: Response
+  try {
+    res = await fetch('https://api.upload-post.com/api/upload_photos', {
+      method: 'POST',
+      headers: { Authorization: `Apikey ${p.apiKey}` },
+      body: form
+    })
+  } catch (e) {
+    throw new Error(`upload-post injoignable : ${e instanceof Error ? e.message : e}`)
+  }
+
+  const text = await res.text()
+  let json: UploadPostResult
+  try {
+    json = JSON.parse(text) as UploadPostResult
+  } catch {
+    throw new Error(`upload-post réponse invalide (HTTP ${res.status}) : ${text.slice(0, 200)}`)
+  }
+
+  const tt = json.results?.tiktok
+  if (tt) {
+    if (!res.ok || tt.success === false) {
+      throw new Error(`upload-post : ${tt.error || json.error || `HTTP ${res.status}`}`)
+    }
+    return { url: tt.url ?? null, postId: postIdFromUrl(tt.url) }
+  }
+  // Même politique que la vidéo : on ne conclut à l'échec que sur preuve explicite.
+  if (res.ok && json.success && json.request_id) {
+    return pollUploadStatus(p.apiKey, json.request_id, p.onNote)
+  }
+  throw new Error(`upload-post : ${json.error || `HTTP ${res.status}`}`)
+}
+
 interface StatusResult {
   status?: string
   results?: Array<{ platform?: string; success?: boolean; post_url?: string; platform_post_id?: string; error_message?: string }>

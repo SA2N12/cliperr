@@ -362,7 +362,7 @@ function neutralizeImagePrompt(prompt: string): string {
  * `keepStyle` : le prompt impose déjà son propre style (mode inspiration/série) → on
  * n'ajoute PAS le suffixe « photoréaliste cinématique » qui l'écraserait.
  */
-async function genImage(openaiKey: string, prompt: string, dest: string, onNote?: (m: string) => void, keepStyle = false): Promise<void> {
+export async function genImage(openaiKey: string, prompt: string, dest: string, onNote?: (m: string) => void, keepStyle = false): Promise<void> {
   const suffix = keepStyle
     ? 'Vertical 9:16 composition, highly detailed, no text, no watermark, no logo.'
     : 'Vertical 9:16, ultra-cinematic, dramatic volumetric lighting, rich saturated colors, shallow depth of field, highly detailed, photorealistic film still, epic mood, no text, no watermark, no logo.'

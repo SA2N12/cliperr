@@ -583,7 +583,8 @@ button {
   aspect-ratio: 9 / 16;
   background: #000;
 }
-.clip-media video {
+.clip-media video,
+.clip-media img {
   width: 100%;
   height: 100%;
   object-fit: cover;
