@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ChangeEvent, type CSSProperties, type MouseEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type MouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import {
   api,
   subscribe,
@@ -2109,35 +2109,13 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
   const [editSlot, setEditSlot] = useState<AutopilotSlot | null>(null)
   const [cfgUser, setCfgUser] = useState<string | null>(null)
   const [day, setDay] = useState(0) // 0 = aujourd'hui, 1 = demain
-  const [dragUser, setDragUser] = useState<string | null>(null)
-  const [overUser, setOverUser] = useState<string | null>(null)
   const [localOrder, setLocalOrder] = useState<string[] | null>(null)
-  // FLIP : on mémorise la position des lignes AVANT le réordonnancement, puis on
-  // les replace visuellement à leur ancien emplacement pour les laisser glisser
-  // vers le nouveau. Sans ça, la liste sauterait d'un coup.
+  // Glissement au pointeur (et non drag HTML5) : la ligne saisie suit vraiment le
+  // curseur, et les lignes traversées s'écartent en direct. Le drag HTML5 ne
+  // promenait qu'un fantôme de la poignée, d'où l'impression que rien ne bougeait.
+  const [drag, setDrag] = useState<{ from: number; to: number; dy: number; h: number } | null>(null)
+  const dragRef = useRef<{ from: number; to: number } | null>(null)
   const rowRefs = useRef(new Map<string, HTMLDivElement>())
-  const prevTops = useRef(new Map<string, number>())
-  const snapshotRows = (): void => {
-    prevTops.current.clear()
-    rowRefs.current.forEach((el, u) => prevTops.current.set(u, el.getBoundingClientRect().top))
-  }
-  useLayoutEffect(() => {
-    if (!prevTops.current.size) return
-    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-    rowRefs.current.forEach((el, u) => {
-      const prev = prevTops.current.get(u)
-      if (prev == null) return
-      const delta = prev - el.getBoundingClientRect().top
-      if (!delta || reduce) return
-      el.style.transition = 'none'
-      el.style.transform = `translateY(${delta}px)`
-      requestAnimationFrame(() => {
-        el.style.transition = 'transform .3s cubic-bezier(.2,.8,.2,1)'
-        el.style.transform = ''
-      })
-    })
-    prevTops.current.clear()
-  }, [localOrder])
   const load = useCallback((): void => {
     api.autopilotPlan(day).then(setPlan).catch(() => undefined)
   }, [day])
@@ -2264,16 +2242,60 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
       })
     : accountList
 
-  const dropOn = (target: string): void => {
-    const from = dragUser
-    setDragUser(null)
-    setOverUser(null)
-    if (!from || from === target) return
-    const next = ordered.map((a) => a.user).filter((u) => u !== from)
-    next.splice(next.indexOf(target), 0, from)
-    snapshotRows() // positions d'avant → l'effet FLIP anime le glissement
-    setLocalOrder(next)
-    api.saveAccountOrder(next).catch(() => toast('Ordre non enregistré'))
+  // Écart appliqué aux lignes traversées = hauteur de la ligne saisie + le gap
+  // de la colonne (12px), pour qu'elles libèrent exactement sa place.
+  const GAP = 12
+  const startDrag = (e: ReactPointerEvent<HTMLElement>, index: number): void => {
+    if (e.button !== 0) return
+    e.preventDefault()
+    const rects = ordered
+      .map((a) => rowRefs.current.get(a.user))
+      .map((el) => (el ? el.getBoundingClientRect() : null))
+    const own = rects[index]
+    if (!own) return
+    const startY = e.clientY
+    dragRef.current = { from: index, to: index }
+    setDrag({ from: index, to: index, dy: 0, h: own.height })
+
+    const move = (ev: PointerEvent): void => {
+      const dy = ev.clientY - startY
+      const center = own.top + own.height / 2 + dy
+      let to = index
+      rects.forEach((r, i) => {
+        if (!r || i === index) return
+        const mid = r.top + r.height / 2
+        if (i < index && center < mid) to = Math.min(to, i)
+        if (i > index && center > mid) to = Math.max(to, i)
+      })
+      dragRef.current = { from: index, to }
+      setDrag((d) => (d ? { ...d, dy, to } : d))
+    }
+    const up = (): void => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      const d = dragRef.current
+      dragRef.current = null
+      setDrag(null)
+      if (!d || d.to === d.from) return
+      const next = ordered.map((a) => a.user)
+      const [moved] = next.splice(d.from, 1)
+      next.splice(d.to, 0, moved)
+      setLocalOrder(next)
+      api.saveAccountOrder(next).catch(() => toast('Ordre non enregistré'))
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
+
+  /** Décalage visuel d'une ligne pendant le glissement. */
+  const dragStyle = (i: number): CSSProperties => {
+    if (!drag) return {}
+    if (i === drag.from) {
+      return { transform: `translateY(${drag.dy}px)`, position: 'relative', zIndex: 3 }
+    }
+    const shift = drag.h + GAP
+    const t = drag.from < i && i <= drag.to ? -shift : drag.to <= i && i < drag.from ? shift : 0
+    return { transform: `translateY(${t}px)`, transition: 'transform .18s cubic-bezier(.2,.8,.2,1)' }
   }
 
   return (
@@ -2318,7 +2340,7 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
       </div>
       {groupByAccount ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 14 }}>
-          {ordered.map((a) => {
+          {ordered.map((a, accIdx) => {
             const u = a.user
             const userSlots = slots.filter((s) => s.user === u)
             const uDone = userSlots.filter((s) => s.done).length
@@ -2327,20 +2349,15 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
               <div
                 key={u}
                 ref={(el) => { if (el) rowRefs.current.set(u, el); else rowRefs.current.delete(u) }}
-                className={`ap-acc-row${dragUser === u ? ' dragging' : ''}${overUser === u ? ' over' : ''}`}
-                onDragOver={(e) => { if (dragUser && dragUser !== u) { e.preventDefault(); setOverUser(u) } }}
-                onDragLeave={() => setOverUser((o) => (o === u ? null : o))}
-                onDrop={(e) => { e.preventDefault(); dropOn(u) }}
-                style={{ display: 'flex', alignItems: 'center', gap: 12, borderTop: '1px solid var(--border)', paddingTop: 12 }}
+                className={`ap-acc-row${drag?.from === accIdx ? ' dragging' : ''}`}
+                style={{ display: 'flex', alignItems: 'center', gap: 12, borderTop: '1px solid var(--border)', paddingTop: 12, ...dragStyle(accIdx) }}
               >
                 <div style={{ width: 176, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
                   {/* Poignée : seule zone « draggable », sinon le glissement partirait
                       aussi depuis les blocs horaires et gênerait leur clic. */}
                   <span
                     className="ap-grip"
-                    draggable
-                    onDragStart={(e) => { setDragUser(u); e.dataTransfer.effectAllowed = 'move' }}
-                    onDragEnd={() => setDragUser(null)}
+                    onPointerDown={(e) => startDrag(e, accIdx)}
                     title="Glisser pour réordonner les comptes"
                   >
                     <MIcon name="drag_indicator" size={16} />
