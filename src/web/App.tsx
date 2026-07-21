@@ -2371,6 +2371,68 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
 }
 
 
+/**
+ * Réglage de l'API de tendances, avec un bouton « Tester » qui montre les tags
+ * RÉELLEMENT extraits : on juge la qualité des données avant de payer un plan.
+ */
+function TrendsSetup({ toast, onDone }: { toast: (m: string) => void; onDone: () => void }): JSX.Element {
+  const [host, setHost] = useState('')
+  const [path, setPath] = useState('')
+  const [hasKey, setHasKey] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<{ tags: string[] } | { error: string } | null>(null)
+  useEffect(() => {
+    api.trendsConfig().then((c) => { setHost(c.host); setPath(c.path); setHasKey(c.hasKey) }).catch(() => undefined)
+  }, [])
+
+  const saveAndTest = async (): Promise<void> => {
+    setBusy(true)
+    setResult(null)
+    try {
+      await api.saveTrendsConfig(host, path)
+      const r = await api.testTrends()
+      setResult({ tags: r.tags })
+      if (r.tags.length) { toast(`${r.tags.length} tendance${r.tags.length > 1 ? 's' : ''} récupérée${r.tags.length > 1 ? 's' : ''} ✓`); onDone() }
+    } catch (e) {
+      setResult({ error: (e as Error).message })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div style={{ marginTop: 8 }}>
+      <p className="muted small" style={{ marginTop: 0 }}>
+        Abonne-toi à une API de tendances sur RapidAPI — ta clé RapidAPI existante fonctionne.
+        Commence par <b>TikTok Trending Data</b> (éditeur <i>earned</i>) en offre gratuite, colle le chemin de
+        l’endpoint « trending hashtags », et teste : tu verras les tags réellement récupérés avant de payer quoi que ce soit.
+      </p>
+      {!hasKey && <p className="small" style={{ color: 'var(--bad)' }}>Clé RapidAPI absente — ajoute-la d’abord dans les Réglages.</p>}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <input className="input-full" style={{ flex: '1 1 260px' }} value={host} onChange={(e) => setHost(e.target.value)} placeholder="Hôte RapidAPI — ex. tiktok-trending-data.p.rapidapi.com" />
+        <input className="input-full" style={{ flex: '1 1 200px' }} value={path} onChange={(e) => setPath(e.target.value)} placeholder="Chemin — ex. /trending/hashtags" />
+        <button className="btn primary" disabled={busy || !path.trim()} onClick={() => void saveAndTest()}>
+          {busy ? 'Test…' : 'Enregistrer et tester'}
+        </button>
+      </div>
+      {result && 'error' in result && (
+        <p className="small" style={{ color: 'var(--bad)', marginBottom: 0 }}>Échec : {result.error}</p>
+      )}
+      {result && 'tags' in result && (
+        result.tags.length === 0 ? (
+          <p className="small" style={{ color: '#b45309', marginBottom: 0 }}>
+            L’API a répondu, mais aucun tag n’a pu être extrait — le format de réponse ne correspond pas. Essaie un autre endpoint.
+          </p>
+        ) : (
+          <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {result.tags.slice(0, 20).map((t) => <span key={t} className="chip">{t}</span>)}
+          </div>
+        )
+      )}
+    </div>
+  )
+}
+
 function ideaToText(i: ViralIdea): string {
   return `${i.title}\n\nHook : ${i.hook}\nAngle : ${i.angle}\n\nScript :\n${i.script
     .map((s, k) => `${k + 1}. ${s}`)
@@ -2473,14 +2535,7 @@ function Ideas({ toast, go }: { toast: (m: string) => void; go: (p: Page) => voi
           </button>
         </div>
         {trendsConfigured === false ? (
-          <div style={{ marginTop: 8 }}>
-            <p className="muted small">
-              Pour afficher les vraies tendances TikTok, abonne-toi à une API de tendances sur RapidAPI (ta clé
-              RapidAPI existante fonctionnera). Tu peux déjà générer des idées ci-dessous, ou cibler des tendances
-              à la main dans la niche.
-            </p>
-            <button className="btn" onClick={() => go('settings')}>Aller aux Réglages</button>
-          </div>
+          <TrendsSetup toast={toast} onDone={loadTrends} />
         ) : trends.length === 0 ? (
           <p className="muted small" style={{ marginBottom: 0, marginTop: 8 }}>Aucune tendance récupérée pour l’instant.</p>
         ) : (

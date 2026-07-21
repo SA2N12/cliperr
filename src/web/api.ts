@@ -222,6 +222,9 @@ export const api = {
       elevenlabs: boolean
       error?: string
     }>('/api/tts/voices'),
+  trendsConfig: () => req<{ host: string; path: string; hasKey: boolean }>('/api/trends/config'),
+  saveTrendsConfig: (host: string, path: string) => post<{ ok: boolean }>('/api/trends/config', { host, path }),
+  testTrends: () => post<{ tags: string[]; count: number }>('/api/trends/test'),
   rapidApiStatus: () => req<{ has: boolean }>('/api/settings/rapidapi'),
   setRapidApiKey: (key: string) => post('/api/settings/rapidapi', { key }),
   cookiesStatus: () => req<{ has: boolean }>('/api/settings/cookies'),

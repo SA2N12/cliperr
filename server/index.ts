@@ -1247,7 +1247,10 @@ app.post('/api/ideas', wrap(async (req, res) => {
   const niche = String(req.body?.niche ?? '').trim()
   if (!niche) return res.status(400).json({ error: 'Précise une niche ou un thème.' })
   const count = Math.min(8, Math.max(1, Math.round(Number(req.body?.count ?? 4))))
-  const trends = Array.isArray(req.body?.trends) ? (req.body.trends as unknown[]).map(String).slice(0, 25) : []
+  // Tendances : celles passées par l'appelant, sinon celles de l'API configurée
+  // (le front n'en envoyait aucune → la génération manuelle n'en profitait jamais).
+  const given = Array.isArray(req.body?.trends) ? (req.body.trends as unknown[]).map(String).slice(0, 25) : []
+  const trends = given.length ? given : await getTrendsCached()
   const model = scriptModel()
   const { ideas, usage } = await generateViralIdeas({ apiKey, model, niche, count, trends })
   if (usage) addSpend(model, usage)
@@ -1641,6 +1644,39 @@ const musicUpload = multer({
   }),
   limits: { fileSize: 25 * 1024 * 1024 }
 })
+// Réglage + test de l'API de tendances : on affiche les tags RÉELLEMENT extraits
+// (ou l'erreur), pour pouvoir juger la qualité des données AVANT de payer un plan.
+app.get('/api/trends/config', wrap((_req, res) => {
+  res.json({
+    host: repo.getSetting('trends_host') || 'tiktok-trending-data.p.rapidapi.com',
+    path: repo.getSetting('trends_path') || '',
+    hasKey: !!getEncrypted('rapidapi_key')
+  })
+}))
+app.post('/api/trends/config', wrap((req, res) => {
+  const b = (req.body ?? {}) as { host?: unknown; path?: unknown }
+  if (b.host !== undefined) repo.setSetting('trends_host', String(b.host ?? '').trim().replace(/^https?:\/\//, '').replace(/\/+$/, ''))
+  if (b.path !== undefined) {
+    const p = String(b.path ?? '').trim()
+    repo.setSetting('trends_path', p ? (p.startsWith('/') ? p : `/${p}`) : '')
+  }
+  trendsCache = null // la config a changé → on ne sert pas d'anciens tags
+  res.json({ ok: true })
+}))
+app.post('/api/trends/test', wrap(async (_req, res) => {
+  const key = getEncrypted('rapidapi_key')
+  if (!key) return res.status(400).json({ error: 'Clé RapidAPI manquante (Réglages).' })
+  const host = repo.getSetting('trends_host') || 'tiktok-trending-data.p.rapidapi.com'
+  const path = repo.getSetting('trends_path') || ''
+  if (!path) return res.status(400).json({ error: 'Renseigne le chemin de l’endpoint (ex. /trending/hashtags).' })
+  try {
+    const tags = await fetchTikTokTrends(key, host, path)
+    res.json({ tags, count: tags.length })
+  } catch (e) {
+    res.status(502).json({ error: e instanceof Error ? e.message : String(e) })
+  }
+}))
+
 app.get('/api/music', wrap((_req, res) => res.json({ tracks: musicTracks() })))
 app.post('/api/music', musicUpload.single('file'), wrap((req, res) => {
   const f = (req as Request & { file?: Express.Multer.File }).file
