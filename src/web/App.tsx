@@ -376,7 +376,6 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
       ...(isAll ? [{ id: 'analyse' as Page, label: 'Analyse IA', icon: 'chart' }] : [])
     ],
     [
-      { id: 'ideas', label: 'Idées virales', icon: 'bulb' },
       { id: 'generate', label: 'Générer', icon: 'spark' },
       { id: 'clips', label: 'Clips', icon: 'clips' }
     ],
@@ -443,7 +442,6 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
         {page === 'dashboard' && <Dashboard scope={scope} />}
         {page === 'autopilot' && isAll && <Autopilot toast={showToast} ideaVideo={ideaVideo} />}
         {page === 'generate' && <Generate sources={sources} progress={progress} onRefresh={refresh} toast={showToast} goHistory={() => setPage('history')} />}
-        {page === 'ideas' && <Ideas toast={showToast} go={setPage} />}
         {page === 'history' && <History sources={sources} clips={clips} progress={progress} onRefresh={refresh} toast={showToast} goClips={() => setPage('clips')} />}
         {page === 'clips' && <Clips clips={clips} sources={sources} onRefresh={refresh} toast={showToast} ttProfile={ttProfile} scope={scope} />}
         {page === 'analyse' && isAll && <Analyse toast={showToast} />}
@@ -1018,7 +1016,7 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
     try {
       await api.generateIdeaVideo(idea.id)
       setLaunched(true)
-      toast('Vidéo lancée — suis la progression dans « Idées virales »')
+      toast('Vidéo lancée — suis la progression en bas à droite ; elle arrivera dans « Clips »')
     } catch (e) {
       toast('Erreur : ' + (e as Error).message)
     }
@@ -1090,7 +1088,7 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
             <button className="btn" onClick={() => { setIdea(null); setUrl('') }}>Nouvelle inspiration</button>
             <button className="btn primary" onClick={() => void genVideo()} disabled={launched}>
-              {launched ? '✓ Vidéo en cours — voir « Idées virales »' : '🎬 Générer la vidéo'}
+              {launched ? '✓ Vidéo en cours — elle arrivera dans « Clips »' : '🎬 Générer la vidéo'}
             </button>
           </div>
         </div>
@@ -3117,7 +3115,7 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
       <div className="card" style={{ marginBottom: 16 }}>
         <h3 style={{ marginTop: 0 }}>Génération de vidéos (IA)</h3>
         <p className="small" style={{ marginTop: 0 }}>
-          Transforme tes idées (page « Mes idées ») en vidéos verticales : voix off + images IA + sous-titres.
+          Sert à produire les vidéos verticales du pilote auto : voix off + images IA + sous-titres.
           Nécessite une clé <b>OpenAI</b> (voix off TTS + images DALL·E). Coût ~0,20–0,40 € par vidéo.
         </p>
         <Field label={openaiHas ? 'Clé OpenAI configurée ✓' : 'Clé OpenAI'}>
