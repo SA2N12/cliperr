@@ -74,7 +74,7 @@ ${source.script.map((s, i) => `${i + 1}. ${s}`).join('\n')}
 
 Produis ${SLIDES} diapos qui reprennent ce déroulé : diapo 1 = le hook ci-dessus reformulé en 8 mots maximum, les suivantes = les étapes (regroupe-les si elles sont plus nombreuses que les diapos, sans rien perdre d'essentiel), la dernière = la chute + une question qui appelle un commentaire.
 
-Règles de TEXTE : 12 mots MAXIMUM par diapo, en français, phrases nominales percutantes. Pas de numérotation. Reste FIDÈLE au contenu de la source.
+Règles de TEXTE : diapo 1 (hook) 12 mots maximum et vraiment accrocheuse (chiffre précis, affirmation contre-intuitive ou révélation retenue — jamais « Voici… » ni « Le saviez-vous ») ; diapos de contenu 2 phrases courtes, 30 mots maximum. Pas de numérotation. Reste FIDÈLE au contenu de la source.
 Règles d'IMAGE (le générateur refuse sinon) : aucun ENFANT ni mineur, aucune personne réelle identifiable, pas de gore ni de contenu sexuel.
 Chaque imagePrompt est en anglais, très détaillé, cinématographique, vertical, SANS AUCUN TEXTE, et cohérent d'une diapo à l'autre (même ambiance, même palette).
 
@@ -88,14 +88,20 @@ Réponds uniquement via l'outil carrousel.`
 Le format carrousel se lit en silence : c'est le TEXTE sur l'image qui fait tout le travail.
 
 Produis EXACTEMENT ${SLIDES} diapos :
-1. Diapo 1 = le HOOK. Une promesse ou une affirmation choc qui donne envie de swiper. Maximum 8 mots.
-2. Diapos 2 à ${SLIDES - 1} = le contenu, une idée par diapo, dans un ordre qui monte en intensité (garde le plus fort pour la fin).
-3. Diapo ${SLIDES} = la chute + une raison de commenter (question ouverte, avis à donner).
+1. Diapo 1 = le HOOK, en 12 mots maximum. C'est LUI qui décide si on swipe. Choisis l'un de ces ressorts, jamais une généralité :
+   - un CHIFFRE précis et troublant (« 47 secondes. C'est tout ce qu'il a fallu. »)
+   - une affirmation CONTRE-INTUITIVE qui contredit ce que le lecteur croit
+   - une révélation retenue (« Personne n'a jamais expliqué ce détail. »)
+   - un enjeu personnel direct (« Tu l'as déjà fait sans le savoir. »)
+   Interdits : « Voici… », « Le saviez-vous », « Top 5 », toute formule tiède ou déjà vue.
+2. Diapos 2 à ${SLIDES - 1} = le contenu, une idée forte par diapo, dans un ordre qui MONTE en intensité (garde le plus marquant pour la fin).
+3. Diapo ${SLIDES} = la chute + une raison de commenter (question ouverte, avis à trancher).
 
 Règles de TEXTE (le plus important) :
-- Chaque texte de diapo : 12 mots MAXIMUM, en français, phrases nominales percutantes. Pas de blabla, pas d'introduction.
+- Diapos de contenu : 2 phrases courtes, 30 mots MAXIMUM au total. Assez de matière pour apprendre quelque chose, jamais un pavé.
+- Chaque diapo doit apporter UNE information nouvelle : si on peut la supprimer sans rien perdre, elle ne sert à rien.
 - Zéro numérotation ni « 1. », « 2. » : la position dans le carrousel suffit.
-- Concret et vérifiable : des faits, des chiffres, des exemples précis — jamais de généralités.
+- Concret et vérifiable : des faits, des chiffres, des noms, des dates — jamais de généralités.
 - Sujets connus/googlables plutôt qu'obscurs : on doit pouvoir reconnaître de quoi on parle.
 
 Règles d'IMAGE (le générateur refuse sinon) : aucun ENFANT ni mineur, aucune personne réelle identifiable, pas de gore ni de contenu sexuel. Illustre autrement (objet, décor, document, symbole, main d'adulte).
@@ -134,9 +140,12 @@ function assEscape(s: string): string {
  * affiche ses propres éléments d'interface.
  */
 function slideAss(text: string, hook: boolean): string {
-  const size = hook ? 96 : 76
+  // Le hook est court → grande taille. Les diapos de contenu portent maintenant
+  // jusqu'à 30 mots : la police descend et la marge basse se resserre, sinon le
+  // texte déborderait de l'image.
+  const size = hook ? 92 : text.length > 90 ? 54 : 64
   const align = hook ? 5 : 2 // 5 = centré au milieu, 2 = bas centré
-  const marginV = hook ? 0 : 520
+  const marginV = hook ? 0 : 400
   return `[Script Info]
 ScriptType: v4.00+
 PlayResX: 1080
