@@ -331,6 +331,11 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
       onIdeaVideo: (e) => {
         setIdeaVideo((m) => ({ ...m, [e.ideaId]: { status: e.status, message: e.message } }))
         if (e.status === 'done' || e.status === 'error') refresh().catch(() => undefined)
+        // Une génération qui échoue restait muette : seul le widget en bas à
+        // droite changeait de couleur. On le dit explicitement.
+        if (e.status === 'error') showToast(`Génération échouée — ${e.message}`.slice(0, 200))
+        // Neutre : le pilote auto émet les mêmes événements et publie, lui, dans la foulée.
+        if (e.status === 'done') showToast(e.message || 'Vidéo prête')
       }
     })
     return unsub

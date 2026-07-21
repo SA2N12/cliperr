@@ -35,7 +35,7 @@ export async function buildCarousel(
   /** Déroulé d'une vidéo source (mode Inspiration) : les diapos le suivent. */
   source?: { title: string; hook: string; script: string[] }
 ): Promise<{ carousel: Carousel | null; usage: Usage | null }> {
-  const client = new Anthropic({ apiKey: anthropicKey })
+  const client = new Anthropic({ apiKey: anthropicKey, maxRetries: 5 })
   const tool = {
     name: 'carrousel',
     description: 'Écrit un carrousel photo TikTok (diapos + légende).',

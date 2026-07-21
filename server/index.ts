@@ -581,7 +581,7 @@ async function autoPickClipUrl(user: string, niche: string): Promise<string | nu
   try {
     const anthropicKey = getApiKey()
     if (anthropicKey) {
-      const client = new Anthropic({ apiKey: anthropicKey })
+      const client = new Anthropic({ apiKey: anthropicKey, maxRetries: 5 })
       const tool = {
         name: 'search_query',
         description: 'Requête de recherche YouTube.',
@@ -1808,7 +1808,7 @@ app.get('/api/settings/validate', wrap(async (_req, res) => {
   const masked = getApiKeyMasked()
   if (!key) return res.json({ connected: false, masked: null })
   try {
-    await new Anthropic({ apiKey: key }).models.list()
+    await new Anthropic({ apiKey: key, maxRetries: 5 }).models.list()
     res.json({ connected: true, masked })
   } catch (e) {
     res.json({ connected: false, masked, error: String((e as Error)?.message ?? e) })
@@ -1931,7 +1931,7 @@ ${JSON.stringify(data, null, 1)}
 
 Analyse RIGOUREUSEMENT ces chiffres reels (cite les comptes/titres precis, pas de generalites). Reperes : le format des titres qui performe vs plafonne, les comptes qui montent vs qui tombent a 0, la conversion abonnes, l engagement (commentaires/partages), la repetition de format. Rends une analyse concrete et priorisee via l outil rendu_analyse. En francais, tutoiement, direct.`
 
-  const client = new Anthropic({ apiKey })
+  const client = new Anthropic({ apiKey, maxRetries: 5 })
   const model = scriptModel()
   const msg = await client.messages.create({
     model,

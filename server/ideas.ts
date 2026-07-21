@@ -40,7 +40,7 @@ export async function generateViralIdeas(
   opts: GenerateIdeasOptions
 ): Promise<{ ideas: ViralIdea[]; usage: Usage | null }> {
   const model = opts.model ?? 'claude-haiku-4-5'
-  const client = new Anthropic({ apiKey: opts.apiKey })
+  const client = new Anthropic({ apiKey: opts.apiKey, maxRetries: 5 })
   const count = Math.min(8, Math.max(1, Math.round(opts.count)))
 
   const tool = {
@@ -151,7 +151,7 @@ export interface InspireOptions {
  */
 export async function generateInspiredIdea(opts: InspireOptions): Promise<{ idea: ViralIdea | null; usage: Usage | null }> {
   const model = opts.model ?? 'claude-haiku-4-5'
-  const client = new Anthropic({ apiKey: opts.apiKey })
+  const client = new Anthropic({ apiKey: opts.apiKey, maxRetries: 5 })
   const reproduce = opts.mode === 'reproduce'
 
   const tool = {
@@ -289,7 +289,7 @@ export async function generateEpisodeIdea(opts: {
   trends?: string[]
 }): Promise<{ idea: ViralIdea; recap: string; usage: Usage | null }> {
   const model = opts.model ?? 'claude-haiku-4-5'
-  const client = new Anthropic({ apiKey: opts.apiKey })
+  const client = new Anthropic({ apiKey: opts.apiKey, maxRetries: 5 })
   const s = opts.series
   const n = Math.max(1, s.episode)
 

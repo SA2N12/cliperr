@@ -68,7 +68,7 @@ async function buildStoryboard(
   styleHint?: string,
   dialogue?: boolean
 ): Promise<{ scenes: Scene[]; cast: CastMember[]; usage: Usage | null }> {
-  const client = new Anthropic({ apiKey: key })
+  const client = new Anthropic({ apiKey: key, maxRetries: 5 })
   const sceneProps: Record<string, unknown> = {
     narration: {
       type: 'string',
@@ -201,7 +201,7 @@ export async function chooseMusicTrack(
   const moods = [...new Set(tracks.map(moodOf))]
   let mood: string | null = null
   try {
-    const client = new Anthropic({ apiKey: key })
+    const client = new Anthropic({ apiKey: key, maxRetries: 5 })
     const tool = {
       name: 'pick_mood',
       description: 'Choisit l’ambiance musicale la plus adaptée à la vidéo.',
