@@ -795,7 +795,9 @@ button {
 /* Lignes de comptes + blocs horaires : entrées en cascade et survols. */
 .ap-acc-row {
   animation: rise-sm 0.4s cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
-  transition: opacity 0.12s ease, box-shadow 0.12s ease;
+  /* `transform` est piloté en JS (FLIP) : on ne le met PAS en transition ici,
+     sinon le repositionnement instantané de l'étape « Invert » s'animerait aussi. */
+  transition: opacity 0.14s ease, background 0.14s ease, box-shadow 0.14s ease, filter 0.14s ease;
 }
 /* Réordonnancement par glisser-déposer */
 .ap-grip {
@@ -812,8 +814,20 @@ button {
 .ap-acc-row:hover .ap-grip {
   color: var(--text);
 }
+/* Ligne saisie : elle « décolle » et s'efface, pour qu'on suive la cible et non elle. */
 .ap-acc-row.dragging {
-  opacity: 0.45;
+  opacity: 0.4;
+  filter: saturate(0.6);
+}
+/* Cible du dépôt : trait d'insertion vert + léger décalage, façon « la place se libère ». */
+.ap-acc-row.over {
+  box-shadow: inset 0 3px 0 -1px var(--ap-green);
+  background: var(--ap-green-soft);
+}
+/* Pendant un glissement, les libellés ne doivent pas se sélectionner. */
+.ap-slots-dragging,
+.ap-acc-row.dragging * {
+  user-select: none;
 }
 .ap-acc-row:nth-child(1) {
   animation-delay: 40ms;

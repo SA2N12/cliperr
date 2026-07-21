@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type MouseEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ChangeEvent, type CSSProperties, type MouseEvent, type ReactNode } from 'react'
 import {
   api,
   subscribe,
@@ -2110,7 +2110,34 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
   const [cfgUser, setCfgUser] = useState<string | null>(null)
   const [day, setDay] = useState(0) // 0 = aujourd'hui, 1 = demain
   const [dragUser, setDragUser] = useState<string | null>(null)
+  const [overUser, setOverUser] = useState<string | null>(null)
   const [localOrder, setLocalOrder] = useState<string[] | null>(null)
+  // FLIP : on mémorise la position des lignes AVANT le réordonnancement, puis on
+  // les replace visuellement à leur ancien emplacement pour les laisser glisser
+  // vers le nouveau. Sans ça, la liste sauterait d'un coup.
+  const rowRefs = useRef(new Map<string, HTMLDivElement>())
+  const prevTops = useRef(new Map<string, number>())
+  const snapshotRows = (): void => {
+    prevTops.current.clear()
+    rowRefs.current.forEach((el, u) => prevTops.current.set(u, el.getBoundingClientRect().top))
+  }
+  useLayoutEffect(() => {
+    if (!prevTops.current.size) return
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    rowRefs.current.forEach((el, u) => {
+      const prev = prevTops.current.get(u)
+      if (prev == null) return
+      const delta = prev - el.getBoundingClientRect().top
+      if (!delta || reduce) return
+      el.style.transition = 'none'
+      el.style.transform = `translateY(${delta}px)`
+      requestAnimationFrame(() => {
+        el.style.transition = 'transform .3s cubic-bezier(.2,.8,.2,1)'
+        el.style.transform = ''
+      })
+    })
+    prevTops.current.clear()
+  }, [localOrder])
   const load = useCallback((): void => {
     api.autopilotPlan(day).then(setPlan).catch(() => undefined)
   }, [day])
@@ -2240,9 +2267,11 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
   const dropOn = (target: string): void => {
     const from = dragUser
     setDragUser(null)
+    setOverUser(null)
     if (!from || from === target) return
     const next = ordered.map((a) => a.user).filter((u) => u !== from)
     next.splice(next.indexOf(target), 0, from)
+    snapshotRows() // positions d'avant → l'effet FLIP anime le glissement
     setLocalOrder(next)
     api.saveAccountOrder(next).catch(() => toast('Ordre non enregistré'))
   }
@@ -2297,8 +2326,10 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
             return (
               <div
                 key={u}
-                className={`ap-acc-row${dragUser === u ? ' dragging' : ''}`}
-                onDragOver={(e) => { if (dragUser && dragUser !== u) e.preventDefault() }}
+                ref={(el) => { if (el) rowRefs.current.set(u, el); else rowRefs.current.delete(u) }}
+                className={`ap-acc-row${dragUser === u ? ' dragging' : ''}${overUser === u ? ' over' : ''}`}
+                onDragOver={(e) => { if (dragUser && dragUser !== u) { e.preventDefault(); setOverUser(u) } }}
+                onDragLeave={() => setOverUser((o) => (o === u ? null : o))}
                 onDrop={(e) => { e.preventDefault(); dropOn(u) }}
                 style={{ display: 'flex', alignItems: 'center', gap: 12, borderTop: '1px solid var(--border)', paddingTop: 12 }}
               >
