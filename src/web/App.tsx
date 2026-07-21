@@ -947,7 +947,6 @@ function Dashboard({ scope }: { scope: string }): JSX.Element {
                           {p.handle ? '@' + p.handle : p.profile}
                           {p.videoCount > 0 && p.views === 0 && <span className="chip warn" style={{ marginLeft: 6 }}>en attente</span>}
                         </div>
-                        <div className="muted small" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.videoCount} vid. · {fmtNum(p.followers)} ab. · ≈{p.videoCount ? fmtNum(Math.round(p.views / p.videoCount)) : 0}/vid · {eng(p)} eng.</div>
                       </div>
                       <Sparkline data={p.timeseries.map((t) => t.value)} />
                     </div>
