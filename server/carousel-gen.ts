@@ -31,7 +31,9 @@ export async function buildCarousel(
   anthropicKey: string,
   model: string,
   niche: string,
-  cta: string
+  cta: string,
+  /** Déroulé d'une vidéo source (mode Inspiration) : les diapos le suivent. */
+  source?: { title: string; hook: string; script: string[] }
 ): Promise<{ carousel: Carousel | null; usage: Usage | null }> {
   const client = new Anthropic({ apiKey: anthropicKey })
   const tool = {
@@ -60,7 +62,28 @@ export async function buildCarousel(
     }
   } as Anthropic.Tool
 
-  const prompt = `Tu écris un CARROUSEL PHOTO pour TikTok (des images qu'on fait défiler, pas une vidéo) dans la niche : « ${niche} ».
+  // Mode Inspiration : on TRANSPOSE une vidéo qui marche en carrousel, au lieu
+  // d'inventer un sujet. Le déroulé est imposé, seule la forme change.
+  const sourcePrompt = source
+    ? `Tu transformes une VIDÉO TikTok existante en CARROUSEL PHOTO (des images qu'on fait défiler). Garde son sujet, son ordre et sa chute : on change de format, pas de contenu.
+
+Titre de la vidéo : ${source.title}
+Hook : ${source.hook}
+Déroulé, à suivre DANS L'ORDRE :
+${source.script.map((s, i) => `${i + 1}. ${s}`).join('\n')}
+
+Produis ${SLIDES} diapos qui reprennent ce déroulé : diapo 1 = le hook ci-dessus reformulé en 8 mots maximum, les suivantes = les étapes (regroupe-les si elles sont plus nombreuses que les diapos, sans rien perdre d'essentiel), la dernière = la chute + une question qui appelle un commentaire.
+
+Règles de TEXTE : 12 mots MAXIMUM par diapo, en français, phrases nominales percutantes. Pas de numérotation. Reste FIDÈLE au contenu de la source.
+Règles d'IMAGE (le générateur refuse sinon) : aucun ENFANT ni mineur, aucune personne réelle identifiable, pas de gore ni de contenu sexuel.
+Chaque imagePrompt est en anglais, très détaillé, cinématographique, vertical, SANS AUCUN TEXTE, et cohérent d'une diapo à l'autre (même ambiance, même palette).
+
+Légende : 1 à 2 phrases + une question.${cta ? `\nTermine la légende par ce CTA : « ${cta} »` : ''}
+
+Réponds uniquement via l'outil carrousel.`
+    : ''
+
+  const prompt = sourcePrompt || `Tu écris un CARROUSEL PHOTO pour TikTok (des images qu'on fait défiler, pas une vidéo) dans la niche : « ${niche} ».
 
 Le format carrousel se lit en silence : c'est le TEXTE sur l'image qui fait tout le travail.
 
@@ -191,6 +214,8 @@ export interface CarouselGenOptions {
   openaiKey: string
   niche: string
   cta?: string
+  /** Déroulé d'une vidéo source à transposer en diapos (mode Inspiration). */
+  source?: { title: string; hook: string; script: string[] }
   onProgress?: (m: string) => void
 }
 
@@ -208,7 +233,8 @@ export async function generateCarousel(
     opts.anthropicKey,
     opts.anthropicModel || 'claude-haiku-4-5',
     opts.niche,
-    opts.cta ?? ''
+    opts.cta ?? '',
+    opts.source
   )
   if (!carousel || !carousel.slides.length) throw new Error('Carrousel vide — réessaie')
 

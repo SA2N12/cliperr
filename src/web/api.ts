@@ -129,6 +129,7 @@ export const api = {
     ctas?: Record<string, string>
     series?: Record<string, { enabled: boolean; title: string; universe: string }>
   }) => post<{ ok: boolean }>('/api/autopilot', cfg),
+  generateIdeaSlideshow: (id: number) => post<{ ok: boolean }>(`/api/ideas/${id}/slideshow`),
   runAutopilotNow: () => post<{ ok: boolean }>('/api/autopilot/run-now'),
   saveAccountOrder: (order: string[]) => post<{ ok: boolean }>('/api/autopilot/order', { order }),
   autopilotPlan: (day?: number) =>

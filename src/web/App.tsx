@@ -988,6 +988,7 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
   const [busy, setBusy] = useState(false)
   const [idea, setIdea] = useState<SavedIdea | null>(null)
   const [launched, setLaunched] = useState(false)
+  const [format, setFormat] = useState<'video' | 'slideshow'>('video')
   const [niches, setNiches] = useState<string[]>([])
   useEffect(() => {
     api.autopilotState()
@@ -1009,12 +1010,15 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
       setBusy(false)
     }
   }
+  // Format de sortie : vidéo montée (voix off + images) ou diaporama d'images
+  // (6 diapos illustrées, texte incrusté) — les deux arrivent dans « Clips ».
   const genVideo = async (): Promise<void> => {
     if (!idea) return
     try {
-      await api.generateIdeaVideo(idea.id)
+      if (format === 'slideshow') await api.generateIdeaSlideshow(idea.id)
+      else await api.generateIdeaVideo(idea.id)
       setLaunched(true)
-      toast('Vidéo lancée — suis la progression en bas à droite ; elle arrivera dans « Clips »')
+      toast(`${format === 'slideshow' ? 'Diaporama' : 'Vidéo'} lancé — suis la progression en bas à droite ; il arrivera dans « Clips »`)
     } catch (e) {
       toast('Erreur : ' + (e as Error).message)
     }
@@ -1085,12 +1089,33 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
             {idea.script.map((s, i) => <li key={i}>{s}</li>)}
           </ol>
           <div className="muted small" style={{ marginBottom: 12 }}>{idea.hashtags.join(' ')}</div>
+          {/* Format de sortie : même déroulé, deux mises en forme. */}
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
+            <span className="muted small">Format :</span>
+            <div style={{ display: 'inline-flex', gap: 3, background: 'var(--panel-2)', padding: 3 }}>
+              {([['video', 'movie', 'Vidéo montée'], ['slideshow', 'image', 'Diaporama d’images']] as const).map(([f, icon, lbl]) => (
+                <button
+                  key={f}
+                  onClick={() => setFormat(f)}
+                  disabled={launched}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: 'none', cursor: launched ? 'default' : 'pointer', padding: '5px 12px', fontSize: 13, fontWeight: format === f ? 700 : 500, background: format === f ? '#fff' : 'transparent', color: format === f ? 'var(--text)' : 'var(--muted)', fontFamily: 'inherit' }}
+                >
+                  <MIcon name={icon} size={14} /> {lbl}
+                </button>
+              ))}
+            </div>
+            <span className="muted small">
+              {format === 'slideshow'
+                ? '6 diapos illustrées, texte incrusté, musique du compte.'
+                : 'Voix off + images + sous-titres.'}
+            </span>
+          </div>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
             <button className="btn" onClick={() => { setIdea(null); setUrl('') }}>Nouvelle inspiration</button>
             <button className="btn primary" onClick={() => void genVideo()} disabled={launched}>
               {launched
-                ? <><MIcon name="check_circle" size={14} /> Vidéo en cours — elle arrivera dans « Clips »</>
-                : <><MIcon name="movie" size={14} /> Générer la vidéo</>}
+                ? <><MIcon name="check_circle" size={14} /> En cours — arrivera dans « Clips »</>
+                : <><MIcon name={format === 'slideshow' ? 'image' : 'movie'} size={14} /> Générer {format === 'slideshow' ? 'le diaporama' : 'la vidéo'}</>}
             </button>
           </div>
         </div>

@@ -1616,6 +1616,63 @@ app.post('/api/ideas/:id/video', wrap((req, res) => {
   res.json({ ok: true })
 }))
 
+/**
+ * Transforme une idée enregistrée en DIAPORAMA d'images (6 diapos illustrées,
+ * texte incrusté) assemblé en MP4 avec la musique du compte actif. Le résultat
+ * arrive dans « Clips » NON publié : on relit avant d'envoyer, comme une vidéo.
+ */
+app.post('/api/ideas/:id/slideshow', wrap((req, res) => {
+  const id = Number(req.params.id)
+  const saved = repo.getIdea(id)
+  if (!saved) return res.status(404).json({ error: 'Idée introuvable' })
+  const anthropicKey = getApiKey()
+  if (!anthropicKey) return res.status(400).json({ error: 'Configure ta clé Claude dans les Réglages.' })
+  const openaiKey = getEncrypted('openai_key')
+  if (!openaiKey) return res.status(400).json({ error: 'Configure ta clé OpenAI dans les Réglages.' })
+
+  // Même file que les vidéos : jamais deux montages ffmpeg en parallèle.
+  videoChain = videoChain
+    .then(async () => {
+      const model = scriptModel()
+      emitIdeaVideo({ ideaId: id, status: 'running', message: 'Écriture des diapos…' })
+      const ctx = await getContext()
+      const { files, carousel, usage } = await generateCarousel(ctx, {
+        anthropicKey,
+        anthropicModel: model,
+        openaiKey,
+        niche: saved.niche,
+        source: { title: saved.title, hook: saved.hook, script: saved.script },
+        onProgress: (m) => emitIdeaVideo({ ideaId: id, status: 'running', message: m })
+      })
+      if (usage) addSpend(model, usage)
+      const tracks = musicTracks()
+      const profile = activeProfile()
+      const rotated = profile ? nextMusicForProfile(profile, tracks) : tracks[0]
+      const { filePath, durationSec } = await assembleSlideshow(ctx, files, rotated ? join(musicDir, rotated) : undefined)
+      const src = repo.createSource(`idea:${id}`)
+      repo.updateSource(src.id, { status: 'done', title: carousel.title, durationSec, filePath })
+      const clip = repo.createClip({
+        sourceId: src.id,
+        startSec: 0,
+        endSec: durationSec,
+        filePath,
+        title: carousel.title,
+        description: carousel.caption,
+        hashtags: carousel.hashtags.join(' '),
+        profile: profile || null
+      })
+      repo.setClipReview(clip.id, 'approved')
+      emitIdeaVideo({ ideaId: id, status: 'done', message: `Diaporama de ${files.length} images prêt — voir « Clips »` })
+    })
+    .then(
+      () => undefined,
+      (e) => {
+        emitIdeaVideo({ ideaId: id, status: 'error', message: e instanceof Error ? e.message : String(e) })
+      }
+    )
+  res.json({ ok: true })
+}))
+
 // Clé OpenAI (voix off + images pour la génération de vidéos)
 app.get('/api/settings/openai', wrap((_req, res) => res.json({ has: !!getEncrypted('openai_key') })))
 app.post('/api/settings/openai', wrap((req, res) => {
