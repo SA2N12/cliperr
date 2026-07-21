@@ -1077,18 +1077,36 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
         </div>
       )}
       {idea && (
-        <div style={{ marginTop: 6, padding: '14px 16px', borderRadius: 12, border: '1.5px solid var(--accent-strong)' }}>
-          <div className="row" style={{ marginBottom: 6 }}>
-            <strong>{idea.title}</strong>
-            <span className="chip" style={{ flexShrink: 0, marginLeft: 8 }}>{idea.niche}</span>
+        <div className="idea-card">
+          <div className="row" style={{ alignItems: 'flex-start', gap: 12 }}>
+            <h3 className="idea-title">{idea.title}</h3>
+            <span className="chip" style={{ flexShrink: 0 }}>{idea.niche}</span>
           </div>
-          <div className="small" style={{ fontStyle: 'italic', marginBottom: 6 }}>🪝 {idea.hook}</div>
-          <div className="muted small" style={{ marginBottom: 8 }}>{idea.angle}</div>
-          {idea.imageStyle && <div className="muted small" style={{ marginBottom: 8 }}>🎨 Style visuel repris de la source : {idea.imageStyle}</div>}
-          <ol className="small" style={{ margin: '0 0 10px', paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {idea.script.map((s, i) => <li key={i}>{s}</li>)}
+
+          {/* Le hook porte tout le poids du format : on le met en exergue. */}
+          <blockquote className="idea-hook">{idea.hook}</blockquote>
+
+          <p className="muted small idea-angle">{idea.angle}</p>
+
+          {/* Déroulé : rail numéroté, bien plus lisible qu'une liste <ol> serrée. */}
+          <ol className="idea-steps">
+            {idea.script.map((s, i) => (
+              <li key={i}><span className="n">{i + 1}</span><span>{s}</span></li>
+            ))}
           </ol>
-          <div className="muted small" style={{ marginBottom: 12 }}>{idea.hashtags.join(' ')}</div>
+
+          <div className="idea-tags">
+            {idea.hashtags.map((h) => <span key={h} className="tag">{h}</span>)}
+          </div>
+
+          {/* Prompt de style : long et en anglais → replié, consultable au besoin. */}
+          {idea.imageStyle && (
+            <details className="idea-style">
+              <summary><MIcon name="palette" size={14} /> Style visuel repris de la source</summary>
+              <p>{idea.imageStyle}</p>
+            </details>
+          )}
+
           {/* Format de sortie : même déroulé, deux mises en forme. */}
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
             <span className="muted small">Format :</span>
