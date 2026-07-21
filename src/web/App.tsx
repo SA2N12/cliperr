@@ -2403,9 +2403,16 @@ function TrendsSetup({ toast, onDone }: { toast: (m: string) => void; onDone: ()
   return (
     <div style={{ marginTop: 8 }}>
       <p className="muted small" style={{ marginTop: 0 }}>
-        Abonne-toi à une API de tendances sur RapidAPI — ta clé RapidAPI existante fonctionne.
-        Commence par <b>TikTok Trending Data</b> (éditeur <i>earned</i>) en offre gratuite, colle le chemin de
-        l’endpoint « trending hashtags », et teste : tu verras les tags réellement récupérés avant de payer quoi que ce soit.
+        <b>Testé le 21/07/2026 :</b> les deux principales API de tendances de RapidAPI sont mortes —
+        <i> TikTok Trending Data</i> (earned) renvoie <code>410 Gone</code> sur ses trois endpoints, et
+        <i> TikTok Creative Center API</i> (Lundehund) répond <code>{'{"data":null,"msg":"deprecated"}'}</code> sur
+        toute sa section Trends, y compris avec ses paramètres documentés. Attention au badge « 100 % de
+        disponibilité » : <b>« deprecated » est renvoyé en HTTP 200</b>, donc l’API paraît saine tout en ne
+        renvoyant rien. Ne paie aucun plan sans avoir testé ici.
+      </p>
+      <p className="muted small">
+        Si tu trouves une API qui fonctionne, branche-la ci-dessous : le test affiche les tags réellement extraits.
+        Sans elle, les idées sont générées sur la niche du compte — ce qui reste le levier principal.
       </p>
       {!hasKey && <p className="small" style={{ color: 'var(--bad)' }}>Clé RapidAPI absente — ajoute-la d’abord dans les Réglages.</p>}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
