@@ -1089,7 +1089,10 @@ async function runAutopilotTick(force = false): Promise<void> {
         .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
         .slice(0, 30)
         .map((c) => c.title as string)
-      const { ideas, usage } = await generateViralIdeas({ apiKey: anthropicKey, model, niche: topic, count: 1, trends, recentTitles })
+      // Boucle d'apprentissage : ce qui a le mieux et le moins bien engagé sur CE
+      // compte est transmis à l'IA (jamais pour être copié — pour en tirer le ressort).
+      const lessons = performanceLessons(await recentPostStats(user).catch(() => []))
+      const { ideas, usage } = await generateViralIdeas({ apiKey: anthropicKey, model, niche: topic, count: 1, trends, recentTitles, lessons })
       if (usage) addSpend(model, usage)
       if (!ideas.length) { failReason = 'aucune idée générée'; emitLog(`Pilote auto : aucune idée générée pour « ${user} ».`); return }
       idea = ideas[0]
@@ -1583,19 +1586,33 @@ async function fetchPostAnalytics(key: string, user: string, postId: string): Pr
     return null
   }
 }
-const postsCache = new Map<string, { at: number; posts: unknown[] }>()
-app.get('/api/analytics/posts', wrap(async (req, res) => {
-  const profile = String(req.query.profile ?? '')
+interface PostStatRow {
+  clipId: number
+  title: string | null
+  filePath: string | null
+  postUrl: string | null
+  createdAt: number
+  views: number
+  likes: number
+  comments: number
+  shares: number
+}
+const postsCache = new Map<string, { at: number; posts: PostStatRow[] }>()
+/**
+ * Stats des 20 dernières vidéos d'un compte (cache 10 min). Sert à l'affichage
+ * ET à la boucle d'apprentissage du pilote.
+ */
+async function recentPostStats(profile: string): Promise<PostStatRow[]> {
   const key = getEncrypted('uploadpost_key')
-  if (!profile || !key) return res.json({ posts: [] })
+  if (!profile || !key) return []
   const cached = postsCache.get(profile)
-  if (cached && Date.now() - cached.at < 10 * 60 * 1000) return res.json({ posts: cached.posts })
+  if (cached && Date.now() - cached.at < 10 * 60 * 1000) return cached.posts
   const clips = repo
     .listClips()
     .filter((c) => c.publishedAccount === profile && c.postId)
     .sort((a, b) => b.createdAt - a.createdAt)
     .slice(0, 20)
-  const posts = []
+  const posts: PostStatRow[] = []
   for (const c of clips) {
     const m = await fetchPostAnalytics(key, profile, c.postId as string)
     posts.push({
@@ -1611,7 +1628,36 @@ app.get('/api/analytics/posts', wrap(async (req, res) => {
     })
   }
   postsCache.set(profile, { at: Date.now(), posts })
-  res.json({ posts })
+  return posts
+}
+
+/**
+ * Ce que le compte doit retenir de ses publications : les 3 meilleures et les
+ * 3 pires, classées sur l'ENGAGEMENT (partages + commentaires + likes rapportés
+ * aux vues) et non sur les vues brutes.
+ *
+ * Pourquoi pas les vues : elles dépendent d'abord du palier de diffusion accordé
+ * par TikTok. Sur un compte plafonné, toutes les vidéos font le même score et il
+ * n'y a aucun signal à extraire. Les ratios, eux, mesurent ce que l'audience a
+ * VRAIMENT fait — et ce sont eux qui décident du palier suivant.
+ */
+function performanceLessons(posts: PostStatRow[]): { top: string[]; flop: string[] } | null {
+  const scored = posts
+    .filter((p) => p.views >= 50 && p.title) // trop peu de vues = bruit
+    .map((p) => ({
+      title: p.title as string,
+      // Les partages pèsent le plus lourd : c'est le signal n°1 du 2e palier.
+      score: (p.shares * 5 + p.comments * 3 + p.likes) / Math.max(1, p.views),
+      detail: `${p.views} vues, ${p.shares} partage${p.shares > 1 ? 's' : ''}, ${p.comments} commentaire${p.comments > 1 ? 's' : ''}, ${p.likes} likes`
+    }))
+    .sort((a, b) => b.score - a.score)
+  if (scored.length < 6) return null // pas assez de recul pour conclure
+  const fmt = (x: { title: string; detail: string }): string => `- « ${x.title} » (${x.detail})`
+  return { top: scored.slice(0, 3).map(fmt), flop: scored.slice(-3).map(fmt) }
+}
+
+app.get('/api/analytics/posts', wrap(async (req, res) => {
+  res.json({ posts: await recentPostStats(String(req.query.profile ?? '')) })
 }))
 
 app.get('/api/ideas/saved', wrap((_req, res) => res.json({ ideas: repo.listIdeas() })))

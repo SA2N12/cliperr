@@ -28,6 +28,8 @@ export interface GenerateIdeasOptions {
   trends?: string[]
   /** Titres des vidéos déjà publiées sur ce compte — pour éviter de répéter les mêmes sujets. */
   recentTitles?: string[]
+  /** Meilleures / pires publications du compte, classées sur l'engagement. */
+  lessons?: { top: string[]; flop: string[] } | null
 }
 
 function normTag(t: string): string {
@@ -100,7 +102,23 @@ Deux interdits sur cette liste, le second est le plus important :
    pas : c'est la FORME répétée qui est pénalisée.`
       : ''
 
-  const prompt = `Tu es un stratège de contenu TikTok expert en viralité. Propose ${count} idées de vidéos verticales ORIGINALES et à fort potentiel viral pour la niche/thème : « ${opts.niche} ».${trendsBlock}${avoidBlock}
+  // Retour d'expérience du compte. Volontairement fondé sur l'ENGAGEMENT et non
+  // sur les vues : sur un compte plafonné par TikTok, toutes les vidéos font le
+  // même nombre de vues et il n'y a aucun signal à en tirer.
+  const lessonsBlock = opts.lessons
+    ? `\n\n📊 CE QUE CE COMPTE A APPRIS DE SES PUBLICATIONS (classement sur l'engagement réel : partages, commentaires, likes rapportés aux vues — PAS sur les vues, qui dépendent surtout du palier accordé par TikTok).
+
+Ont le MIEUX engagé :
+${opts.lessons.top.join('\n')}
+
+Ont le MOINS bien engagé :
+${opts.lessons.flop.join('\n')}
+
+Sers-toi de cet écart : demande-toi ce que les premières ont fait que les secondes n'ont pas fait (nature du sujet, promesse, tension, capacité à faire réagir). Applique ce RESSORT.
+⚠️ N'imite NI les sujets NI les formulations de cette liste — ce sont des exemples à comprendre, pas des modèles à recopier. Reprendre leurs sujets serait une répétition, ce qui est justement pénalisé.`
+    : ''
+
+  const prompt = `Tu es un stratège de contenu TikTok expert en viralité. Propose ${count} idées de vidéos verticales ORIGINALES et à fort potentiel viral pour la niche/thème : « ${opts.niche} ».${trendsBlock}${avoidBlock}${lessonsBlock}
 
 Pour chaque idée : un titre accrocheur, un hook (3 premières secondes), l'angle qui la rend virale, un script plan par plan (4 à 8 étapes courtes et concrètes), un format conseillé (durée, style, sous-titres) et 5 à 8 hashtags.
 
