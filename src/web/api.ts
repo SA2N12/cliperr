@@ -130,6 +130,7 @@ export const api = {
     series?: Record<string, { enabled: boolean; title: string; universe: string }>
   }) => post<{ ok: boolean }>('/api/autopilot', cfg),
   runAutopilotNow: () => post<{ ok: boolean }>('/api/autopilot/run-now'),
+  saveAccountOrder: (order: string[]) => post<{ ok: boolean }>('/api/autopilot/order', { order }),
   autopilotPlan: (day?: number) =>
     req<{
       enabled: boolean

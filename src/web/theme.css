@@ -795,6 +795,25 @@ button {
 /* Lignes de comptes + blocs horaires : entrées en cascade et survols. */
 .ap-acc-row {
   animation: rise-sm 0.4s cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
+  transition: opacity 0.12s ease, box-shadow 0.12s ease;
+}
+/* Réordonnancement par glisser-déposer */
+.ap-grip {
+  display: inline-flex;
+  align-items: center;
+  color: var(--muted-2);
+  cursor: grab;
+  flex-shrink: 0;
+  padding: 2px 0;
+}
+.ap-grip:active {
+  cursor: grabbing;
+}
+.ap-acc-row:hover .ap-grip {
+  color: var(--text);
+}
+.ap-acc-row.dragging {
+  opacity: 0.45;
 }
 .ap-acc-row:nth-child(1) {
   animation-delay: 40ms;

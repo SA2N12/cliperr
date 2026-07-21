@@ -2109,6 +2109,8 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
   const [editSlot, setEditSlot] = useState<AutopilotSlot | null>(null)
   const [cfgUser, setCfgUser] = useState<string | null>(null)
   const [day, setDay] = useState(0) // 0 = aujourd'hui, 1 = demain
+  const [dragUser, setDragUser] = useState<string | null>(null)
+  const [localOrder, setLocalOrder] = useState<string[] | null>(null)
   const load = useCallback((): void => {
     api.autopilotPlan(day).then(setPlan).catch(() => undefined)
   }, [day])
@@ -2225,6 +2227,26 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
       })
   ).filter(scopedAcc)
 
+  // Ordre local : appliqué tout de suite au dépôt (le serveur le persiste ensuite),
+  // sinon la ligne reviendrait à sa place jusqu'au prochain rechargement du plan.
+  const ordered = localOrder
+    ? accountList.slice().sort((a, b) => {
+        const ia = localOrder.indexOf(a.user)
+        const ib = localOrder.indexOf(b.user)
+        return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib)
+      })
+    : accountList
+
+  const dropOn = (target: string): void => {
+    const from = dragUser
+    setDragUser(null)
+    if (!from || from === target) return
+    const next = ordered.map((a) => a.user).filter((u) => u !== from)
+    next.splice(next.indexOf(target), 0, from)
+    setLocalOrder(next)
+    api.saveAccountOrder(next).catch(() => toast('Ordre non enregistré'))
+  }
+
   return (
     <div className="card" style={{ marginBottom: 16 }}>
       <div className="row" style={{ marginBottom: 4 }}>
@@ -2267,14 +2289,31 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
       </div>
       {groupByAccount ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 14 }}>
-          {accountList.map((a) => {
+          {ordered.map((a) => {
             const u = a.user
             const userSlots = slots.filter((s) => s.user === u)
             const uDone = userSlots.filter((s) => s.done).length
             const uCredits = userSlots.reduce((sum, s) => sum + (s.credits ?? 0), 0)
             return (
-              <div key={u} className="ap-acc-row" style={{ display: 'flex', alignItems: 'center', gap: 12, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+              <div
+                key={u}
+                className={`ap-acc-row${dragUser === u ? ' dragging' : ''}`}
+                onDragOver={(e) => { if (dragUser && dragUser !== u) e.preventDefault() }}
+                onDrop={(e) => { e.preventDefault(); dropOn(u) }}
+                style={{ display: 'flex', alignItems: 'center', gap: 12, borderTop: '1px solid var(--border)', paddingTop: 12 }}
+              >
                 <div style={{ width: 176, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {/* Poignée : seule zone « draggable », sinon le glissement partirait
+                      aussi depuis les blocs horaires et gênerait leur clic. */}
+                  <span
+                    className="ap-grip"
+                    draggable
+                    onDragStart={(e) => { setDragUser(u); e.dataTransfer.effectAllowed = 'move' }}
+                    onDragEnd={() => setDragUser(null)}
+                    title="Glisser pour réordonner les comptes"
+                  >
+                    <MIcon name="drag_indicator" size={16} />
+                  </span>
                   <Avatar url={a.avatarUrl} name={u} size={32} />
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div className="small" style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.handle ? '@' + a.handle : u}</div>

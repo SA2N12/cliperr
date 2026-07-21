@@ -1647,6 +1647,25 @@ const musicUpload = multer({
 })
 // Réglage + test de l'API de tendances : on affiche les tags RÉELLEMENT extraits
 // (ou l'erreur), pour pouvoir juger la qualité des données AVANT de payer un plan.
+// Ordre d'affichage des comptes sur le planning (glisser-déposer). Purement
+// visuel : il ne change PAS les heures calculées, sinon réordonner déplacerait
+// silencieusement les publications de la journée.
+function accountOrder(): string[] {
+  try {
+    const r = JSON.parse(repo.getSetting('autopilot_account_order') || '[]') as unknown
+    return Array.isArray(r) ? r.map(String) : []
+  } catch {
+    return []
+  }
+}
+app.post('/api/autopilot/order', wrap((req, res) => {
+  const raw = (req.body ?? {}) as { order?: unknown }
+  const known = uploadPostProfiles()
+  const order = Array.isArray(raw.order) ? raw.order.map(String).filter((u) => known.includes(u)) : []
+  repo.setSetting('autopilot_account_order', JSON.stringify(order))
+  res.json({ ok: true })
+}))
+
 app.get('/api/trends/config', wrap((_req, res) => {
   res.json({
     host: repo.getSetting('trends_host') || 'tiktok-trending-data.p.rapidapi.com',
@@ -2251,10 +2270,17 @@ app.get('/api/autopilot/plan', wrap(async (req, res) => {
   const targetPerDay = profiles.reduce((s, u) => s + perDayForProfile(u), 0)
   // Tous les comptes configurés, même ceux à 0 vidéo/jour → l'UI affiche une ligne
   // par compte pour pouvoir en réactiver un qui n'a aucune vidéo prévue.
-  const accounts = profiles.map((user) => {
-    const m = meta.get(user)
-    return { user, handle: m?.tiktokHandle ?? null, avatarUrl: m?.avatarUrl ?? null }
-  })
+  const ord = accountOrder()
+  const rank = (u: string): number => {
+    const i = ord.indexOf(u)
+    return i === -1 ? Number.MAX_SAFE_INTEGER : i // compte jamais réordonné → à la fin
+  }
+  const accounts = profiles
+    .map((user) => {
+      const m = meta.get(user)
+      return { user, handle: m?.tiktokHandle ?? null, avatarUrl: m?.avatarUrl ?? null }
+    })
+    .sort((a, b) => rank(a.user) - rank(b.user))
   res.json({ enabled, perDay, targetPerDay, window: win, nowHm, today, day: dayOffset, accounts, slots })
 }))
 // Réglages d'UN SEUL compte (fusion dans les maps existantes — pas de remplacement
