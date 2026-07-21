@@ -1322,16 +1322,6 @@ function History({ sources, clips, onRefresh, toast, goClips }: { sources: Sourc
   )
 }
 
-function Switch({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }): JSX.Element {
-  return (
-    <label className="switch">
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
-      <span className="track" />
-      {label}
-    </label>
-  )
-}
-
 const STATE_LABEL: Record<ClipDTO['publishStatus'], string> = {
   published: 'Publié',
   failed: 'Échec',
@@ -1392,15 +1382,6 @@ function ClipCard({ c, ai, onReview, onPublish }: { c: ClipDTO; ai: boolean; onR
 function Clips({ clips, sources, onRefresh, toast, ttProfile, scope }: { clips: ClipDTO[]; sources: SourceDTO[]; onRefresh: () => Promise<void>; toast: (m: string) => void; ttProfile: { nickname: string | null } | null; scope: string }): JSX.Element {
   const [modal, setModal] = useState<ClipDTO | null>(null)
   const [tab, setTab] = useState<'stock' | 'published'>('stock')
-  const [autoApprove, setAutoApprove] = useState(false)
-  useEffect(() => {
-    api.getFlag('auto_approve').then((r) => setAutoApprove(r.value === '1')).catch(() => undefined)
-  }, [])
-  async function toggleAuto(v: boolean): Promise<void> {
-    setAutoApprove(v)
-    await api.setFlag('auto_approve', v ? '1' : '0')
-    toast(v ? 'Auto-approbation activée' : 'Auto-approbation désactivée')
-  }
   async function review(id: number, status: ClipDTO['reviewStatus']): Promise<void> {
     await api.reviewClip(id, status)
     await onRefresh()
@@ -1425,12 +1406,6 @@ function Clips({ clips, sources, onRefresh, toast, ttProfile, scope }: { clips: 
         <div>
           <h1>Clips</h1>
           <p>Tes clips à valider et publier.</p>
-        </div>
-        <div className="card" style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <Switch checked={autoApprove} onChange={toggleAuto} label="Auto-approuver" />
-          <span className="muted small" style={{ maxWidth: 200 }}>
-            Les nouveaux clips sont validés et mis en file d’attente automatiquement.
-          </span>
         </div>
       </div>
 
