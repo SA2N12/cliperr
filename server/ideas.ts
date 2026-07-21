@@ -84,10 +84,20 @@ export async function generateViralIdeas(
 
   const avoidBlock =
     opts.recentTitles && opts.recentTitles.length
-      ? `\n\n⛔ SUJETS DÉJÀ TRAITÉS RÉCEMMENT SUR CE COMPTE — n'y reviens PAS et ne les reformule pas ; trouve des sujets ET des angles VRAIMENT différents :\n${opts.recentTitles
+      ? `\n\n⛔ TITRES DÉJÀ PUBLIÉS RÉCEMMENT SUR CE COMPTE :\n${opts.recentTitles
           .slice(0, 30)
           .map((t) => `- ${t}`)
-          .join('\n')}`
+          .join('\n')}
+
+Deux interdits sur cette liste, le second est le plus important :
+1. NE reviens PAS sur ces sujets et ne les reformule pas.
+2. NE RÉUTILISE PAS LEUR STRUCTURE DE TITRE. Repère le patron qui domine la liste
+   (par exemple « DATE : l'objet que [personnalité célèbre] a fait », ou tout autre
+   moule qui revient) et écris des titres qui n'y ressemblent en RIEN — autre
+   construction grammaticale, autre entrée en matière, autre longueur.
+   Vingt vidéos bâties sur le même moule, TikTok les traite comme des doublons et
+   plafonne chacune à son premier palier de diffusion. Varier le sujet ne suffit
+   pas : c'est la FORME répétée qui est pénalisée.`
       : ''
 
   const prompt = `Tu es un stratège de contenu TikTok expert en viralité. Propose ${count} idées de vidéos verticales ORIGINALES et à fort potentiel viral pour la niche/thème : « ${opts.niche} ».${trendsBlock}${avoidBlock}
