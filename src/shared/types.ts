@@ -11,7 +11,10 @@ export type JobStage =
   | 'metadata'
   | 'publish'
 
-export type JobStatus = 'pending' | 'running' | 'done' | 'error'
+// 'queued' est bien écrit en base (server/index.ts, mise en file d'une source) :
+// sans lui dans le type, toutes les comparaisons `status === 'queued'` de l'UI
+// étaient considérées comme du code mort par TypeScript.
+export type JobStatus = 'pending' | 'queued' | 'running' | 'done' | 'error'
 
 export interface SourceDTO {
   id: number

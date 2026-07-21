@@ -440,7 +440,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
         <TopBar state={pub} />
         {page === 'dashboard' && <Dashboard scope={scope} />}
         {page === 'autopilot' && isAll && <Autopilot toast={showToast} ideaVideo={ideaVideo} />}
-        {page === 'generate' && <Generate sources={sources} progress={progress} onRefresh={refresh} toast={showToast} goHistory={() => setPage('history')} />}
+        {page === 'generate' && <Generate sources={sources} clips={clips} progress={progress} onRefresh={refresh} toast={showToast} goHistory={() => setPage('history')} />}
         {page === 'history' && <History sources={sources} clips={clips} progress={progress} onRefresh={refresh} toast={showToast} goClips={() => setPage('clips')} />}
         {page === 'clips' && <Clips clips={clips} sources={sources} onRefresh={refresh} toast={showToast} ttProfile={ttProfile} scope={scope} />}
         {page === 'providers' && <Providers go={setPage} />}
@@ -1095,7 +1095,7 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
   )
 }
 
-function Generate({ sources, progress, onRefresh, toast, goHistory }: { sources: SourceDTO[]; progress: Record<number, ProgressEvent>; onRefresh: () => Promise<void>; toast: (m: string) => void; goHistory: () => void }): JSX.Element {
+function Generate({ sources, clips, progress, onRefresh, toast, goHistory }: { sources: SourceDTO[]; clips: ClipDTO[]; progress: Record<number, ProgressEvent>; onRefresh: () => Promise<void>; toast: (m: string) => void; goHistory: () => void }): JSX.Element {
   const [step, setStep] = useState<'import' | 'count'>('import')
   const [tab, setTab] = useState<'upload' | 'url' | 'inspire'>('upload')
   const [url, setUrl] = useState('')
@@ -1169,6 +1169,9 @@ function Generate({ sources, progress, onRefresh, toast, goHistory }: { sources:
   }
 
   const active = sources.filter((s) => s.status === 'queued' || s.status === 'running')
+  const recent = sources.filter((s) => s.status === 'done' || s.status === 'error').slice(-4).reverse()
+  const clipCounts = new Map<number, number>()
+  for (const c of clips) clipCounts.set(c.sourceId, (clipCounts.get(c.sourceId) ?? 0) + 1)
 
   return (
     <>
@@ -1242,6 +1245,29 @@ function Generate({ sources, progress, onRefresh, toast, goHistory }: { sources:
           </div>
         )}
       </div>
+
+      {/* Page vide sinon : on montre les derniers imports, avec l'action suivante. */}
+      {active.length === 0 && recent.length > 0 && (
+        <div className="card">
+          <div className="row" style={{ marginBottom: 6 }}>
+            <strong>Derniers imports</strong>
+            <button className="btn small" onClick={goHistory}>Tout l’historique</button>
+          </div>
+          {recent.map((s) => {
+            const n = clipCounts.get(s.id) ?? 0
+            const ko = s.status === 'error'
+            return (
+              <div key={s.id} className="recent-row">
+                <MIcon name={ko ? 'error' : 'check_circle'} size={15} style={{ color: ko ? 'var(--bad)' : 'var(--ap-green-strong)' }} />
+                <span className="r-title" title={s.title || s.url || ''}>{s.title || s.url?.split(/[\\/]/).pop() || `Source #${s.id}`}</span>
+                <span className="muted small" style={{ flexShrink: 0 }}>
+                  {ko ? 'échec' : `${n} clip${n > 1 ? 's' : ''}`}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       {active.length > 0 && (
         <div>

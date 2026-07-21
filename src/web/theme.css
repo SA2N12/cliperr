@@ -1458,33 +1458,61 @@ textarea:focus {
 
 /* Glisser-déposer */
 .dropzone {
-  border: 2px dashed var(--border);
-  border-radius: 14px;
-  padding: 44px 20px;
+  border: 1px solid var(--border);
+  padding: 34px 20px;
   text-align: center;
   color: var(--muted);
   cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
   background: var(--panel-2);
 }
 .dropzone:hover {
-  border-color: var(--accent);
+  border-color: var(--muted-2);
+  background: var(--panel);
 }
+.dropzone:hover .dz-icon {
+  transform: translateY(-2px);
+}
+/* Survol d'un fichier : l'anneau intérieur signale la cible sans décaler le contenu. */
 .dropzone.drag {
   border-color: var(--accent);
   background: var(--accent-soft);
   color: var(--accent-strong);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.dropzone.drag .dz-icon {
+  transform: translateY(-3px) scale(1.06);
 }
 .dz-icon {
-  width: 52px;
-  height: 52px;
-  border-radius: 14px;
+  width: 48px;
+  height: 48px;
   background: var(--accent-soft);
   color: var(--accent-strong);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   margin-bottom: 12px;
+  transition: transform 0.18s cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+/* Derniers imports (page Générer) : évite une page vide et donne l'action suivante. */
+.recent-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+}
+.recent-row:first-child {
+  border-top: 0;
+}
+.recent-row .r-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Dossiers (Clips par vidéo) */
