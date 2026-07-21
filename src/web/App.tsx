@@ -224,7 +224,7 @@ function TopBar({ state }: { state: PublishStateT | null }): JSX.Element | null 
   const quotaProf = state.profiles.find((p) => p.username === state.quotaProfile)
   return (
     <div className="card" style={{ marginBottom: 16, background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', display: 'flex', alignItems: 'center', gap: 10 }}>
-      <span style={{ fontSize: 18 }}>⚠️</span>
+      <MIcon name="warning" size={18} />
       <div className="small">
         <b>Quota journalier atteint pour {quotaProf?.handle ? `@${quotaProf.handle}` : state.quotaProfile}.</b> TikTok limite le nombre de publications par jour et par compte. La publication reprendra automatiquement dès que possible — ou choisis un autre profil en haut de la page.
       </div>
@@ -1023,14 +1023,14 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
   return (
     <div>
       {/* Mode : reproduire fidèlement la source, ou s'en inspirer pour de l'original. */}
-      <div style={{ display: 'inline-flex', gap: 3, background: 'var(--panel-2)', borderRadius: 9, padding: 3, marginBottom: 10 }}>
-        {([['reproduce', '🎬 Reproduire (fidèle)'], ['inspire', '💡 S’inspirer (original)']] as const).map(([m, lbl]) => (
+      <div style={{ display: 'inline-flex', gap: 3, background: 'var(--panel-2)', borderRadius: 0, padding: 3, marginBottom: 10 }}>
+        {([['reproduce', 'movie', 'Reproduire (fidèle)'], ['inspire', 'lightbulb', 'S’inspirer (original)']] as const).map(([m, icon, lbl]) => (
           <button
             key={m}
             onClick={() => setMode(m)}
-            style={{ border: 'none', cursor: 'pointer', borderRadius: 6, padding: '5px 14px', fontSize: 13, fontWeight: mode === m ? 700 : 500, background: mode === m ? '#fff' : 'transparent', color: mode === m ? 'var(--text)' : 'var(--muted)', fontFamily: 'inherit' }}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: 'none', cursor: 'pointer', borderRadius: 0, padding: '5px 14px', fontSize: 13, fontWeight: mode === m ? 700 : 500, background: mode === m ? '#fff' : 'transparent', color: mode === m ? 'var(--text)' : 'var(--muted)', fontFamily: 'inherit' }}
           >
-            {lbl}
+            <MIcon name={icon} size={14} /> {lbl}
           </button>
         ))}
       </div>
@@ -1066,7 +1066,9 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
       </p>
       {busy && (
         <div style={{ marginTop: 6, padding: '12px 14px', borderRadius: 10, background: 'var(--panel-2)', border: '1px solid var(--border)' }}>
-          <div className="small" style={{ fontWeight: 600 }}>⏳ Téléchargement → transcription → écriture de l’idée…</div>
+          <div className="small" style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <MIcon name="progress_activity" size={14} spin /> Téléchargement → transcription → écriture de l’idée…
+          </div>
           <div className="muted small" style={{ marginTop: 3 }}>1 à 2 minutes selon la durée de la vidéo source.</div>
         </div>
       )}
@@ -1086,7 +1088,9 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
             <button className="btn" onClick={() => { setIdea(null); setUrl('') }}>Nouvelle inspiration</button>
             <button className="btn primary" onClick={() => void genVideo()} disabled={launched}>
-              {launched ? '✓ Vidéo en cours — elle arrivera dans « Clips »' : '🎬 Générer la vidéo'}
+              {launched
+                ? <><MIcon name="check_circle" size={14} /> Vidéo en cours — elle arrivera dans « Clips »</>
+                : <><MIcon name="movie" size={14} /> Générer la vidéo</>}
             </button>
           </div>
         </div>
@@ -1221,7 +1225,9 @@ function Generate({ sources, clips, progress, onRefresh, toast, goHistory }: { s
                   <input className="input-full" style={{ flex: 1, minWidth: 260 }} placeholder="URL YouTube / Twitch…" value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addUrl()} />
                   <button className="btn primary" onClick={addUrl} disabled={busy}>Continuer</button>
                 </div>
-                <p className="muted small" style={{ marginTop: 10 }}>⚠️ Sur ce serveur, YouTube par URL est souvent bloqué — préfère l’import de fichier.</p>
+                <p className="muted small" style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <MIcon name="warning" size={14} /> Sur ce serveur, YouTube par URL est souvent bloqué — préfère l’import de fichier.
+                </p>
               </div>
             ) : (
               <InspireTab toast={toast} />
@@ -1240,7 +1246,9 @@ function Generate({ sources, clips, progress, onRefresh, toast, goHistory }: { s
             </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 20, justifyContent: 'flex-end' }}>
               <button className="btn" onClick={() => { setStep('import'); setNewSource(null) }}>Retour</button>
-              <button className="btn primary" onClick={launch} disabled={busy}>{busy ? 'Lancement…' : '🚀 Lancer la génération'}</button>
+              <button className="btn primary" onClick={launch} disabled={busy}>
+                {busy ? 'Lancement…' : <><MIcon name="rocket_launch" size={15} /> Lancer la génération</>}
+              </button>
             </div>
           </div>
         )}
