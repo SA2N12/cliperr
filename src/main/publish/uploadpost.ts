@@ -23,8 +23,23 @@ export interface UploadPostParams {
 interface UploadPostResult {
   success?: boolean
   error?: string
+  /** upload-post renvoie parfois `message` (ou `detail`) au lieu de `error`. */
+  message?: string
+  detail?: string
   request_id?: string
   results?: { tiktok?: { success?: boolean; url?: string; error?: string } }
+}
+
+/**
+ * Message d'erreur exploitable. Sans ce repli sur le corps brut, un 400 dont le
+ * detail n'est pas dans `error` se resumait a « HTTP 400 » — impossible a
+ * diagnostiquer (cas vecu sur un carrousel).
+ */
+function errText(json: UploadPostResult, raw: string, status: number): string {
+  const m = json.error || json.message || json.detail
+  if (m) return m
+  const body = raw.trim().slice(0, 300)
+  return body ? `HTTP ${status} — ${body}` : `HTTP ${status}`
 }
 
 /** Extrait l'ID de la vidéo TikTok d'une URL (…/video/<id>). */
@@ -75,7 +90,7 @@ export async function uploadPostTikTok(p: UploadPostParams): Promise<{ url: stri
   const tt = json.results?.tiktok
   if (tt) {
     if (!res.ok || tt.success === false) {
-      throw new Error(`upload-post : ${tt.error || json.error || `HTTP ${res.status}`}`)
+      throw new Error(`upload-post : ${tt.error || errText(json, text, res.status)}`)
     }
     return { url: tt.url ?? null, postId: postIdFromUrl(tt.url) }
   }
@@ -83,7 +98,7 @@ export async function uploadPostTikTok(p: UploadPostParams): Promise<{ url: stri
   if (res.ok && json.success && json.request_id) {
     return pollUploadStatus(p.apiKey, json.request_id, p.onNote)
   }
-  throw new Error(`upload-post : ${json.error || `HTTP ${res.status}`}`)
+  throw new Error(`upload-post : ${errText(json, text, res.status)}`)
 }
 
 export interface UploadPhotosParams {
@@ -145,7 +160,7 @@ export async function uploadPostTikTokPhotos(p: UploadPhotosParams): Promise<{ u
   const tt = json.results?.tiktok
   if (tt) {
     if (!res.ok || tt.success === false) {
-      throw new Error(`upload-post : ${tt.error || json.error || `HTTP ${res.status}`}`)
+      throw new Error(`upload-post (photos) : ${tt.error || errText(json, text, res.status)}`)
     }
     return { url: tt.url ?? null, postId: postIdFromUrl(tt.url) }
   }
@@ -153,7 +168,7 @@ export async function uploadPostTikTokPhotos(p: UploadPhotosParams): Promise<{ u
   if (res.ok && json.success && json.request_id) {
     return pollUploadStatus(p.apiKey, json.request_id, p.onNote)
   }
-  throw new Error(`upload-post : ${json.error || `HTTP ${res.status}`}`)
+  throw new Error(`upload-post (photos) : ${errText(json, text, res.status)}`)
 }
 
 interface StatusResult {
