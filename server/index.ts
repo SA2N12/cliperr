@@ -95,6 +95,7 @@ function scriptModel(): string {
  * de série animée (Nano Banana + fal + Veo).
  */
 function estimateCredits(type: string | undefined): number {
+  if (type === 'stock') return 0 // clip déjà produit : publier ne coûte rien
   if (type === 'clip') return 15
   if (type === 'carousel' || type === 'slideshow') return 40 // 6 images IA, pas de voix off
   if (type === 'serie') return getEncrypted('fal_key') ? 140 : 70 // fal/Veo, ou repli Ken Burns
@@ -632,7 +633,9 @@ async function autoPickClipUrl(user: string, niche: string): Promise<string | nu
 // VIDÉO, appliqués CHAQUE jour tant que l'utilisateur ne les change pas (les
 // compteurs, eux, se réinitialisent quotidiennement). Clé « <user>:<ordinal> ».
 // autopilot_slot_overrides = { "<user>:<ordinal>": { hm?, type?, subject?, music? } }
-// (type: 'niche' | 'serie' | 'custom' | 'clip' ; music: nom de fichier | absent = auto IA | 'none')
+// (type: 'niche' | 'serie' | 'custom' | 'clip' | 'carousel' | 'slideshow' | 'stock' ;
+//  'stock' = un clip précis de « Clips → En stock », subject = id du clip, publié UNE fois ;
+//  music: nom de fichier | absent = auto IA | 'none')
 type SlotOverride = { hm?: number; type?: string; subject?: string; music?: string }
 function slotOverrides(): Record<string, SlotOverride> {
   try {
@@ -900,6 +903,59 @@ async function runAutopilotTick(force = false): Promise<void> {
     const trends = await getTrendsCached()
 
     const subject = (slotOv.subject ?? '').trim()
+
+    // ── Type « stock » : publie un clip PRÉCIS déjà en stock (choisi dans le
+    // bloc, subject = id du clip). Publication UNIQUE : le choix est ensuite
+    // retiré du modèle — le lendemain, le bloc repart en automatique (un clip
+    // ne se publie qu'une fois, sinon le modèle pointerait un clip déjà parti).
+    if (slotOv.type === 'stock') {
+      const clearStock = (): void => {
+        try {
+          const map = slotOverrides()
+          const k = `${user}:${ordinal}`
+          const o = map[k]
+          if (o && o.type === 'stock') {
+            delete o.type
+            delete o.subject
+            if (o.hm == null && !o.music) delete map[k]
+            else map[k] = o
+            repo.setSetting('autopilot_slot_overrides', JSON.stringify(map))
+          }
+        } catch { /* ignore */ }
+      }
+      const clipId = Number(subject)
+      const clip = Number.isFinite(clipId) ? repo.getClip(clipId) : null
+      if (!clip || !clip.filePath) {
+        failReason = 'clip en stock introuvable (supprimé ?)'
+        clearStock()
+        emitLog(`Pilote auto : le clip en stock n°${subject} de « ${user} » est introuvable — créneau remis en automatique.`)
+        return
+      }
+      if (clip.publishStatus === 'published') {
+        failReason = 'clip déjà publié'
+        clearStock()
+        emitLog(`Pilote auto : le clip « ${clip.title ?? `n°${clip.id}`} » est déjà publié — créneau remis en automatique.`)
+        return
+      }
+      // is_aigc : un clip issu d'une génération IA (source `idea:…`) doit être
+      // étiqueté contenu généré ; un extrait YouTube réel, non.
+      const stockSrc = repo.getSource(clip.sourceId)
+      const isAI = !!stockSrc?.url?.startsWith('idea:')
+      emitLog(`Pilote auto : publication du clip en stock « ${clip.title ?? `n°${clip.id}`} » sur « ${user} »…`)
+      try {
+        await publishClipById(clip.id, paths, emitLog, { uploadPostUser: user, videoType: isAI ? 'niche' : 'clip' })
+      } catch (e) {
+        // Uploads TikTok asynchrones : un clip « échoué » mais en réalité posté
+        // serait re-publiable → on le sort de la file (même garde-fou que « clip »).
+        repo.setClipReview(clip.id, 'pending')
+        throw e
+      }
+      markDone(user, ordinal)
+      produced = true
+      clearStock()
+      emitLog(`Pilote auto : clip en stock publié sur « ${user} » (${done + 1}/${perDayFor(user)} aujourd'hui).`)
+      return
+    }
 
     // ── Type « clip » : découpe les meilleurs moments d'une rediff de live /
     // d'un reportage YouTube et publie le meilleur. URL du bloc, ou CHOIX AUTO
@@ -2320,6 +2376,7 @@ app.get('/api/autopilot/plan', wrap(async (req, res) => {
       let label: string
       if (ov?.type === 'custom' && (ov.subject ?? '').trim()) label = `Sujet : ${(ov.subject ?? '').trim()}`
       else if (ov?.type === 'carousel' || ov?.type === 'slideshow') label = `${ov.type === 'slideshow' ? 'Diaporama' : 'Carrousel'} : ${(ov.subject ?? '').trim() || nicheForProfile(user)}`
+      else if (ov?.type === 'stock') label = `En stock : ${repo.getClip(Number(ov.subject))?.title ?? `clip n°${ov.subject}`}`
       else if (ov?.type === 'clip') label = `Clip : ${(ov.subject ?? '').trim().replace(/^https?:\/\/(www\.)?/, '').slice(0, 50) || 'choix auto (IA)'}`
       else if (ov?.type === 'serie' && confSerie) label = `Série : ${confSerie.title}`
       else label = nicheForProfile(user)
@@ -2374,6 +2431,7 @@ app.get('/api/autopilot/plan', wrap(async (req, res) => {
     let label: string
     if (ov?.type === 'custom' && (ov.subject ?? '').trim()) label = `Sujet : ${(ov.subject ?? '').trim()}`
     else if (ov?.type === 'carousel' || ov?.type === 'slideshow') label = `${ov.type === 'slideshow' ? 'Diaporama' : 'Carrousel'} : ${(ov.subject ?? '').trim() || nicheForProfile(sc.user)}`
+    else if (ov?.type === 'stock') label = `En stock : ${repo.getClip(Number(ov.subject))?.title ?? `clip n°${ov.subject}`}`
     else if (ov?.type === 'clip') label = `Clip : ${(ov.subject ?? '').trim().replace(/^https?:\/\/(www\.)?/, '').slice(0, 50) || 'choix auto (IA)'}`
     else if (ov?.type === 'serie' && confSerie) label = `Série : ${confSerie.title} — Ép. ${confSerie.episode}`
     else label = nicheForProfile(sc.user)
@@ -2596,7 +2654,7 @@ app.post('/api/autopilot/slot', wrap((req, res) => {
       if (!t || t === 'auto') {
         delete o.type
         delete o.subject
-      } else if (['niche', 'serie', 'custom', 'clip', 'carousel', 'slideshow'].includes(t)) {
+      } else if (['niche', 'serie', 'custom', 'clip', 'carousel', 'slideshow', 'stock'].includes(t)) {
         o.type = t
       }
     }

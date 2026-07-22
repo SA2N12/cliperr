@@ -1729,8 +1729,15 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
   const [busy, setBusy] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [dragOver, setDragOver] = useState(false)
+  // Clips « En stock » (non publiés, non rejetés) : publiables tels quels via le type « stock ».
+  const [stockClips, setStockClips] = useState<ClipDTO[]>([])
   const musicInputRef = useRef<HTMLInputElement>(null)
   useEffect(() => { api.musicList().then((r) => setTracks(r.tracks)).catch(() => undefined) }, [])
+  useEffect(() => {
+    api.listClips()
+      .then((cs) => setStockClips(cs.filter((c) => c.publishStatus !== 'published' && c.reviewStatus !== 'rejected' && c.filePath).sort((a, b) => b.createdAt - a.createdAt)))
+      .catch(() => undefined)
+  }, [])
   // Import d'un MP3 depuis le bloc → stocké dans /data/music (partagé), puis auto-sélectionné pour ce bloc.
   const uploadTrack = async (file: File): Promise<void> => {
     if (!/\.(mp3|m4a|aac|wav|ogg|opus)$/i.test(file.name)) { toast('Format audio non supporté (mp3, m4a, wav, ogg…)'); return }
@@ -1776,7 +1783,7 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
           ordinal: slot.ordinal,
           hm: Number.isFinite(h) && Number.isFinite(m) ? h + m / 60 : null,
           type: type === 'auto' ? null : type,
-          subject: ['custom', 'clip', 'carousel', 'slideshow'].includes(type) ? subject : null,
+          subject: ['custom', 'clip', 'carousel', 'slideshow', 'stock'].includes(type) ? subject : null,
           music
         })
         toast('Créneau personnalisé ✓')
@@ -1816,14 +1823,45 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
 
         <div className="sp-field">
           <label className="sp-label">Type de vidéo</label>
-          <select className="input-full" value={type === 'niche' ? 'auto' : type} onChange={(e) => setType(e.target.value)}>
+          <select
+            className="input-full"
+            value={type === 'niche' ? 'auto' : type}
+            onChange={(e) => {
+              const v = e.target.value
+              // Le sujet ne se partage pas avec le mode « stock » : ici c'est un id de clip.
+              if ((v === 'stock') !== (type === 'stock')) setSubject('')
+              setType(v)
+            }}
+          >
             <option value="auto">Vidéo de niche (défaut)</option>
             {slot.hasSeries && <option value="serie">Épisode de série</option>}
             <option value="carousel">Carrousel photo — musique imposée par TikTok</option>
             <option value="slideshow">Diaporama vidéo — ta musique</option>
             <option value="clip">Clip (rediff live / reportage YouTube)</option>
+            <option value="stock">Clip en stock — publier une vidéo déjà prête</option>
             <option value="custom">Sujet personnalisé…</option>
           </select>
+          {type === 'stock' && (
+            <>
+              <select className="input-full" value={subject} onChange={(e) => setSubject(e.target.value)} style={{ marginTop: 8 }}>
+                <option value="">— Choisir un clip en stock —</option>
+                {stockClips.map((c) => {
+                  const dur = Math.max(0, Math.round(c.endSec - c.startSec))
+                  return <option key={c.id} value={String(c.id)}>{c.title || `Clip n°${c.id}`}{dur > 0 ? ` · ${dur}s` : ''}</option>
+                })}
+                {/* Clip enregistré mais plus en stock (publié/supprimé depuis) : sans
+                    cette option, le choix semblerait perdu à la réouverture. */}
+                {subject && !stockClips.some((c) => String(c.id) === subject) && (
+                  <option value={subject}>Clip n°{subject} — plus en stock</option>
+                )}
+              </select>
+              <div className="sp-note">
+                {stockClips.length === 0
+                  ? 'Aucun clip en stock : la page Clips → onglet En stock est vide.'
+                  : 'Publie ce clip tel quel, sans génération (0 crédit). Une fois publié, le créneau redevient automatique — un clip ne part qu’une fois.'}
+              </div>
+            </>
+          )}
           {(type === 'carousel' || type === 'slideshow') && (
             <>
               <input className="input-full" value={subject} placeholder="Sujet — ou laisse vide : l'IA suit la niche du compte" onChange={(e) => setSubject(e.target.value)} style={{ marginTop: 8 }} />
@@ -1849,7 +1887,7 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
           )}
         </div>
 
-        {type !== 'clip' && (
+        {type !== 'clip' && type !== 'stock' && (
           <div className="sp-field">
             <label className="sp-label">Musique de fond</label>
             <select className="input-full" value={music} onChange={(e) => setMusic(e.target.value)}>
@@ -1907,7 +1945,7 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
       <div className="sp-foot">
         <button className="btn danger-ghost" disabled={busy} onClick={() => void removeSlot()} style={{ marginRight: 'auto' }} title="Retire cette vidéo (baisse la cadence du compte)"><MIcon name="delete" size={15} /> Supprimer</button>
         {(slot.pinned || slot.type) && <button className="btn" disabled={busy} onClick={() => void apply(true)}>Réinitialiser</button>}
-        <button className="btn primary" disabled={busy || (type === 'custom' && !subject.trim())} onClick={() => void apply(false)}>
+        <button className="btn primary" disabled={busy || ((type === 'custom' || type === 'stock') && !subject.trim())} onClick={() => void apply(false)}>
           {busy ? 'Enregistrement…' : 'Enregistrer'}
         </button>
       </div>
