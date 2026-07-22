@@ -2449,7 +2449,7 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
   }
 
   return (
-    <div className="card" style={{ marginBottom: 16 }}>
+    <div className="card ap-plan-card">
       <div className="row" style={{ marginBottom: 4 }}>
         <div>
           <div style={{ display: 'inline-flex', gap: 3, background: 'var(--panel-2)', borderRadius: 0, padding: 3, marginBottom: 7 }}>
@@ -2493,7 +2493,7 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
         </div>
       </div>
       {groupByAccount ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 14 }}>
+        <div className="ap-rows" style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 14 }}>
           {ordered.map((a, accIdx) => {
             const u = a.user
             const userSlots = slots.filter((s) => s.user === u)
@@ -2542,7 +2542,7 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
           })}
         </div>
       ) : (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 14 }}>
+        <div className="ap-rows" style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 14 }}>
           {slots.map((s) => renderBlock(s))}
         </div>
       )}
@@ -2921,7 +2921,7 @@ function Autopilot({ toast, ideaVideo, scope }: { toast: (m: string) => void; id
   const totalPerDay = scopedProfiles.reduce((s, p) => s + (perDays[p.username] ?? p.perDay), 0)
 
   return (
-    <>
+    <div className="ap-fit">
       <div className="page-head">
         <div><h1>Pilote automatique</h1><p>Chaque jour, du contenu adapté à chaque compte selon sa niche — généré et publié sans intervention.</p></div>
         <div className="ap-switch-wrap">
@@ -2955,7 +2955,7 @@ function Autopilot({ toast, ideaVideo, scope }: { toast: (m: string) => void; id
 
       <TodayPlan ideaVideo={ideaVideo} toast={toast} scope={scope} groupByAccount onConfigSaved={() => void load()} />
       {profiles.length === 0 && <div className="card muted">Aucun compte upload-post connecté. Ajoute-les dans Réglages.</div>}
-    </>
+    </div>
   )
 }
 
