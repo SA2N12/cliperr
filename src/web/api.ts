@@ -161,7 +161,7 @@ export const api = {
         music?: string
       }[]
     }>(`/api/autopilot/plan${day ? `?day=${day}` : ''}`),
-  saveAutopilotSlot: (slot: { user: string; ordinal: number; hm?: number | null; type?: string | null; subject?: string | null; music?: string | null; reset?: boolean }) =>
+  saveAutopilotSlot: (slot: { user: string; ordinal: number; hm?: number | null; type?: string | null; subject?: string | null; music?: string | null; reset?: boolean; day?: number }) =>
     post<{ ok: boolean }>('/api/autopilot/slot', slot),
   saveAutopilotAccount: (cfg: { user: string; perDay?: number; niche?: string; ctas?: { niche?: string; serie?: string; custom?: string; clip?: string }; music?: string[]; voice?: string; clipChannels?: string; series?: { enabled: boolean; title: string; universe: string } }) =>
     post<{ ok: boolean }>('/api/autopilot/account', cfg),

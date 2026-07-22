@@ -632,11 +632,14 @@ async function autoPickClipUrl(user: string, niche: string): Promise<string | nu
 // ── Créneaux personnalisés PERSISTANTS (modèle) : heure et/ou type choisis PAR
 // VIDÉO, appliqués CHAQUE jour tant que l'utilisateur ne les change pas (les
 // compteurs, eux, se réinitialisent quotidiennement). Clé « <user>:<ordinal> ».
-// autopilot_slot_overrides = { "<user>:<ordinal>": { hm?, type?, subject?, music? } }
+// autopilot_slot_overrides = { "<user>:<ordinal>": { hm?, type?, subject?, music?, from? } }
 // (type: 'niche' | 'serie' | 'custom' | 'clip' | 'carousel' | 'slideshow' | 'stock' ;
 //  'stock' = un clip précis de « Clips → En stock », subject = id du clip, publié UNE fois ;
-//  music: nom de fichier | absent = auto IA | 'none')
-type SlotOverride = { hm?: number; type?: string; subject?: string; music?: string }
+//  music: nom de fichier | absent = auto IA | 'none' ;
+//  from: date « YYYY-MM-DD » AVANT laquelle le créneau n'existe pas — posé quand le
+//  bloc est créé depuis l'onglet Demain, pour que le rattrapage ne le lance pas le
+//  soir même alors que son heure du jour est déjà passée)
+type SlotOverride = { hm?: number; type?: string; subject?: string; music?: string; from?: string }
 function slotOverrides(): Record<string, SlotOverride> {
   try {
     const raw = repo.getSetting('autopilot_slot_overrides')
@@ -735,31 +738,38 @@ let autopilotTask: ScheduledTask | null = null
  * passe en premier). Heures : réparties uniformément dans la fenêtre 9h–23h,
  * au centre de chaque tranche. Une heure épinglée sur un bloc la remplace.
  */
-function dailySchedule(): { user: string; ordinal: number; hm: number; pinned: boolean }[] {
+function dailySchedule(forDay = dayKey()): { user: string; ordinal: number; hm: number; pinned: boolean }[] {
   const profiles = uploadPostProfiles()
   const ov = slotOverrides()
-  const left = new Map<string, number>()
-  const nextOrd = new Map<string, number>()
+  // Ordinaux ACTIFS ce jour-là : un bloc créé depuis « Demain » porte `from` et
+  // n'existe pas avant cette date. Il ne consomme pas non plus de tranche horaire
+  // aujourd'hui → les heures des blocs du jour ne bougent pas quand on prépare demain.
+  const ords = new Map<string, number[]>()
   let total = 0
   for (const u of profiles) {
-    const n = perDayForProfile(u)
-    left.set(u, n)
-    nextOrd.set(u, 1)
-    total += n
+    const list: number[] = []
+    for (let j = 1; j <= perDayForProfile(u); j++) {
+      const p = ov[`${u}:${j}`]
+      if (p?.from && p.from > forDay) continue
+      list.push(j)
+    }
+    ords.set(u, list)
+    total += list.length
   }
   const step = total > 0 ? (PUB_END_HOUR - PUB_START_HOUR) / total : 0
+  const idx = new Map<string, number>()
   const out: { user: string; ordinal: number; hm: number; pinned: boolean }[] = []
   for (let i = 0; i < total; i++) {
     let best: string | null = null
     let bestLeft = 0
     for (const u of profiles) {
-      const r = left.get(u) ?? 0
+      const r = (ords.get(u)?.length ?? 0) - (idx.get(u) ?? 0)
       if (r > bestLeft) { bestLeft = r; best = u }
     }
     if (!best) break
-    left.set(best, (left.get(best) ?? 0) - 1)
-    const ordinal = nextOrd.get(best) ?? 1
-    nextOrd.set(best, ordinal + 1)
+    const pos = idx.get(best) ?? 0
+    idx.set(best, pos + 1)
+    const ordinal = (ords.get(best) ?? [])[pos]
     const p = ov[`${best}:${ordinal}`]
     out.push({
       user: best,
@@ -2422,7 +2432,7 @@ app.get('/api/autopilot/plan', wrap(async (req, res) => {
     for (let j = 1; j <= perDayForProfile(u); j++) if (!set.has(j)) list.add(j)
     pendingOrd.set(u, list)
   })
-  for (const sc of dailySchedule()) {
+  for (const sc of dailySchedule(today)) {
     if (!pendingOrd.get(sc.user)?.has(sc.ordinal)) continue
     const m = meta.get(sc.user)
     const ov = ovToday[`${sc.user}:${sc.ordinal}`]
@@ -2454,7 +2464,8 @@ app.get('/api/autopilot/plan', wrap(async (req, res) => {
   }
 
   slots.sort((a, b) => a.etaHm - b.etaHm)
-  const targetPerDay = profiles.reduce((s, u) => s + perDayForProfile(u), 0)
+  // Cible du jour AFFICHÉ : les blocs différés (`from` futur) n'y comptent pas.
+  const targetPerDay = dailySchedule(today).length
   // Tous les comptes configurés, même ceux à 0 vidéo/jour → l'UI affiche une ligne
   // par compte pour pouvoir en réactiver un qui n'a aucune vidéo prévue.
   const ord = accountOrder()
@@ -2465,7 +2476,9 @@ app.get('/api/autopilot/plan', wrap(async (req, res) => {
   const accounts = profiles
     .map((user) => {
       const m = meta.get(user)
-      return { user, handle: m?.tiktokHandle ?? null, avatarUrl: m?.avatarUrl ?? null }
+      // perDay : cadence RÉELLE du compte — la vue du jour peut masquer des blocs
+      // différés, le « + » du client a besoin du vrai chiffre pour incrémenter.
+      return { user, handle: m?.tiktokHandle ?? null, avatarUrl: m?.avatarUrl ?? null, perDay: perDayForProfile(user) }
     })
     .sort((a, b) => rank(a.user) - rank(b.user))
   res.json({ enabled, perDay, targetPerDay, window: win, nowHm, today, day: dayOffset, accounts, slots })
@@ -2634,7 +2647,7 @@ app.post('/api/autopilot/clip-channels/test', wrap(async (req, res) => {
 
 // Personnalise un créneau du jour (heure et/ou type) — clic sur un bloc du planning.
 app.post('/api/autopilot/slot', wrap((req, res) => {
-  const b = (req.body ?? {}) as { user?: unknown; ordinal?: unknown; hm?: unknown; type?: unknown; subject?: unknown; music?: unknown; reset?: unknown }
+  const b = (req.body ?? {}) as { user?: unknown; ordinal?: unknown; hm?: unknown; type?: unknown; subject?: unknown; music?: unknown; reset?: unknown; day?: unknown }
   const user = String(b.user ?? '').trim()
   const ordinal = Math.max(1, Math.round(Number(b.ordinal)) || 1)
   if (!user || !uploadPostProfiles().includes(user)) return res.status(400).json({ error: 'Compte inconnu' })
@@ -2668,7 +2681,11 @@ app.post('/api/autopilot/slot', wrap((req, res) => {
       if (mu && mu !== 'auto') o.music = mu.slice(0, 120) // nom de fichier précis, ou 'none'
       else delete o.music // 'auto' → l'IA choisit la musique
     }
-    if (o.hm == null && !o.type && !o.music) delete map[key]
+    // Bloc créé depuis l'onglet « Demain » (day=1) : il ne prend vie que demain.
+    // Sans ça, le modèle vaudrait aussi pour AUJOURD'HUI et le rattrapage lancerait
+    // le soir même tout bloc dont l'heure du jour est déjà passée.
+    if (Number(b.day) >= 1) o.from = dayKey(1)
+    if (o.hm == null && !o.type && !o.music && !o.from) delete map[key]
     else map[key] = o
   }
   // Modèle persistant : appliqué chaque jour tant qu'il n'est pas modifié.

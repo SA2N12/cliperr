@@ -1715,7 +1715,7 @@ const TTS_VOICES: { id: string; label: string }[] = [
   { id: 'alloy', label: 'Alloy — neutre' }
 ]
 
-type AutopilotAccount = { user: string; handle: string | null; avatarUrl: string | null }
+type AutopilotAccount = { user: string; handle: string | null; avatarUrl: string | null; perDay?: number }
 type AutopilotPlan = { enabled: boolean; perDay: number; targetPerDay?: number; window: { start: number; end: number }; nowHm: number; day?: number; accounts?: AutopilotAccount[]; slots: AutopilotSlot[] }
 
 // Fenêtre d'édition d'un créneau du planning : heure + type de contenu.
@@ -1785,6 +1785,10 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
           type: type === 'auto' ? null : type,
           subject: ['custom', 'clip', 'carousel', 'slideshow', 'stock'].includes(type) ? subject : null,
           music
+          // NB : pas de `day` ici — le différé (`from`) est posé UNIQUEMENT à la
+          // création d'un bloc depuis « Demain » (bouton +) et survit à cet
+          // enregistrement (fusion côté serveur). Différer aussi les ÉDITIONS
+          // annulerait l'occurrence du jour d'un bloc existant.
         })
         toast('Créneau personnalisé ✓')
       }
@@ -2329,9 +2333,16 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
   // Bouton « + » : ajoute une vidéo/jour au compte puis ouvre directement le
   // choix du type (niche / épisode de série / sujet) et de l'heure.
   const addVideo = async (u: string, current: number): Promise<void> => {
-    const next = Math.min(5, current + 1)
+    // Cadence RÉELLE du compte, pas le nombre de blocs visibles : la vue du jour
+    // masque les blocs différés (créés depuis « Demain ») — compter les blocs
+    // affichés ferait retomber la cadence au lieu de l'augmenter.
+    const realPerDay = plan?.accounts?.find((a) => a.user === u)?.perDay ?? current
+    const next = Math.min(5, Math.max(realPerDay, current) + 1)
     try {
       await api.saveAutopilotAccount({ user: u, perDay: next })
+      // Ajout depuis « Demain » : le créneau ne prend vie que demain (sinon le
+      // rattrapage le lancerait ce soir si son heure du jour est déjà passée).
+      if (day === 1) await api.saveAutopilotSlot({ user: u, ordinal: next, day: 1 })
       const p = await api.autopilotPlan(day)
       setPlan(p)
       onConfigSaved?.()
@@ -2601,7 +2612,9 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
       {editSlot && (
         <SlotModal
           slot={editSlot}
-          quota={slots.filter((x) => x.user === editSlot.user).length}
+          // Cadence RÉELLE du compte (les blocs différés sont masqués sur la vue
+          // du jour) : « Supprimer » décrémente ce chiffre, pas le nombre visible.
+          quota={plan?.accounts?.find((a) => a.user === editSlot.user)?.perDay ?? slots.filter((x) => x.user === editSlot.user).length}
           onClose={() => setEditSlot(null)}
           onSaved={() => {
             load()
