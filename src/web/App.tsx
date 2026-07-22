@@ -11,7 +11,7 @@ import {
   type SavedIdea
 } from './api'
 
-type Page = 'dashboard' | 'autopilot' | 'analyse' | 'generate' | 'ideas' | 'history' | 'clips' | 'providers' | 'settings'
+type Page = 'dashboard' | 'autopilot' | 'analyse' | 'clipping' | 'genai' | 'ideas' | 'history' | 'clips' | 'providers' | 'settings'
 
 const ICONS: Record<string, string> = {
   dashboard: 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z',
@@ -35,7 +35,8 @@ const ICONS: Record<string, string> = {
   bolt: 'M13 2L4 14h6l-1 8 9-12h-6l1-8z',
   globe: 'M12 3a9 9 0 100 18 9 9 0 000-18zM3 12h18M12 3c2.6 2.7 2.6 15.3 0 18M12 3c-2.6 2.7-2.6 15.3 0 18',
   plug: 'M4 5h16v5H4zM4 14h16v5H4zM7.5 7h.01M7.5 16h.01',
-  terminal: 'M4 17l6-5-6-5M12 19h8'
+  terminal: 'M4 17l6-5-6-5M12 19h8',
+  scissors: 'M6 9a3 3 0 100-6 3 3 0 000 6zM6 21a3 3 0 100-6 3 3 0 000 6zM20 4L8.12 15.88M14.47 14.48L20 20M8.12 9.12L12 13'
 }
 
 // Valeur spéciale du sélecteur en haut à droite : « Tous les comptes » (vue globale).
@@ -389,7 +390,8 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
       { id: 'autopilot', label: 'Pilote auto', icon: 'bolt' }
     ],
     [
-      { id: 'generate', label: 'Générer', icon: 'spark' },
+      { id: 'clipping', label: 'Clipage', icon: 'scissors' },
+      { id: 'genai', label: 'Génération IA', icon: 'spark' },
       { id: 'clips', label: 'Clips', icon: 'clips' }
     ],
     [
@@ -483,7 +485,8 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
         <TopBar state={pub} />
         {page === 'dashboard' && <Dashboard scope={scope} />}
         {page === 'autopilot' && <Autopilot toast={showToast} ideaVideo={ideaVideo} scope={scope} />}
-        {page === 'generate' && <Generate sources={sources} clips={clips} progress={progress} onRefresh={refresh} toast={showToast} goHistory={() => setPage('history')} />}
+        {page === 'clipping' && <Clipage sources={sources} clips={clips} progress={progress} onRefresh={refresh} toast={showToast} goHistory={() => setPage('history')} />}
+        {page === 'genai' && <GenAI toast={showToast} />}
         {page === 'history' && <History sources={sources} clips={clips} progress={progress} onRefresh={refresh} toast={showToast} goClips={() => setPage('clips')} />}
         {page === 'clips' && <Clips clips={clips} sources={sources} onRefresh={refresh} toast={showToast} ttProfile={ttProfile} scope={scope} />}
         {page === 'providers' && <Providers go={setPage} />}
@@ -1188,9 +1191,27 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
   )
 }
 
-function Generate({ sources, clips, progress, onRefresh, toast, goHistory }: { sources: SourceDTO[]; clips: ClipDTO[]; progress: Record<number, ProgressEvent>; onRefresh: () => Promise<void>; toast: (m: string) => void; goHistory: () => void }): JSX.Element {
+// Page « Génération IA » : créer une vidéo ou un diaporama à partir d'un
+// TikTok inspirant (l'ancien onglet Inspiration de Générer, en pleine page).
+function GenAI({ toast }: { toast: (m: string) => void }): JSX.Element {
+  return (
+    <>
+      <div className="page-head">
+        <div>
+          <h1>Génération IA</h1>
+          <p>Inspire-toi d’un TikTok qui marche : idées, vidéo IA ou diaporama.</p>
+        </div>
+      </div>
+      <div className="card">
+        <InspireTab toast={toast} />
+      </div>
+    </>
+  )
+}
+
+function Clipage({ sources, clips, progress, onRefresh, toast, goHistory }: { sources: SourceDTO[]; clips: ClipDTO[]; progress: Record<number, ProgressEvent>; onRefresh: () => Promise<void>; toast: (m: string) => void; goHistory: () => void }): JSX.Element {
   const [step, setStep] = useState<'import' | 'count'>('import')
-  const [tab, setTab] = useState<'upload' | 'url' | 'inspire'>('upload')
+  const [tab, setTab] = useState<'upload' | 'url'>('upload')
   const [url, setUrl] = useState('')
   const [busy, setBusy] = useState(false)
   const [uploadPct, setUploadPct] = useState<number | null>(null)
@@ -1270,27 +1291,24 @@ function Generate({ sources, clips, progress, onRefresh, toast, goHistory }: { s
     <>
       <div className="page-head">
         <div>
-          <h1>Générer</h1>
-          <p>Importe une vidéo à découper en clips — ou inspire-toi d’un TikTok qui marche.</p>
+          <h1>Clipage</h1>
+          <p>Importe une vidéo à découper en clips.</p>
         </div>
         <button className="btn" onClick={goHistory}><Icon name="list" size={16} /> Historique</button>
       </div>
 
       <div className="card" style={{ marginBottom: 18 }}>
-        {tab !== 'inspire' && (
-          <div className="stepper">
-            <div className={`step ${step === 'import' ? 'on' : 'done'}`}><span className="n">1</span> Importer</div>
-            <div className="step-line" />
-            <div className={`step ${step === 'count' ? 'on' : ''}`}><span className="n">2</span> Nombre de clips</div>
-          </div>
-        )}
+        <div className="stepper">
+          <div className={`step ${step === 'import' ? 'on' : 'done'}`}><span className="n">1</span> Importer</div>
+          <div className="step-line" />
+          <div className={`step ${step === 'count' ? 'on' : ''}`}><span className="n">2</span> Nombre de clips</div>
+        </div>
 
         {step === 'import' && (
-          <div style={{ marginTop: tab === 'inspire' ? 0 : 18 }}>
+          <div style={{ marginTop: 18 }}>
             <div className="tabs">
               <button className={`tab ${tab === 'upload' ? 'on' : ''}`} onClick={() => setTab('upload')}><Icon name="upload" size={16} /> Importer un fichier</button>
               <button className={`tab ${tab === 'url' ? 'on' : ''}`} onClick={() => setTab('url')}><Icon name="sources" size={16} /> Télécharger (URL)</button>
-              <button className={`tab ${tab === 'inspire' ? 'on' : ''}`} onClick={() => setTab('inspire')}><Icon name="bulb" size={16} /> Inspiration</button>
             </div>
             {tab === 'upload' ? (
               <div>
@@ -1308,7 +1326,7 @@ function Generate({ sources, clips, progress, onRefresh, toast, goHistory }: { s
                 {uploadPct !== null && <div className="bar" style={{ marginTop: 12 }}><div style={{ width: `${uploadPct}%` }} /></div>}
                 <input ref={fileRef} type="file" accept="video/*" hidden onChange={onFile} />
               </div>
-            ) : tab === 'url' ? (
+            ) : (
               <div>
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                   <input className="input-full" style={{ flex: 1, minWidth: 260 }} placeholder="URL YouTube / Twitch…" value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addUrl()} />
@@ -1318,8 +1336,6 @@ function Generate({ sources, clips, progress, onRefresh, toast, goHistory }: { s
                   <MIcon name="warning" size={14} /> Sur ce serveur, YouTube par URL est souvent bloqué — préfère l’import de fichier.
                 </p>
               </div>
-            ) : (
-              <InspireTab toast={toast} />
             )}
           </div>
         )}
