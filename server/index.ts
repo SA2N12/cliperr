@@ -2269,21 +2269,35 @@ app.get('/api/autopilot/plan', wrap(async (req, res) => {
       niche: nicheForProfile(user)
     }
     const times = doneTimes.get(user) ?? []
-    for (let j = 1; j <= done; j++) {
-      const t = times[j - 1]
+    // Ordinaux RÉELLEMENT faits (un bloc épinglé peut s'exécuter hors ordre :
+    // doneord = [1,2,4] avec le 3 encore à venir). Émettre 1..done créerait une
+    // collision d'ordinal avec le créneau restant → deux blocs de même clé côté
+    // UI, et des blocs fantômes qui s'accumulent à chaque re-rendu.
+    let doneArr: number[] = []
+    try {
+      const p = JSON.parse(repo.getSetting(`autopilot_doneord_${user}_${today}`) || '[]')
+      if (Array.isArray(p)) doneArr = p.filter((n): n is number => typeof n === 'number')
+    } catch {
+      /* ignore */
+    }
+    const doneSet = new Set(doneArr)
+    for (let j = 1; doneSet.size < done && j <= perDayForProfile(user); j++) doneSet.add(j) // rétro-compat
+    const doneOrds = [...doneSet].sort((a, b) => a - b)
+    doneOrds.forEach((ord, idx) => {
+      const t = times[idx]
       const pp = t ? parisPartsOf(t.at) : null
       // Pour les publiées : on affiche le TITRE RÉEL de la vidéo (pas la config
       // actuelle du compte, qui a pu changer depuis — ex. passage en mode série).
       slots.push({
         ...info,
         niche: t?.title || info.niche,
-        ordinal: j,
+        ordinal: ord,
         etaHm: pp ? pp.hm : 0,
         eta: pp ? pp.label : '—',
         done: true,
-        credits: estimateCredits(ovToday[`${user}:${j}`]?.type)
+        credits: estimateCredits(ovToday[`${user}:${ord}`]?.type)
       })
-    }
+    })
   })
 
   // Créneaux EN ÉCHEC aujourd'hui : écartés de la production (retentés demain), mais

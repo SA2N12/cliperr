@@ -2198,8 +2198,19 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
   const [drag, setDrag] = useState<{ from: number; to: number; dy: number; h: number } | null>(null)
   const dragRef = useRef<{ from: number; to: number } | null>(null)
   const rowRefs = useRef(new Map<string, HTMLDivElement>())
+  // Jour actuellement AFFICHÉ — mis à jour à chaque rendu. Les réponses réseau
+  // sont validées contre lui, pas contre le jour demandé : sinon une réponse en
+  // retard de l'ancien onglet passerait encore son propre test.
+  const dayRef = useRef(day)
+  dayRef.current = day
   const load = useCallback((): void => {
-    api.autopilotPlan(day).then(setPlan).catch(() => undefined)
+    const asked = day
+    // Garde d'ordre : en basculant Aujourd'hui ↔ Demain, une réponse en retard
+    // de l'ancien jour peut arriver APRÈS celle du nouveau et écraser l'affichage
+    // (blocs « Publiée » d'aujourd'hui rendus sous l'onglet Demain).
+    api.autopilotPlan(asked).then((p) => {
+      if ((p.day ?? 0) === dayRef.current) setPlan(p)
+    }).catch(() => undefined)
   }, [day])
   useEffect(() => {
     load()
@@ -2247,7 +2258,7 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
     const generating = day === 0 && !!activeGen && `${s.user}-${s.ordinal}` === nextKey
     return (
       <button
-        key={`${s.user}-${s.ordinal}`}
+        key={`${s.user}-${s.ordinal}-${s.done ? 'pub' : 'up'}`}
         className={`ap-slot${s.done ? ' done' : ''}${generating ? ' gen' : ''}`}
         onClick={() => { if (!s.done) { setCfgUser(null); setEditSlot(s) } }}
         title={s.failed ? `Échec : ${s.error ?? ''} — clique pour changer / retenter` : s.done ? s.niche : `${s.niche} — clique pour personnaliser (heure, type)`}
