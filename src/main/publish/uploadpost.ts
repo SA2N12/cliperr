@@ -95,6 +95,10 @@ export async function uploadPostTikTok(p: UploadPostParams): Promise<{ url: stri
     if (!res.ok || tt.success === false) {
       throw new Error(`upload-post : ${tt.error || errText(json, text, res.status)}`)
     }
+    if (tt.url && /inbox/i.test(tt.url)) {
+      p.onNote?.('⚠️ TikTok a refusé la publication directe : vidéo envoyée en BROUILLON (Inbox) dans l’app — PAS publiée publiquement.')
+      return { url: null, postId: null }
+    }
     return { url: tt.url ?? null, postId: postIdFromUrl(tt.url) }
   }
   // Cas asynchrone : traité en tâche de fond → on suit le statut jusqu'au résultat réel.
@@ -215,6 +219,15 @@ async function pollUploadStatus(
       // preuve EXPLICITE — `success: false`, ou un statut « failed ».
       if (tk?.success === false || j.status === 'failed') {
         throw new Error(`upload-post : ${tk?.error_message || 'échec de la publication'}`)
+      }
+      // « Inbox » : TikTok a REFUSÉ la publication directe (compte restreint ou
+      // autorisation dégradée) et la vidéo est partie en BROUILLON dans l'app —
+      // elle n'est PAS publique. On le dit très fort : vu du pilote tout semble
+      // réussi, et le compte affiche ensuite 0 vue sans explication.
+      const inboxHit = (tk?.post_url && /inbox/i.test(tk.post_url)) || String(tk?.platform_post_id ?? '').startsWith('v_inbox')
+      if (inboxHit) {
+        onNote?.('⚠️ TikTok a refusé la publication directe : vidéo envoyée en BROUILLON (Inbox) dans l’app — PAS publiée publiquement. Ouvre l’app TikTok de ce compte pour publier le brouillon, et vérifie si le compte est restreint.')
+        return { url: null, postId: null }
       }
       // « completed » sans résultat exploitable (results absent/vide/autre forme) :
       // le traitement s'est terminé sans erreur → la vidéo est très probablement en
