@@ -1792,8 +1792,8 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
 
   return (
     <aside className="side-panel">
-      <div className="sp-head">
-        <div className="row" style={{ marginBottom: 12, gap: 8 }}>
+      <div className="sp-head line">
+        <div className="row" style={{ gap: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
             <Avatar url={slot.avatarUrl} name={slot.user} size={32} />
             <div style={{ minWidth: 0 }}>
@@ -1803,51 +1803,56 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
             <span className="ap-time-tag">{slot.eta}</span>
-            <button className="btn icon-btn" disabled={busy} title="Fermer" onClick={onClose} style={{ width: 30, height: 30, fontSize: 16 }}>✕</button>
+            <button className="btn icon-btn" disabled={busy} title="Fermer" onClick={onClose} style={{ width: 30, height: 30 }}><MIcon name="close" size={16} /></button>
           </div>
         </div>
       </div>
 
       <div className="sp-body">
-        <label className="muted small" style={{ display: 'block', marginBottom: 4 }}>Heure de publication</label>
-        <input type="time" value={time} onChange={(e) => setTime(e.target.value)} style={{ marginBottom: 12 }} />
+        <div className="sp-field">
+          <label className="sp-label">Heure de publication</label>
+          <input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+        </div>
 
-        <label className="muted small" style={{ display: 'block', marginBottom: 4 }}>Type de vidéo</label>
-        <select className="input-full" value={type === 'niche' ? 'auto' : type} onChange={(e) => setType(e.target.value)} style={{ marginBottom: 10 }}>
-          <option value="auto">Vidéo de niche (défaut)</option>
-          {slot.hasSeries && <option value="serie">Épisode de série</option>}
-          <option value="carousel">Carrousel photo — musique imposée par TikTok</option>
-          <option value="slideshow">Diaporama vidéo — ta musique</option>
-          <option value="clip">Clip (rediff live / reportage YouTube)</option>
-          <option value="custom">Sujet personnalisé…</option>
-        </select>
-        {(type === 'carousel' || type === 'slideshow') && (
-          <>
-            <input className="input-full" value={subject} placeholder="Sujet — ou laisse vide : l'IA suit la niche du compte" onChange={(e) => setSubject(e.target.value)} style={{ marginBottom: 4 }} />
-            <div className="muted small" style={{ marginBottom: 10 }}>
-              6 diapos écrites par l’IA (hook → contenu → chute), une image par diapo, texte incrusté.{' '}
-              {type === 'slideshow'
-                ? 'Publié en vidéo → la musique ci-dessous s’applique.'
-                : 'Publié en post photo natif : TikTok choisit lui-même la musique (impossible d’en joindre une).'}
-            </div>
-          </>
-        )}
-        {!slot.hasSeries && <div className="muted small" style={{ marginTop: -4, marginBottom: 10 }}>Pour proposer « Épisode de série » : configure la série du compte (<MIcon name="settings" size={13} /> de la ligne → onglet Série).</div>}
-        {type === 'custom' && (
-          <input className="input-full" value={subject} placeholder="Sujet exact de la vidéo — ex. le mystère du vol MH370" onChange={(e) => setSubject(e.target.value)} style={{ marginBottom: 10 }} />
-        )}
-        {type === 'clip' && (
-          <>
-            <input className="input-full" value={subject} placeholder="URL YouTube — ou laisse vide : l'IA choisit la vidéo" onChange={(e) => setSubject(e.target.value)} style={{ marginBottom: 4 }} />
-            <div className="muted small" style={{ marginBottom: 10 }}>
-              URL vide = l'IA cherche elle-même une rediff/un reportage (niche + chaînes préférées du compte, jamais deux fois la même vidéo). L'analyse extrait 3 clips ; chaque bloc publie le meilleur suivant.
-            </div>
-          </>
-        )}
+        <div className="sp-field">
+          <label className="sp-label">Type de vidéo</label>
+          <select className="input-full" value={type === 'niche' ? 'auto' : type} onChange={(e) => setType(e.target.value)}>
+            <option value="auto">Vidéo de niche (défaut)</option>
+            {slot.hasSeries && <option value="serie">Épisode de série</option>}
+            <option value="carousel">Carrousel photo — musique imposée par TikTok</option>
+            <option value="slideshow">Diaporama vidéo — ta musique</option>
+            <option value="clip">Clip (rediff live / reportage YouTube)</option>
+            <option value="custom">Sujet personnalisé…</option>
+          </select>
+          {(type === 'carousel' || type === 'slideshow') && (
+            <>
+              <input className="input-full" value={subject} placeholder="Sujet — ou laisse vide : l'IA suit la niche du compte" onChange={(e) => setSubject(e.target.value)} style={{ marginTop: 8 }} />
+              <div className="sp-note">
+                6 diapos écrites par l’IA (hook → contenu → chute), une image par diapo, texte incrusté.{' '}
+                {type === 'slideshow'
+                  ? 'Publié en vidéo → la musique ci-dessous s’applique.'
+                  : 'Publié en post photo natif : TikTok choisit lui-même la musique (impossible d’en joindre une).'}
+              </div>
+            </>
+          )}
+          {!slot.hasSeries && <div className="sp-note">Pour proposer « Épisode de série » : configure la série du compte (<MIcon name="settings" size={13} /> de la ligne → onglet Série).</div>}
+          {type === 'custom' && (
+            <input className="input-full" value={subject} placeholder="Sujet exact de la vidéo — ex. le mystère du vol MH370" onChange={(e) => setSubject(e.target.value)} style={{ marginTop: 8 }} />
+          )}
+          {type === 'clip' && (
+            <>
+              <input className="input-full" value={subject} placeholder="URL YouTube — ou laisse vide : l'IA choisit la vidéo" onChange={(e) => setSubject(e.target.value)} style={{ marginTop: 8 }} />
+              <div className="sp-note">
+                URL vide = l'IA cherche elle-même une rediff/un reportage (niche + chaînes préférées du compte, jamais deux fois la même vidéo). L'analyse extrait 3 clips ; chaque bloc publie le meilleur suivant.
+              </div>
+            </>
+          )}
+        </div>
+
         {type !== 'clip' && (
-          <>
-            <label className="muted small" style={{ display: 'block', marginBottom: 4 }}>Musique de fond</label>
-            <select className="input-full" value={music} onChange={(e) => setMusic(e.target.value)} style={{ marginBottom: music === 'auto' ? 4 : 8 }}>
+          <div className="sp-field">
+            <label className="sp-label">Musique de fond</label>
+            <select className="input-full" value={music} onChange={(e) => setMusic(e.target.value)}>
               {/* « auto » ne veut pas dire « l'IA choisit » : ça veut dire « ne rien
                   imposer ici » → le bloc suit la playlist du compte (rotation), et
                   ce n'est QUE sans playlist que l'IA tranche. */}
@@ -1861,11 +1866,11 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
               )}
             </select>
             {music === 'auto' && (
-              <div className="muted small" style={{ marginBottom: 8 }}>
+              <div className="sp-note">
                 Prend la piste suivante de la playlist du compte (<MIcon name="settings" size={13} /> de la ligne → onglet <b>Vidéos de niche</b>), pour que les vidéos alternent. Si aucune piste n’y est cochée, l’IA choisit selon l’ambiance.
               </div>
             )}
-            {type === 'serie' && music === 'auto' && <div className="muted small" style={{ marginTop: -4, marginBottom: 8 }}>Exception : les épisodes de série n’ont pas de musique de fond (dialogues seuls). Choisis une piste précise ci-dessus pour en imposer une.</div>}
+            {type === 'serie' && music === 'auto' && <div className="sp-note accent">Exception : les épisodes de série n’ont pas de musique de fond (dialogues seuls). Choisis une piste précise ci-dessus pour en imposer une.</div>}
             <div
               onDragOver={(e) => { e.preventDefault(); if (!uploading) setDragOver(true) }}
               onDragLeave={() => setDragOver(false)}
@@ -1879,7 +1884,7 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
                 textAlign: 'center',
                 cursor: uploading ? 'default' : 'pointer',
                 background: dragOver ? 'var(--panel-2)' : 'transparent',
-                marginBottom: 10,
+                marginTop: 10,
                 transition: 'border-color .15s, background .15s'
               }}
             >
@@ -1894,13 +1899,13 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadTrack(f); e.currentTarget.value = '' }}
               />
             </div>
-          </>
+          </div>
         )}
-        <div className="muted small">Ces réglages sont prioritaires sur la répartition automatique et s'appliquent chaque jour jusqu'à modification.</div>
+        <div className="sp-note">Ces réglages sont prioritaires sur la répartition automatique et s'appliquent chaque jour jusqu'à modification.</div>
       </div>
 
       <div className="sp-foot">
-        <button className="btn" disabled={busy} onClick={() => void removeSlot()} style={{ color: 'var(--bad)', marginRight: 'auto' }} title="Retire cette vidéo (baisse la cadence du compte)">🗑 Supprimer</button>
+        <button className="btn danger-ghost" disabled={busy} onClick={() => void removeSlot()} style={{ marginRight: 'auto' }} title="Retire cette vidéo (baisse la cadence du compte)"><MIcon name="delete" size={15} /> Supprimer</button>
         {(slot.pinned || slot.type) && <button className="btn" disabled={busy} onClick={() => void apply(true)}>Réinitialiser</button>}
         <button className="btn primary" disabled={busy || (type === 'custom' && !subject.trim())} onClick={() => void apply(false)}>
           {busy ? 'Enregistrement…' : 'Enregistrer'}
