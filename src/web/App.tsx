@@ -369,15 +369,12 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
   const scope = pub?.scope ?? ALL_SCOPE
   const isAll = scope === ALL_SCOPE
 
-  // Le pilote auto pilote TOUS les comptes → visible uniquement en vue « Tous les comptes ».
-  useEffect(() => {
-    if (page === 'autopilot' && !isAll) setPage('dashboard')
-  }, [page, isAll])
-
   const navGroups: { id: Page; label: string; icon: string }[][] = [
     [
       { id: 'dashboard', label: 'Tableau de bord', icon: 'dashboard' },
-      ...(isAll ? [{ id: 'autopilot' as Page, label: 'Pilote auto', icon: 'bolt' }] : [])
+      // Visible quel que soit le compte choisi : la vue filtre alors le planning
+      // sur ce compte (l'interrupteur, lui, reste global).
+      { id: 'autopilot', label: 'Pilote auto', icon: 'bolt' }
     ],
     [
       { id: 'generate', label: 'Générer', icon: 'spark' },
@@ -444,7 +441,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
       <main className="main">
         <TopBar state={pub} />
         {page === 'dashboard' && <Dashboard scope={scope} />}
-        {page === 'autopilot' && isAll && <Autopilot toast={showToast} ideaVideo={ideaVideo} />}
+        {page === 'autopilot' && <Autopilot toast={showToast} ideaVideo={ideaVideo} scope={scope} />}
         {page === 'generate' && <Generate sources={sources} clips={clips} progress={progress} onRefresh={refresh} toast={showToast} goHistory={() => setPage('history')} />}
         {page === 'history' && <History sources={sources} clips={clips} progress={progress} onRefresh={refresh} toast={showToast} goClips={() => setPage('clips')} />}
         {page === 'clips' && <Clips clips={clips} sources={sources} onRefresh={refresh} toast={showToast} ttProfile={ttProfile} scope={scope} />}
@@ -2428,7 +2425,11 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
           {totalCredits > 0 && (
             <span className="pill-badge" title="Coût estimé total du jour (aperçu — aucun débit pour l’instant)" style={{ fontVariantNumeric: 'tabular-nums' }}>{totalCredits} cr/jour</span>
           )}
-          <span className="ap-pill"><span className="dot" /> {plan.targetPerDay ?? plan.perDay} vidéo{(plan.targetPerDay ?? plan.perDay) > 1 ? 's' : ''}/jour</span>
+          {/* Vue filtrée sur un compte : le compteur du jour de CE compte, pas le total des 5. */}
+          {(() => {
+            const n = scope && scope !== ALL_SCOPE ? slots.length : plan.targetPerDay ?? plan.perDay
+            return <span className="ap-pill"><span className="dot" /> {n} vidéo{n > 1 ? 's' : ''}/jour</span>
+          })()}
         </div>
       </div>
       {groupByAccount ? (
@@ -2815,7 +2816,7 @@ type SeriesCfg = { enabled: boolean; title: string; universe: string; episode: n
 type AutopilotProfile = { username: string; handle: string | null; avatarUrl: string | null; niche: string; ctas: { niche?: string; serie?: string; custom?: string; clip?: string }; clipChannels: string; perDay: number; series: SeriesCfg; doneToday: number }
 type AutopilotState = { enabled: boolean; perDay: number; busy: boolean; profiles: AutopilotProfile[] }
 
-function Autopilot({ toast, ideaVideo }: { toast: (m: string) => void; ideaVideo: IdeaVideoMap }): JSX.Element {
+function Autopilot({ toast, ideaVideo, scope }: { toast: (m: string) => void; ideaVideo: IdeaVideoMap; scope: string }): JSX.Element {
   const [state, setState] = useState<AutopilotState | null>(null)
   const [perDays, setPerDays] = useState<Record<string, number>>({})
   const [enabled, setEnabled] = useState(false)
@@ -2854,7 +2855,10 @@ function Autopilot({ toast, ideaVideo }: { toast: (m: string) => void; ideaVideo
   }
 
   const profiles = state?.profiles ?? []
-  const totalPerDay = profiles.reduce((s, p) => s + (perDays[p.username] ?? p.perDay), 0)
+  // Cadence affichée à côté de l'interrupteur : celle du compte choisi si un
+  // compte est sélectionné, sinon le total des 5.
+  const scopedProfiles = profiles.filter((p) => scope === ALL_SCOPE || p.username === scope)
+  const totalPerDay = scopedProfiles.reduce((s, p) => s + (perDays[p.username] ?? p.perDay), 0)
 
   return (
     <>
@@ -2889,7 +2893,7 @@ function Autopilot({ toast, ideaVideo }: { toast: (m: string) => void; ideaVideo
         </div>
       </div>
 
-      <TodayPlan ideaVideo={ideaVideo} toast={toast} groupByAccount onConfigSaved={() => void load()} />
+      <TodayPlan ideaVideo={ideaVideo} toast={toast} scope={scope} groupByAccount onConfigSaved={() => void load()} />
       {profiles.length === 0 && <div className="card muted">Aucun compte upload-post connecté. Ajoute-les dans Réglages.</div>}
     </>
   )
