@@ -66,6 +66,17 @@ button {
 .app:has(.side-panel) {
   grid-template-columns: calc(var(--rail) + var(--panel-w)) 1fr;
 }
+/* Sidebar épinglée déployée → la colonne réserve sa vraie largeur : le contenu
+   se décale au lieu d'être recouvert en permanence. */
+.app:has(.sidebar.expanded) {
+  grid-template-columns: var(--side-w) 1fr;
+}
+.app:has(.sidebar.expanded):has(.side-panel) {
+  grid-template-columns: calc(var(--side-w) + var(--panel-w)) 1fr;
+}
+.app:has(.sidebar.expanded) .side-panel {
+  left: var(--side-w);
+}
 
 /* ── Barre du haut (façon Supabase) : logo · compte TikTok … recherche · compte ── */
 .topbar {
@@ -252,7 +263,11 @@ button {
   gap: 6px;
   transition: width 0.18s ease;
 }
-.sidebar:hover {
+/* Trois modes (contrôle en bas de barre, façon Supabase) :
+   .expanded = toujours déployée · .collapsed = toujours repliée ·
+   .hoverable = se déploie au survol (comportement historique). */
+.sidebar.expanded,
+.sidebar.hoverable:hover {
   width: var(--side-w);
 }
 /* Conteneurs à largeur FIXE (celle de l'état déployé) : le texte ne se réagence
@@ -275,9 +290,12 @@ button {
   box-sizing: border-box;
   transition: width 0.18s ease;
 }
-.sidebar:hover .nav-item,
-.sidebar:hover .side-search,
-.sidebar:hover .user-card {
+.sidebar.expanded .nav-item,
+.sidebar.expanded .side-search,
+.sidebar.expanded .user-card,
+.sidebar.hoverable:hover .nav-item,
+.sidebar.hoverable:hover .side-search,
+.sidebar.hoverable:hover .user-card {
   width: calc(var(--side-w) - 24px);
 }
 .sidebar .user-card .nav-item {
@@ -298,7 +316,8 @@ button {
   transition: width 0.18s ease, margin-left 0.18s ease, padding 0.18s ease;
 }
 /* Déployée : retour à la rangée pleine largeur, icône à gauche. */
-.sidebar:hover .nav-item {
+.sidebar.expanded .nav-item,
+.sidebar.hoverable:hover .nav-item {
   width: calc(var(--side-w) - 24px);
   height: 36px;
   padding: 0 12px;
@@ -306,6 +325,7 @@ button {
 }
 /* Les icônes ne doivent jamais être écrasées par le flex quand c'est étroit. */
 .sidebar .nav-item svg,
+.sidebar .nav-item .msym,
 .sidebar .side-search svg,
 .sidebar .brand > span:first-child,
 .sidebar .avatar {
@@ -317,7 +337,8 @@ button {
   transition: opacity 0.14s ease;
   pointer-events: none;
 }
-.sidebar:hover .lbl {
+.sidebar.expanded .lbl,
+.sidebar.hoverable:hover .lbl {
   opacity: 1;
   pointer-events: auto;
 }
@@ -325,6 +346,63 @@ button {
   height: 1px;
   background: var(--border);
   margin: 8px 10px;
+}
+/* ── Contrôle d'affichage de la sidebar (bouton en bas de barre, façon Supabase).
+   Le menu est en `fixed` hors de la sidebar : jamais rogné par son overflow. ── */
+.side-ctl-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 64;
+}
+.side-ctl-menu {
+  position: fixed;
+  left: calc(var(--rail) + 8px);
+  bottom: 14px;
+  z-index: 65;
+  min-width: 178px;
+  padding: 6px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14);
+  animation: rise-sm 0.18s ease;
+}
+.app:has(.sidebar.expanded) .side-ctl-menu {
+  left: calc(var(--side-w) + 8px);
+}
+.sc-title {
+  padding: 4px 8px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+}
+.sc-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 9px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.sc-item:hover {
+  background: var(--panel-2);
+}
+.sc-item .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: transparent;
+  flex-shrink: 0;
+}
+.sc-item.on .dot {
+  background: var(--ok, #22c55e);
 }
 .brand {
   display: flex;

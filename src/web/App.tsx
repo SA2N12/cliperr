@@ -292,6 +292,18 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
   const [toast, setToast] = useState('')
   // Console « Activité en direct » : ouverte depuis la topbar (à droite de la recherche).
   const [consoleOpen, setConsoleOpen] = useState(false)
+  // Mode d'affichage de la sidebar (contrôle en bas de barre, façon Supabase).
+  // Préférence d'appareil → localStorage, pas la BDD.
+  const [sideMode, setSideMode] = useState<'expanded' | 'collapsed' | 'hover'>(() => {
+    const v = localStorage.getItem('sidebar_mode')
+    return v === 'expanded' || v === 'collapsed' ? v : 'hover'
+  })
+  const [sideMenuOpen, setSideMenuOpen] = useState(false)
+  const changeSideMode = (m: 'expanded' | 'collapsed' | 'hover'): void => {
+    setSideMode(m)
+    localStorage.setItem('sidebar_mode', m)
+    setSideMenuOpen(false)
+  }
   const [progress, setProgress] = useState<Record<number, ProgressEvent>>({})
   const [ideaVideo, setIdeaVideo] = useState<Record<number, { status: 'running' | 'done' | 'error'; message: string }>>({})
   const [pub, setPub] = useState<PublishStateT | null>(null)
@@ -422,9 +434,9 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
 
       {consoleOpen && <ConsolePanel live={log} onClose={() => setConsoleOpen(false)} />}
 
-      {/* Barre repliée en colonne d'icônes ; se déploie au survol par-dessus le
-          contenu (les libellés `.lbl` apparaissent en fondu). */}
-      <aside className="sidebar">
+      {/* Barre en colonne d'icônes ; trois modes (contrôle en bas, façon Supabase) :
+          déployée en permanence, repliée, ou déploiement au survol. */}
+      <aside className={`sidebar ${sideMode === 'expanded' ? 'expanded' : sideMode === 'collapsed' ? 'collapsed' : 'hoverable'}`}>
         {navGroups.map((group, gi) => (
           <div key={gi}>
             {gi > 0 && <div className="nav-sep-line" />}
@@ -436,7 +448,36 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
           </div>
         ))}
         <div className="spacer" />
+        <div>
+          <button
+            className={`nav-item${sideMenuOpen ? ' active' : ''}`}
+            title="Affichage de la barre latérale"
+            onClick={() => setSideMenuOpen((v) => !v)}
+          >
+            <MIcon name={sideMode === 'collapsed' ? 'left_panel_open' : 'left_panel_close'} size={16} />
+            <span className="lbl">Barre latérale</span>
+          </button>
+        </div>
       </aside>
+      {sideMenuOpen && (
+        <>
+          <div className="side-ctl-backdrop" onClick={() => setSideMenuOpen(false)} />
+          <div className="side-ctl-menu">
+            <div className="sc-title">Barre latérale</div>
+            {(
+              [
+                ['expanded', 'Déployée'],
+                ['collapsed', 'Repliée'],
+                ['hover', 'Déployée au survol']
+              ] as const
+            ).map(([m, lbl]) => (
+              <button key={m} className={`sc-item${sideMode === m ? ' on' : ''}`} onClick={() => changeSideMode(m)}>
+                <span className="dot" /> {lbl}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
 
       <main className="main">
         <TopBar state={pub} />
