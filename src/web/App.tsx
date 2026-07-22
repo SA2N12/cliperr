@@ -648,6 +648,10 @@ function AreaChart({ data }: { data: Bucket[] }): JSX.Element {
             <span className="chart-dot hover" style={{ left: `${hoverPct}%`, top: `${(y(hv.count) / H) * 100}%` }} />
             <div className="chart-tip" style={{ left: `${Math.min(90, Math.max(10, hoverPct))}%` }}>
               <b>{fmtNum(hv.count)}</b> vues <span className="dim">· {hv.label}</span>
+              {/* Dernier point = jour en cours : TikTok consolide sa série
+                  journalière avec plusieurs heures de retard, le chiffre est
+                  donc toujours en dessous des compteurs live de l'app. */}
+              {hover === n - 1 && <span className="dim"> · provisoire</span>}
             </div>
           </>
         )}
@@ -984,7 +988,15 @@ function Dashboard({ scope }: { scope: string }): JSX.Element {
                       <div style={{ flex: 1, minWidth: 0, lineHeight: 1.25 }}>
                         <div style={{ fontWeight: 700, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {p.handle ? '@' + p.handle : p.profile}
-                          {p.videoCount > 0 && p.views === 0 && <span className="chip warn" style={{ marginLeft: 6 }}>en attente</span>}
+                          {p.videoCount > 0 && p.views === 0 && (
+                            <span
+                              className="chip warn"
+                              style={{ marginLeft: 6 }}
+                              title="Des vidéos sont publiées mais TikTok remonte 0 vue (compte en pause ou restreint)"
+                            >
+                              en attente
+                            </span>
+                          )}
                         </div>
                       </div>
                       <Sparkline data={p.timeseries.map((t) => t.value)} />
