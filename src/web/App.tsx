@@ -988,15 +988,6 @@ function Dashboard({ scope }: { scope: string }): JSX.Element {
                       <div style={{ flex: 1, minWidth: 0, lineHeight: 1.25 }}>
                         <div style={{ fontWeight: 700, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {p.handle ? '@' + p.handle : p.profile}
-                          {p.videoCount > 0 && p.views === 0 && (
-                            <span
-                              className="chip warn"
-                              style={{ marginLeft: 6 }}
-                              title="Des vidéos sont publiées mais TikTok remonte 0 vue (compte en pause ou restreint)"
-                            >
-                              en attente
-                            </span>
-                          )}
                         </div>
                       </div>
                       <Sparkline data={p.timeseries.map((t) => t.value)} />
