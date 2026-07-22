@@ -63,6 +63,10 @@ export async function publishClip(
       disableComment: overrides.disableComment,
       disableDuet: overrides.disableDuet,
       disableStitch: overrides.disableStitch,
+      // Étiquetage AIGC TikTok : obligatoire pour le contenu réaliste généré par
+      // IA (le non-étiqueté peut être SUPPRIMÉ, cf. règles 2026). Tout est généré
+      // chez nous SAUF les clips découpés dans de vraies vidéos YouTube.
+      isAigc: overrides.videoType !== 'clip',
       onNote: deps.onNote
     })
     return { ok: true, detail: res.url ? `Publié via upload-post → ${res.url}` : 'Publié via upload-post', postUrl: res.url, postId: res.postId }

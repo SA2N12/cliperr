@@ -99,7 +99,10 @@ Deux interdits sur cette liste, le second est le plus important :
    construction grammaticale, autre entrée en matière, autre longueur.
    Vingt vidéos bâties sur le même moule, TikTok les traite comme des doublons et
    plafonne chacune à son premier palier de diffusion. Varier le sujet ne suffit
-   pas : c'est la FORME répétée qui est pénalisée.`
+   pas : c'est la FORME répétée qui est pénalisée.
+3. Choisis ton sujet AVANT d'écrire le titre, puis écris le titre FINAL d'un seul
+   tenant. N'écris JAMAIS de correction en cours de titre (aucun « — non, ... »,
+   aucun « ... non — », aucune biffure) : ce texte part tel quel sur TikTok.`
       : ''
 
   // Retour d'expérience du compte. Volontairement fondé sur l'ENGAGEMENT et non

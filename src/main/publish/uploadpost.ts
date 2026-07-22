@@ -16,6 +16,8 @@ export interface UploadPostParams {
   disableComment?: boolean
   disableDuet?: boolean
   disableStitch?: boolean
+  /** Étiquette AIGC TikTok (contenu généré par IA). */
+  isAigc?: boolean
   /** Journal (diagnostic des réponses ambiguës d'upload-post). */
   onNote?: (m: string) => void
 }
@@ -66,6 +68,7 @@ export async function uploadPostTikTok(p: UploadPostParams): Promise<{ url: stri
   if (p.disableComment) form.append('disable_comment', 'true')
   if (p.disableDuet) form.append('disable_duet', 'true')
   if (p.disableStitch) form.append('disable_stitch', 'true')
+  if (p.isAigc) form.append('is_aigc', 'true')
 
   let res: Response
   try {
