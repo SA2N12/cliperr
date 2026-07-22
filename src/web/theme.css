@@ -290,8 +290,10 @@ button {
 .sidebar .nav-item {
   width: 36px;
   height: 36px;
-  padding: 0;
-  justify-content: center;
+  /* Icône 16px centrée via padding fixe (36−16)/2 — PAS de justify-content:
+     center : le libellé masqué (opacity 0) garde sa largeur dans le flex et
+     éjecterait l'icône du carré. Il déborde à droite, invisible. */
+  padding: 0 0 0 10px;
   margin-left: calc((var(--rail) - 36px) / 2 - 12px);
   transition: width 0.18s ease, margin-left 0.18s ease, padding 0.18s ease;
 }
@@ -300,7 +302,6 @@ button {
   width: calc(var(--side-w) - 24px);
   height: 36px;
   padding: 0 12px;
-  justify-content: flex-start;
   margin-left: 0;
 }
 /* Les icônes ne doivent jamais être écrasées par le flex quand c'est étroit. */
