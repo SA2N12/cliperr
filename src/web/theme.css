@@ -283,15 +283,25 @@ button {
 .sidebar .user-card .nav-item {
   width: auto;
 }
-/* Rail replié : icône de nav CENTRÉE (formule indépendante de la largeur du rail —
-   icône 16px, padding sidebar 12px). Au survol : retour à l'inset gauche déployé. */
+/* Rail replié : pastille active/survol = VRAI CARRÉ 36×36, icône centrée.
+   (Avant : 28×36 — largeur `rail − 24px` héritée, hauteur dictée par le padding
+   vertical → proportions bancales.) Centrage dans le rail via une marge négative
+   qui compense le padding 12px de la sidebar. */
 .sidebar .nav-item {
-  padding-left: calc(var(--rail) / 2 - 20px);
-  padding-right: 0;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  justify-content: center;
+  margin-left: calc((var(--rail) - 36px) / 2 - 12px);
+  transition: width 0.18s ease, margin-left 0.18s ease, padding 0.18s ease;
 }
+/* Déployée : retour à la rangée pleine largeur, icône à gauche. */
 .sidebar:hover .nav-item {
-  padding-left: 12px;
-  padding-right: 12px;
+  width: calc(var(--side-w) - 24px);
+  height: 36px;
+  padding: 0 12px;
+  justify-content: flex-start;
+  margin-left: 0;
 }
 /* Les icônes ne doivent jamais être écrasées par le flex quand c'est étroit. */
 .sidebar .nav-item svg,
@@ -339,7 +349,7 @@ button {
   align-items: center;
   gap: 12px;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: 0; /* coins nets, cohérents avec le reste de l'app */
   color: var(--muted);
   font-weight: 500;
   cursor: pointer;
