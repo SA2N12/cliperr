@@ -546,6 +546,11 @@ button {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /* Défilement possible mais SANS barre visible (molette/trackpad/clavier). */
+  scrollbar-width: none;
+}
+.ap-fit .ap-rows::-webkit-scrollbar {
+  display: none;
 }
 
 /* ── Apparitions du tableau de bord ────────────────────────────────────────
