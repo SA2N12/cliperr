@@ -661,6 +661,24 @@ function slotOverrides(): Record<string, SlotOverride> {
   }
   return {}
 }
+/** Clips « En stock » : non publiés, non rejetés, avec un fichier — les mêmes que
+ *  ceux listés dans « Clips → En stock » et dans le sélecteur du volet. */
+function availableStockClips(): import('../src/shared/types').ClipDTO[] {
+  return repo
+    .listClips()
+    .filter((c) => c.filePath && c.publishStatus !== 'published' && c.reviewStatus !== 'rejected')
+    .sort((a, b) => b.createdAt - a.createdAt)
+}
+/** Clip qu'un créneau « stock » publiera : celui choisi (subject) s'il est encore
+ *  disponible, sinon le plus récent en stock. `null` = plus aucun clip en stock. */
+function pickStockClip(subjectId: number | undefined): import('../src/shared/types').ClipDTO | null {
+  const all = availableStockClips()
+  if (subjectId != null && Number.isFinite(subjectId)) {
+    const chosen = all.find((c) => c.id === subjectId)
+    if (chosen) return chosen
+  }
+  return all[0] ?? null
+}
 /** Série CONFIGURÉE (titre + univers remplis), même si le toggle est désactivé — pour forcer un épisode sur un créneau. */
 function seriesConfiguredFor(user: string): SeriesState | null {
   const s = autopilotSeries()[user]
@@ -889,6 +907,11 @@ async function runAutopilotTick(force = false): Promise<void> {
     if (!quotaOk(s.user)) continue
     if (doneOf(s.user) >= perDayFor(s.user)) continue
     if (skipOrdOf(s.user).has(s.ordinal)) continue
+    // Créneau « stock » sans clip disponible : on le SAUTE (il ne devient jamais
+    // une vidéo de niche). Il reste affiché « Aucun clip en stock » et se réveillera
+    // dès qu'un clip entrera en stock — pas d'échec, pas de génération.
+    const ovSel = ovToday[`${s.user}:${s.ordinal}`]
+    if (ovSel?.type === 'stock' && !pickStockClip(Number.isFinite(Number(ovSel.subject)) ? Number(ovSel.subject) : undefined)) continue
     picked = { user: s.user, ordinal: s.ordinal }
     break
   }
@@ -929,32 +952,18 @@ async function runAutopilotTick(force = false): Promise<void> {
     // retiré du modèle — le lendemain, le bloc repart en automatique (un clip
     // ne se publie qu'une fois, sinon le modèle pointerait un clip déjà parti).
     if (slotOv.type === 'stock') {
-      const clearStock = (): void => {
-        try {
-          const map = slotOverrides()
-          const k = `${user}:${ordinal}`
-          const o = map[k]
-          if (o && o.type === 'stock') {
-            delete o.type
-            delete o.subject
-            if (o.hm == null && !o.music) delete map[k]
-            else map[k] = o
-            repo.setSetting('autopilot_slot_overrides', JSON.stringify(map))
-          }
-        } catch { /* ignore */ }
-      }
-      const clipId = Number(subject)
-      const clip = Number.isFinite(clipId) ? repo.getClip(clipId) : null
+      // Le clip choisi (subject) est mémorisé mais N'EST PLUS effacé après coup :
+      // le créneau reste de type « stock » (il ne redevient jamais une vidéo de
+      // niche). Chaque jour il publie le clip choisi s'il est encore dispo, sinon
+      // le plus récent en stock. Une fois publié, on retire juste l'id figé pour
+      // que le lendemain reparte sur le stock du moment.
+      const clip = pickStockClip(Number.isFinite(Number(subject)) ? Number(subject) : undefined)
       if (!clip || !clip.filePath) {
-        failReason = 'clip en stock introuvable (supprimé ?)'
-        clearStock()
-        emitLog(`Pilote auto : le clip en stock n°${subject} de « ${user} » est introuvable — créneau remis en automatique.`)
-        return
-      }
-      if (clip.publishStatus === 'published') {
-        failReason = 'clip déjà publié'
-        clearStock()
-        emitLog(`Pilote auto : le clip « ${clip.title ?? `n°${clip.id}`} » est déjà publié — créneau remis en automatique.`)
+        // Plus aucun clip en stock : on NE génère PAS de vidéo de niche à la place.
+        // Le créneau est marqué « sans clip » pour la journée (affiché tel quel),
+        // et reste de type stock pour les jours suivants.
+        failReason = 'Aucun clip en stock disponible — ajoute des clips (page Clips) ou change le type du bloc.'
+        emitLog(`Pilote auto : aucun clip en stock pour « ${user} » (créneau n°${ordinal}) — laissé sans publication, aucune vidéo de niche de remplacement.`)
         return
       }
       // is_aigc : un clip issu d'une génération IA (source `idea:…`) doit être
@@ -970,9 +979,15 @@ async function runAutopilotTick(force = false): Promise<void> {
         repo.setClipReview(clip.id, 'pending')
         throw e
       }
+      // Retire l'id figé mais GARDE le type stock → demain, prochain clip du stock.
+      try {
+        const map = slotOverrides()
+        const k = `${user}:${ordinal}`
+        const o = map[k]
+        if (o && o.subject) { delete o.subject; map[k] = o; repo.setSetting('autopilot_slot_overrides', JSON.stringify(map)) }
+      } catch { /* ignore */ }
       markDone(user, ordinal, clip.title)
       produced = true
-      clearStock()
       emitLog(`Pilote auto : clip en stock publié sur « ${user} » (${done + 1}/${perDayFor(user)} aujourd'hui).`)
       return
     }
@@ -2323,6 +2338,7 @@ app.get('/api/autopilot/plan', wrap(async (req, res) => {
     failed?: boolean
     error?: string
     music?: string
+    emptyStock?: boolean
   }
   const slots: Slot[] = []
   const ovToday = slotOverrides()
@@ -2410,7 +2426,7 @@ app.get('/api/autopilot/plan', wrap(async (req, res) => {
       let label: string
       if (ov?.type === 'custom' && (ov.subject ?? '').trim()) label = `Sujet : ${(ov.subject ?? '').trim()}`
       else if (ov?.type === 'carousel' || ov?.type === 'slideshow') label = `${ov.type === 'slideshow' ? 'Diaporama' : 'Carrousel'} : ${(ov.subject ?? '').trim() || nicheForProfile(user)}`
-      else if (ov?.type === 'stock') label = `En stock : ${repo.getClip(Number(ov.subject))?.title ?? `clip n°${ov.subject}`}`
+      else if (ov?.type === 'stock') { const sc = pickStockClip(Number(ov.subject)); label = sc ? `En stock : ${sc.title ?? `clip n°${sc.id}`}` : 'Aucun clip en stock' }
       else if (ov?.type === 'clip') label = `Clip : ${(ov.subject ?? '').trim().replace(/^https?:\/\/(www\.)?/, '').slice(0, 50) || 'choix auto (IA)'}`
       else if (ov?.type === 'serie' && confSerie) label = `Série : ${confSerie.title}`
       else label = nicheForProfile(user)
@@ -2463,9 +2479,12 @@ app.get('/api/autopilot/plan', wrap(async (req, res) => {
     const confSerie = seriesConfiguredFor(sc.user)
     // Libellé selon le type du créneau (niche par défaut).
     let label: string
+    // Créneau « stock » sans clip disponible : affiché tel quel (« Aucun clip en
+    // stock »), signalé au client par emptyStock → il ne publiera pas de niche.
+    let emptyStock = false
     if (ov?.type === 'custom' && (ov.subject ?? '').trim()) label = `Sujet : ${(ov.subject ?? '').trim()}`
     else if (ov?.type === 'carousel' || ov?.type === 'slideshow') label = `${ov.type === 'slideshow' ? 'Diaporama' : 'Carrousel'} : ${(ov.subject ?? '').trim() || nicheForProfile(sc.user)}`
-    else if (ov?.type === 'stock') label = `En stock : ${repo.getClip(Number(ov.subject))?.title ?? `clip n°${ov.subject}`}`
+    else if (ov?.type === 'stock') { const stk = pickStockClip(Number(ov.subject)); if (stk) label = `En stock : ${stk.title ?? `clip n°${stk.id}`}`; else { label = 'Aucun clip en stock'; emptyStock = true } }
     else if (ov?.type === 'clip') label = `Clip : ${(ov.subject ?? '').trim().replace(/^https?:\/\/(www\.)?/, '').slice(0, 50) || 'choix auto (IA)'}`
     else if (ov?.type === 'serie' && confSerie) label = `Série : ${confSerie.title} — Ép. ${confSerie.episode}`
     else label = nicheForProfile(sc.user)
@@ -2483,7 +2502,8 @@ app.get('/api/autopilot/plan', wrap(async (req, res) => {
       subject: ov?.subject,
       hasSeries: !!confSerie,
       credits: estimateCredits(ov?.type),
-      music: ov?.music
+      music: ov?.music,
+      emptyStock
     })
   }
 

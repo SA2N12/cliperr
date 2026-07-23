@@ -1694,7 +1694,7 @@ const CRON_LABELS: Record<string, string> = {
   '0 */3 * * *': 'toutes les 3 h'
 }
 
-type AutopilotSlot = { user: string; handle: string | null; avatarUrl: string | null; niche: string; ordinal: number; etaHm: number; eta: string; done: boolean; pinned?: boolean; type?: string; subject?: string; hasSeries?: boolean; credits?: number; failed?: boolean; error?: string; music?: string }
+type AutopilotSlot = { user: string; handle: string | null; avatarUrl: string | null; niche: string; ordinal: number; etaHm: number; eta: string; done: boolean; pinned?: boolean; type?: string; subject?: string; hasSeries?: boolean; credits?: number; failed?: boolean; error?: string; music?: string; emptyStock?: boolean }
 /** Nom lisible d'un morceau (retire le préfixe technique + l'extension du fichier). */
 function trackLabel(f: string): string {
   return f.replace(/^[a-z]+-\d+-/i, '').replace(/^\d+-/, '').replace(/\.[^.]+$/, '')
@@ -2377,8 +2377,8 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
           width: opts?.hideAvatar ? 104 : 116,
           padding: '12px 8px',
           borderRadius: 0,
-          background: s.failed ? 'rgba(220,38,38,0.06)' : s.done ? 'var(--ap-green-soft)' : '#fff',
-          border: s.failed ? '1.5px solid var(--bad)' : s.done ? '1.5px solid var(--ap-green-border)' : `1.5px solid ${generating || s.pinned || s.type ? 'var(--ap-green)' : 'var(--border)'}`,
+          background: s.failed ? 'rgba(220,38,38,0.06)' : s.emptyStock ? 'rgba(217,119,6,0.06)' : s.done ? 'var(--ap-green-soft)' : '#fff',
+          border: s.failed ? '1.5px solid var(--bad)' : s.emptyStock ? '1.5px dashed #d97706' : s.done ? '1.5px solid var(--ap-green-border)' : `1.5px solid ${generating || s.pinned || s.type ? 'var(--ap-green)' : 'var(--border)'}`,
           cursor: s.done ? 'default' : 'pointer',
           display: 'flex',
           flexDirection: 'column',
@@ -2401,11 +2401,12 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
             {s.handle ? '@' + s.handle : s.user}
           </div>
         )}
-        <div className="small" style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: s.done || s.failed ? 700 : 500, color: s.failed ? 'var(--bad)' : s.done ? 'var(--ap-green-strong)' : generating ? 'var(--ap-green-strong)' : 'var(--muted)' }}>
+        <div className="small" style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: s.done || s.failed ? 700 : 500, color: s.failed ? 'var(--bad)' : s.emptyStock ? '#b45309' : s.done ? 'var(--ap-green-strong)' : generating ? 'var(--ap-green-strong)' : 'var(--muted)' }}>
           {s.done ? <><MIcon name="check_circle" size={13} /> Publiée</>
             : s.failed ? <><MIcon name="error" size={13} /> Échec</>
-              : generating ? <><MIcon name="progress_activity" size={13} spin /> création…</>
-                : s.niche.split(' (')[0]}
+              : s.emptyStock ? <><MIcon name="warning" size={13} /> Aucun clip</>
+                : generating ? <><MIcon name="progress_activity" size={13} spin /> création…</>
+                  : s.niche.split(' (')[0]}
         </div>
         {s.failed && s.error ? (
           <div title={s.error} style={{ fontSize: 10, color: 'var(--bad)', maxWidth: '100%', whiteSpace: 'normal', lineHeight: 1.2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
