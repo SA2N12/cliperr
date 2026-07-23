@@ -502,9 +502,9 @@ button {
 }
 .page-head h1 {
   margin: 0 0 4px;
-  font-size: 26px;
+  /* Titres à l'échelle SellExpert, tracking serré. */
+  font-size: 29px;
   font-weight: 700;
-  /* Titres serrés, comme le dashboard SellExpert (tracking-tight). */
   letter-spacing: -0.02em;
 }
 .page-head p {
@@ -1176,11 +1176,12 @@ button {
   font-size: 12px;
 }
 .stat-grid .value {
-  font-size: 25px;
-  /* Graisse des gros chiffres SellExpert (Inter 800). */
+  /* Échelle SellExpert : ce sont ses gros chiffres (taille + graisse 800) qui
+     font sa signature typographique — la famille (Inter) était déjà la même. */
+  font-size: 31px;
   font-weight: 800;
-  letter-spacing: -0.5px;
-  line-height: 1.1;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
 }
 .grid-3 {
   display: grid;
