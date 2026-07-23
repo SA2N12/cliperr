@@ -1820,7 +1820,9 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
   useEffect(() => { api.musicList().then((r) => setTracks(r.tracks)).catch(() => undefined) }, [])
   useEffect(() => {
     api.listClips()
-      .then((cs) => setStockClips(cs.filter((c) => c.publishStatus !== 'published' && c.reviewStatus !== 'rejected' && c.filePath).sort((a, b) => b.createdAt - a.createdAt)))
+      // Même pool que le pilote : on exclut les clips protégés (non publiables) —
+      // ils ne peuvent pas être choisis pour un créneau.
+      .then((cs) => setStockClips(cs.filter((c) => c.publishStatus !== 'published' && c.reviewStatus !== 'rejected' && c.filePath && c.publishable).sort((a, b) => b.createdAt - a.createdAt)))
       .catch(() => undefined)
   }, [])
   // Import d'un MP3 depuis le bloc → stocké dans /data/music (partagé), puis auto-sélectionné pour ce bloc.
