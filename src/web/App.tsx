@@ -1522,7 +1522,7 @@ const STATE_LABEL: Record<ClipDTO['publishStatus'], string> = {
 }
 
 /** Vignette d'un clip : aperçu 9:16, statut et origine en surimpression, actions en pied. */
-function ClipCard({ c, ai, onReview, onPublish }: { c: ClipDTO; ai: boolean; onReview: (id: number, s: ClipDTO['reviewStatus']) => void; onPublish: (c: ClipDTO) => void }): JSX.Element {
+function ClipCard({ c, ai, onReview, onPublish, onSetPublishable }: { c: ClipDTO; ai: boolean; onReview: (id: number, s: ClipDTO['reviewStatus']) => void; onPublish: (c: ClipDTO) => void; onSetPublishable: (id: number, value: boolean) => void }): JSX.Element {
   const published = c.publishStatus === 'published'
   const account = c.publishedAccount || c.profile
   const when = new Date(c.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })
@@ -1552,6 +1552,22 @@ function ClipCard({ c, ai, onReview, onPublish }: { c: ClipDTO; ai: boolean; onR
           <span style={{ flexShrink: 0 }}>{when}</span>
         </div>
       </div>
+      {/* Toggle « Publiable » (clips non publiés) : par défaut ON. Éteint = clip
+          protégé, ni publié par le pilote auto, ni par le bouton. */}
+      {!published && (
+        <div className="clip-pub">
+          <button
+            className={`ap-switch mini${c.publishable ? ' on' : ''}`}
+            role="switch"
+            aria-checked={c.publishable}
+            title={c.publishable ? 'Publiable — clique pour protéger ce clip' : 'Protégé — clique pour l’autoriser à la publication'}
+            onClick={() => onSetPublishable(c.id, !c.publishable)}
+          >
+            <span className="knob" />
+          </button>
+          {c.publishable ? <span><b>Publiable</b></span> : <span><MIcon name="block" size={13} /> Protégé</span>}
+        </div>
+      )}
       <div className="clip-actions">
         {published ? (
           c.postUrl && (
@@ -1563,7 +1579,13 @@ function ClipCard({ c, ai, onReview, onPublish }: { c: ClipDTO; ai: boolean; onR
             {c.reviewStatus !== 'rejected' && <button className="btn small" onClick={() => onReview(c.id, 'rejected')}>Rejeter</button>}
           </>
         )}
-        <button className="btn primary small" style={{ marginLeft: 'auto' }} onClick={() => onPublish(c)}>
+        <button
+          className="btn primary small"
+          style={{ marginLeft: 'auto' }}
+          disabled={!published && !c.publishable}
+          title={!published && !c.publishable ? 'Clip protégé — active « Publiable » d’abord' : undefined}
+          onClick={() => onPublish(c)}
+        >
           {published ? 'Republier' : 'Publier'}
         </button>
       </div>
@@ -1577,6 +1599,14 @@ function Clips({ clips, sources, onRefresh, toast, ttProfile, scope }: { clips: 
   async function review(id: number, status: ClipDTO['reviewStatus']): Promise<void> {
     await api.reviewClip(id, status)
     await onRefresh()
+  }
+  async function setPublishable(id: number, value: boolean): Promise<void> {
+    try {
+      await api.setClipPublishable(id, value)
+      await onRefresh()
+    } catch (e) {
+      toast('Erreur : ' + (e as Error).message)
+    }
   }
 
   // Origine du clip (IA depuis une idée, ou découpe d'une vidéo source) — affichée
@@ -1625,7 +1655,7 @@ function Clips({ clips, sources, onRefresh, toast, ttProfile, scope }: { clips: 
       ) : (
         <div className="clip-grid">
           {list.map((c) => (
-            <ClipCard key={c.id} c={c} ai={isAI(c)} onReview={review} onPublish={(x) => setModal(x)} />
+            <ClipCard key={c.id} c={c} ai={isAI(c)} onReview={review} onPublish={(x) => setModal(x)} onSetPublishable={setPublishable} />
           ))}
         </div>
       )}

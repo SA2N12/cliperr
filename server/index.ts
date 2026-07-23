@@ -680,7 +680,7 @@ function slotOverrides(): Record<string, SlotOverride> {
 function availableStockClips(): import('../src/shared/types').ClipDTO[] {
   return repo
     .listClips()
-    .filter((c) => c.filePath && c.publishStatus !== 'published' && c.reviewStatus !== 'rejected')
+    .filter((c) => c.filePath && c.publishStatus !== 'published' && c.reviewStatus !== 'rejected' && c.publishable)
     .sort((a, b) => b.createdAt - a.createdAt)
 }
 /** Clip qu'un créneau « stock » publiera : celui choisi (subject) s'il est encore
@@ -1361,9 +1361,17 @@ app.post('/api/clips/:id/review', wrap((req, res) => {
   repo.setClipReview(Number(req.params.id), req.body?.status)
   res.json({ ok: true })
 }))
+// Toggle « Publiable » : protège (ou re-autorise) un clip du pilote et du bouton.
+app.post('/api/clips/:id/publishable', wrap((req, res) => {
+  repo.setClipPublishable(Number(req.params.id), req.body?.value !== false)
+  res.json({ ok: true })
+}))
 app.post('/api/clips/:id/publish', wrap(async (req, res) => {
+  const id = Number(req.params.id)
+  // Garde-fou : un clip marqué non publiable ne part pas, même par le bouton.
+  if (repo.getClip(id)?.publishable === false) return res.status(409).json({ error: 'Clip protégé (non publiable) — réactive-le d’abord.' })
   const overrides = req.body?.overrides as PublishOverrides | undefined
-  await publishClipById(Number(req.params.id), paths, emitLog, overrides)
+  await publishClipById(id, paths, emitLog, overrides)
   res.json({ ok: true })
 }))
 

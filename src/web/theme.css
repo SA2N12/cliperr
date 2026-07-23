@@ -922,6 +922,33 @@ button {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+/* Interrupteur compact (carte de clip : « Publiable »). */
+.ap-switch.mini {
+  width: 34px;
+  height: 20px;
+}
+.ap-switch.mini .knob {
+  width: 14px;
+  height: 14px;
+  top: 3px;
+  left: 3px;
+}
+.ap-switch.mini.on .knob {
+  transform: translateX(14px);
+}
+/* Ligne « Publiable » en pied de carte, au-dessus des actions. */
+.clip-pub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.clip-pub b {
+  color: var(--text);
+  font-weight: 600;
+}
 
 /* Lignes de comptes + blocs horaires : entrées en cascade et survols. */
 .ap-acc-row {

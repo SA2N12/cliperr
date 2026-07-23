@@ -35,6 +35,7 @@ function toClipDTO(r: ClipRow): ClipDTO {
     hashtags: r.hashtags,
     reviewStatus: r.reviewStatus as ClipDTO['reviewStatus'],
     publishStatus: r.publishStatus as ClipDTO['publishStatus'],
+    publishable: r.publishable !== 0,
     publishedAccount: r.publishedAccount,
     profile: r.profile,
     postUrl: r.postUrl,
@@ -120,6 +121,11 @@ export function setClipPublish(id: number, status: ClipDTO['publishStatus']): vo
   db().update(clips).set({ publishStatus: status }).where(eq(clips.id, id)).run()
 }
 
+/** Rend un clip publiable ou non (protège du pilote auto ET du bouton Publier). */
+export function setClipPublishable(id: number, value: boolean): void {
+  db().update(clips).set({ publishable: value ? 1 : 0 }).where(eq(clips.id, id)).run()
+}
+
 /** Prochain clip validé, non publié, avec un fichier — pour la publication auto. */
 export function nextApprovedUnpublished(): ClipDTO | null {
   const rows = db()
@@ -131,7 +137,9 @@ export function nextApprovedUnpublished(): ClipDTO | null {
   // On (re)publie les clips jamais publiés ET ceux en échec (ex. saturation d'un
   // compte à un instant donné) : avec la rotation/bascule, un nouvel essai peut
   // aboutir sur un autre compte.
-  const hit = rows.find((r) => (r.publishStatus === 'unpublished' || r.publishStatus === 'failed') && !!r.filePath)
+  const hit = rows.find(
+    (r) => (r.publishStatus === 'unpublished' || r.publishStatus === 'failed') && !!r.filePath && r.publishable !== 0
+  )
   return hit ? toClipDTO(hit) : null
 }
 

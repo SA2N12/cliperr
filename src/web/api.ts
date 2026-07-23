@@ -70,6 +70,7 @@ export const api = {
   listClips: (sourceId?: number) =>
     req<ClipDTO[]>(`/api/clips${sourceId ? `?sourceId=${sourceId}` : ''}`),
   reviewClip: (id: number, status: ClipDTO['reviewStatus']) => post(`/api/clips/${id}/review`, { status }),
+  setClipPublishable: (id: number, value: boolean) => post(`/api/clips/${id}/publishable`, { value }),
   publishClip: (id: number, overrides?: PublishOverrides) =>
     post(`/api/clips/${id}/publish`, { overrides }),
   runPipeline: (sourceId: number, clipCount: number, range?: { startSec: number; endSec: number }) =>

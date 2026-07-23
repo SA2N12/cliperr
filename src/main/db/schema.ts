@@ -25,6 +25,8 @@ export const clips = sqliteTable('clips', {
   hashtags: text('hashtags'),
   reviewStatus: text('review_status').notNull().default('pending'),
   publishStatus: text('publish_status').notNull().default('unpublished'),
+  // 1 = publiable (défaut), 0 = protégé : ni publié par le pilote, ni par le bouton.
+  publishable: integer('publishable').notNull().default(1),
   publishedAccount: text('published_account'),
   profile: text('profile'),
   postUrl: text('post_url'),
@@ -99,6 +101,7 @@ CREATE TABLE IF NOT EXISTS clips (
   hashtags TEXT,
   review_status TEXT NOT NULL DEFAULT 'pending',
   publish_status TEXT NOT NULL DEFAULT 'unpublished',
+  publishable INTEGER NOT NULL DEFAULT 1,
   published_account TEXT,
   profile TEXT,
   post_url TEXT,

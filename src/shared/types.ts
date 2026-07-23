@@ -41,6 +41,8 @@ export interface ClipDTO {
   hashtags: string | null
   reviewStatus: 'pending' | 'approved' | 'rejected'
   publishStatus: 'unpublished' | 'scheduled' | 'published' | 'failed'
+  /** Publiable (pilote auto + bouton Publier). Faux = clip protégé. Défaut vrai. */
+  publishable: boolean
   /** Compte/profil sur lequel le clip a été publié (upload-post, TikTok…). */
   publishedAccount: string | null
   /** Profil actif au moment de la création du clip (pour filtrer par profil). */
