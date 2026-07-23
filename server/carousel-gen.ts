@@ -184,7 +184,10 @@ export async function assembleSlideshow(
         '-loop', '1', '-t', String(secPerSlide), '-i', files[i],
         '-vf',
         `scale=1188:2112:force_original_aspect_ratio=increase,crop=1188:2112,zoompan=z='min(zoom+0.0005,1.12)':d=${frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30,setsar=1`,
-        '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-r', '30',
+        // veryfast + CRF explicite : sans eux, x264 encode en « medium » (~4 min 30
+        // PAR diapo sur le VPS 2 vCPU, fichiers de 30-40 Mo pour 3,2 s). Pour des
+        // images fixes en léger zoom, veryfast est visuellement équivalent.
+        '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '22', '-pix_fmt', 'yuv420p', '-r', '30',
         seg
       ])
       segs.push(seg)
