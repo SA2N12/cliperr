@@ -1,4 +1,5 @@
 import { join } from 'path'
+import { unlink } from 'fs/promises'
 import type { PipelineContext, Emit } from './context'
 import { fetchMetadata, downloadVideo, type SourceMeta } from './ingest'
 import { probeDuration, naiveSegments } from './extract'
@@ -231,4 +232,10 @@ export async function runPipeline(
   }
   emit('reframe', 'done', 1, `${segments.length} clip(s) vertical(aux) prêt(s)`)
   if (opts.apiKey) emit('metadata', 'done', 1, `${metaCount} légende(s) générée(s)`)
+
+  // Nettoyage : la vidéo source (parfois plusieurs Go pour une VOD Twitch/YouTube)
+  // ne sert plus une fois les clips extraits — chaque clip est un fichier autonome.
+  // Sans ça, /data/downloads gonflait indéfiniment jusqu'à saturer le disque (ce
+  // qui faisait échouer les téléchargements suivants avec « No space left »).
+  await unlink(file).catch(() => undefined)
 }

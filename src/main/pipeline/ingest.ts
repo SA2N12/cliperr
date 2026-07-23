@@ -165,9 +165,16 @@ export async function downloadVideo(
         ...proxyArgs(),
         '--ffmpeg-location',
         ctx.bin.ffmpeg,
-        // Préfère ≤1080, mais retombe sur n'importe quel meilleur format dispo.
+        // Plafonne à 720p : la sortie est un clip vertical 1080×1920 recadré, une
+        // source 720p suffit largement. Surtout, ça évite qu'une VOD Twitch de
+        // plusieurs heures se télécharge en 1080p60 (~23 Go → disque saturé).
+        // Repli en cascade sur le meilleur format ≤720, puis n'importe lequel.
         '-f',
-        'bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b',
+        'bv*[height<=720]+ba/b[height<=720]/bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b',
+        // Garde-fou dur : abandonne un téléchargement qui dépasserait 8 Go
+        // (protège le disque même si l'estimation de format se trompe).
+        '--max-filesize',
+        '8G',
         '--merge-output-format',
         'mp4',
         '-o',
