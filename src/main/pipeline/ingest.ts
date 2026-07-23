@@ -67,15 +67,27 @@ function pluginArgs(binDir: string): string[] {
   return args
 }
 
+/** URL YouTube (youtube.com / youtu.be / shorts). */
+function isYouTube(url: string): boolean {
+  return /(?:^|\.)youtube\.com|youtu\.be/i.test(url)
+}
+
 /**
  * Proxy optionnel pour yt-dlp (variable `DOWNLOAD_PROXY`, ex. http://user:pass@ip:port).
  * Vide par défaut : on télécharge depuis l'IP du VPS. Utile si YouTube se met à
  * rate-limiter (HTTP 429) ou bloquer cette IP — on bascule alors sur un proxy
  * résidentiel/ISP sans toucher au code.
+ *
+ * RÉSERVÉ À YOUTUBE : le proxy résidentiel est lent (~170 Ko/s). Twitch et les
+ * autres sites n'ont pas de blocage sur l'IP du VPS → les router par le proxy
+ * ralentissait le téléchargement d'un facteur 10-50 (une VOD de 90 min prenait
+ * plus d'une heure). On télécharge donc en DIRECT sauf pour YouTube.
  */
-function proxyArgs(): string[] {
+function proxyArgs(url?: string): string[] {
   const p = process.env.DOWNLOAD_PROXY
-  return p ? ['--proxy', p] : []
+  if (!p) return []
+  if (url && !isYouTube(url)) return []
+  return ['--proxy', p]
 }
 
 /** Diagnostic verbeux : formats + chargement des plugins + tentatives de PO token. */
@@ -88,7 +100,7 @@ function listFormats(
   return new Promise((resolve) => {
     const child = spawn(
       ctx.bin.ytDlp,
-      ['-F', '-v', '--no-playlist', ...cookieArgs(browser, file), ...pluginArgs(ctx.dirs.bin), ...proxyArgs(), url],
+      ['-F', '-v', '--no-playlist', ...cookieArgs(browser, file), ...pluginArgs(ctx.dirs.bin), ...proxyArgs(url), url],
       { windowsHide: true }
     )
     let out = ''
@@ -131,7 +143,7 @@ export async function fetchMetadata(
       '--no-playlist',
       ...cookieArgs(cookiesFromBrowser, cookiesFile),
       ...pluginArgs(ctx.dirs.bin),
-      ...proxyArgs(),
+      ...proxyArgs(url),
       url
     ])
   } catch (e) {
@@ -196,7 +208,7 @@ export async function downloadVideo(
         ...sectionArgs,
         ...cookieArgs(cookiesFromBrowser, cookiesFile),
         ...pluginArgs(ctx.dirs.bin),
-        ...proxyArgs(),
+        ...proxyArgs(url),
         '--ffmpeg-location',
         ffLocation,
         // PRÉFÈRE un format COMBINÉ (vidéo+audio déjà dans un seul fichier) : `b`
