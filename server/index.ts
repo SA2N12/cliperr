@@ -1207,7 +1207,10 @@ function reloadAutopilot(): void {
     autopilotTask.stop()
     autopilotTask = null
   }
-  if (repo.getSetting('autopilot_enabled') !== '1') return
+  // Le cron tourne TOUJOURS : c'est le tick qui vérifie l'interrupteur à chaque
+  // minute. Planifier seulement si activé créait un piège : un démarrage pilote
+  // coupé puis une activation du flag en base (sans passer par l'API) laissait
+  // « En marche » à l'écran… sans aucune horloge derrière.
   // Passage CHAQUE MINUTE : le tick ne fait rien tant qu'aucun créneau n'est dû,
   // et démarre un créneau à la minute exacte de son heure prévue.
   const expr = repo.getSetting('autopilot_cron') || '* * * * *'
@@ -1215,7 +1218,7 @@ function reloadAutopilot(): void {
   autopilotTask = cron.schedule(expr, () => {
     void runAutopilotTick().catch((e) => emitLog(`Pilote auto : ${e instanceof Error ? e.message : String(e)}`))
   })
-  emitLog('Pilote auto activé — chaque vidéo part à son heure prévue.')
+  if (repo.getSetting('autopilot_enabled') === '1') emitLog('Pilote auto activé — chaque vidéo part à son heure prévue.')
 }
 
 // ── Bootstrap ──
