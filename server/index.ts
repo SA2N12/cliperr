@@ -2525,7 +2525,9 @@ app.get('/api/autopilot/plan', wrap(async (req, res) => {
       return { user, handle: m?.tiktokHandle ?? null, avatarUrl: m?.avatarUrl ?? null, perDay: perDayForProfile(user) }
     })
     .sort((a, b) => rank(a.user) - rank(b.user))
-  res.json({ enabled, perDay, targetPerDay, window: win, nowHm, today, day: dayOffset, accounts, slots })
+  // Clips prêts en stock (non publiés, non rejetés) : dispo pour les créneaux « stock ».
+  const stockCount = availableStockClips().length
+  res.json({ enabled, perDay, targetPerDay, stockCount, window: win, nowHm, today, day: dayOffset, accounts, slots })
 }))
 // Réglages d'UN SEUL compte (fusion dans les maps existantes — pas de remplacement
 // global) : utilisé par la fenêtre ⚙️ des lignes du planning.

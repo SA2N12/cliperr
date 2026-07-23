@@ -1716,7 +1716,7 @@ const TTS_VOICES: { id: string; label: string }[] = [
 ]
 
 type AutopilotAccount = { user: string; handle: string | null; avatarUrl: string | null; perDay?: number }
-type AutopilotPlan = { enabled: boolean; perDay: number; targetPerDay?: number; window: { start: number; end: number }; nowHm: number; day?: number; accounts?: AutopilotAccount[]; slots: AutopilotSlot[] }
+type AutopilotPlan = { enabled: boolean; perDay: number; targetPerDay?: number; stockCount?: number; window: { start: number; end: number }; nowHm: number; day?: number; accounts?: AutopilotAccount[]; slots: AutopilotSlot[] }
 
 // Fenêtre d'édition d'un créneau du planning : heure + type de contenu.
 // `quota` = nb de vidéos/jour actuel du compte (pour le bouton Supprimer).
@@ -2537,6 +2537,15 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {plan.stockCount != null && (
+            <span
+              className="pill-badge"
+              title="Clips prêts en stock (page Clips → En stock) — disponibles pour les créneaux « Clip en stock »"
+              style={{ fontVariantNumeric: 'tabular-nums' }}
+            >
+              <MIcon name="movie" size={13} /> {plan.stockCount} en stock
+            </span>
+          )}
           {totalCredits > 0 && (
             <span className="pill-badge" title="Coût estimé total du jour (aperçu — aucun débit pour l’instant)" style={{ fontVariantNumeric: 'tabular-nums' }}>{totalCredits} cr/jour</span>
           )}
