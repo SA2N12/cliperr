@@ -19,10 +19,31 @@ export interface RunOptions {
   cwd?: string
 }
 
+// Processus enfants actifs (yt-dlp, ffmpeg…). Permet d'ANNULER une génération :
+// tuer ces processus fait échouer l'étape en cours (téléchargement/montage), ce
+// qui propage l'annulation jusqu'au pipeline (source marquée en erreur).
+const activeChildren = new Set<ReturnType<typeof spawn>>()
+
+/** Tue tous les processus enfants en cours. Renvoie combien ont été tués. */
+export function killActiveChildren(): number {
+  let n = 0
+  for (const child of activeChildren) {
+    try {
+      child.kill('SIGKILL')
+      n++
+    } catch {
+      /* déjà terminé */
+    }
+  }
+  activeChildren.clear()
+  return n
+}
+
 /** Lance un binaire et résout quand il se termine (rejette si code != 0). */
 export function run(bin: string, args: string[], opts: RunOptions = {}): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(bin, args, { cwd: opts.cwd, windowsHide: true })
+    activeChildren.add(child)
     let stderrTail = ''
     child.stdout.on('data', (d: Buffer) => opts.onStdout?.(d.toString()))
     child.stderr.on('data', (d: Buffer) => {
@@ -32,6 +53,7 @@ export function run(bin: string, args: string[], opts: RunOptions = {}): Promise
     })
     child.on('error', reject)
     child.on('close', (code) => {
+      activeChildren.delete(child)
       if (code === 0) resolve()
       else reject(new Error(`${bin} a terminé avec le code ${code}\n${stderrTail}`))
     })
@@ -42,6 +64,7 @@ export function run(bin: string, args: string[], opts: RunOptions = {}): Promise
 export function runCapture(bin: string, args: string[], opts: RunOptions = {}): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(bin, args, { cwd: opts.cwd, windowsHide: true })
+    activeChildren.add(child)
     let stdout = ''
     let stderrTail = ''
     child.stdout.on('data', (d: Buffer) => (stdout += d.toString()))
@@ -50,6 +73,7 @@ export function runCapture(bin: string, args: string[], opts: RunOptions = {}): 
     })
     child.on('error', reject)
     child.on('close', (code) => {
+      activeChildren.delete(child)
       if (code === 0) resolve(stdout)
       else reject(new Error(`${bin} a terminé avec le code ${code}\n${stderrTail}`))
     })

@@ -34,6 +34,7 @@ import { runPipeline, type ReframeFocus } from '../src/main/pipeline/orchestrato
 import { transcribeSource, transcribeWithGroq, type Word } from '../src/main/pipeline/transcribe'
 import { detectFaceCenterX } from '../src/main/pipeline/face'
 import { isLocalFile, fetchMetadata, downloadVideo } from '../src/main/pipeline/ingest'
+import { killActiveChildren } from '../src/main/pipeline/context'
 import { downloadViaApi, isYouTubeUrl, searchYouTubeVideos, probeDownloadable, type SourceMetaApi } from './ytdl-api'
 import { listUploadPostProfiles, type UploadPostProfile } from '../src/main/publish/uploadpost'
 import { generateViralIdeas, generateEpisodeIdea, generateInspiredIdea, fetchTikTokTrends, type SeriesState } from './ideas'
@@ -197,9 +198,19 @@ function getContext(): Promise<PipelineContext> {
 // ── Pipeline (un seul à la fois) ──
 let pipelineChain: Promise<void> = Promise.resolve()
 
+// Sources dont l'utilisateur a demandé l'annulation (en file ou en cours).
+const canceledSources = new Set<number>()
+
 async function runForSource(sourceId: number, clipCount: number, profileOverride?: string, section?: { start: number; end: number } | null): Promise<void> {
   const source = repo.getSource(sourceId)
   if (!source) throw new Error(`Source #${sourceId} introuvable`)
+  // Annulée avant même son tour (elle attendait dans la file) : on la saute.
+  if (canceledSources.has(sourceId)) {
+    canceledSources.delete(sourceId)
+    repo.updateSource(sourceId, { status: 'error', error: 'Annulé' })
+    emitProgress({ sourceId, stage: 'ingest', status: 'error', progress: 0, message: 'Annulé' })
+    return
+  }
   const send = (ev: ProgressEvent): void => emitProgress(ev)
   const log = (m: string): void =>
     send({ sourceId, stage: 'ingest', status: 'running', progress: 0, message: m })
@@ -297,9 +308,12 @@ async function runForSource(sourceId: number, clipCount: number, profileOverride
     )
     repo.updateSource(sourceId, { status: 'done' })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
+    // Annulation demandée : l'échec vient du kill des process enfants → message propre.
+    const msg = canceledSources.has(sourceId) ? 'Annulé' : err instanceof Error ? err.message : String(err)
     repo.updateSource(sourceId, { status: 'error', error: msg })
     send({ sourceId, stage: 'ingest', status: 'error', progress: 0, message: msg })
+  } finally {
+    canceledSources.delete(sourceId)
   }
 }
 
@@ -1367,6 +1381,22 @@ app.post('/api/pipeline/run', wrap((req, res) => {
   emitProgress({ sourceId, stage: 'ingest', status: 'running', progress: 0, message: 'En file d’attente…' })
   const job = pipelineChain.then(() => runForSource(sourceId, clipCount, undefined, section))
   pipelineChain = job.then(() => undefined, () => undefined)
+  res.json({ ok: true })
+}))
+// Annule une génération : source en cours → tue le téléchargement/montage en cours ;
+// source en file → sera sautée à son tour. Dans les deux cas, statut passé en erreur.
+app.post('/api/pipeline/cancel', wrap((req, res) => {
+  const sourceId = Number(req.body?.sourceId)
+  if (!sourceId) return res.status(400).json({ error: 'sourceId manquant' })
+  const src = repo.getSource(sourceId)
+  if (!src) return res.status(404).json({ error: 'Source inconnue' })
+  canceledSources.add(sourceId)
+  // Seule UNE génération tourne à la fois (pipelineChain) → si celle-ci est en
+  // cours, tuer les process enfants l'interrompt ; si elle est en file, le kill
+  // ne touche rien et le garde-fou de runForSource la sautera à son tour.
+  if (src.status === 'running') killActiveChildren()
+  repo.updateSource(sourceId, { status: 'error', error: 'Annulé' })
+  emitProgress({ sourceId, stage: 'ingest', status: 'error', progress: 0, message: 'Annulé' })
   res.json({ ok: true })
 }))
 

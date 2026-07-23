@@ -1436,9 +1436,20 @@ function Clipage({ sources, clips, progress, onRefresh, toast, goHistory }: { so
               const stage = s.status === 'queued' ? 'En file d’attente' : STAGE_LABELS[p?.stage ?? 'ingest'] ?? p?.stage ?? '…'
               return (
                 <div key={s.id} className="card">
-                  <div className="row" style={{ marginBottom: 8 }}>
-                    <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.title || s.url?.split(/[\\/]/).pop()}</strong>
-                    <span className="pill-badge"><span className="dot" /> {s.status === 'queued' ? 'En attente' : 'En cours'}</span>
+                  <div className="row" style={{ marginBottom: 8, gap: 8 }}>
+                    <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: 1 }}>{s.title || s.url?.split(/[\\/]/).pop()}</strong>
+                    <span className="pill-badge" style={{ flexShrink: 0 }}><span className="dot" /> {s.status === 'queued' ? 'En attente' : 'En cours'}</span>
+                    <button
+                      className="btn danger-ghost"
+                      style={{ flexShrink: 0, padding: '5px 10px', fontSize: 13 }}
+                      title="Annuler cette génération (arrête le téléchargement en cours)"
+                      onClick={async () => {
+                        try { await api.cancelPipeline(s.id); toast('Génération annulée'); await onRefresh() }
+                        catch (e) { toast('Erreur : ' + (e as Error).message) }
+                      }}
+                    >
+                      <MIcon name="cancel" size={14} /> Annuler
+                    </button>
                   </div>
                   <div className="muted small" style={{ marginBottom: 6 }}>{stage}{p?.message ? ` — ${p.message}` : ''}</div>
                   <div className="bar"><div style={{ width: `${pct}%`, transition: 'width .4s' }} /></div>

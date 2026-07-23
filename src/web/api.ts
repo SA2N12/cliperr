@@ -74,6 +74,7 @@ export const api = {
     post(`/api/clips/${id}/publish`, { overrides }),
   runPipeline: (sourceId: number, clipCount: number, range?: { startSec: number; endSec: number }) =>
     post('/api/pipeline/run', { sourceId, clipCount, ...(range ?? {}) }),
+  cancelPipeline: (sourceId: number) => post('/api/pipeline/cancel', { sourceId }),
 
   // Publication : profil actif + état du quota
   publishState: () =>
