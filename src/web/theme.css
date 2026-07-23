@@ -1283,6 +1283,14 @@ button {
   opacity: 0.5;
   cursor: not-allowed;
 }
+/* Boutons primaires (noirs) : restent NOIRS même désactivés — pas de fondu gris.
+   Seul le curseur « interdit » signale qu'ils ne sont pas encore cliquables. */
+.btn.primary:disabled {
+  opacity: 1;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
 .chip {
   font-size: 12px;
   padding: 3px 10px;
