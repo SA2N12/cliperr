@@ -35,7 +35,8 @@ const ICONS: Record<string, string> = {
   globe: 'M12 3a9 9 0 100 18 9 9 0 000-18zM3 12h18M12 3c2.6 2.7 2.6 15.3 0 18M12 3c-2.6 2.7-2.6 15.3 0 18',
   plug: 'M4 5h16v5H4zM4 14h16v5H4zM7.5 7h.01M7.5 16h.01',
   terminal: 'M4 17l6-5-6-5M12 19h8',
-  scissors: 'M6 9a3 3 0 100-6 3 3 0 000 6zM6 21a3 3 0 100-6 3 3 0 000 6zM20 4L8.12 15.88M14.47 14.48L20 20M8.12 9.12L12 13'
+  scissors: 'M6 9a3 3 0 100-6 3 3 0 000 6zM6 21a3 3 0 100-6 3 3 0 000 6zM20 4L8.12 15.88M14.47 14.48L20 20M8.12 9.12L12 13',
+  twitch: 'M4 4h16v10l-4 4h-3l-3 3v-3H4zM10 8v4M15 8v4'
 }
 
 // Valeur spéciale du sélecteur en haut à droite : « Tous les comptes » (vue globale).
@@ -1326,13 +1327,13 @@ function Clipage({ sources, progress, onRefresh, toast }: { sources: SourceDTO[]
             </div>
             <div className="clip-src-sep"><span>ou</span></div>
             <div className="clip-src-col">
-              <div className="clip-src-h"><Icon name="sources" size={15} /> À partir d’une URL</div>
-              <input className="input-full" placeholder="URL YouTube / Twitch…" value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addUrl()} />
+              <div className="clip-src-h"><Icon name="twitch" size={15} /> Depuis une VOD Twitch</div>
+              <input className="input-full" placeholder="twitch.tv/videos/…" value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addUrl()} />
               <button className="btn primary" style={{ marginTop: 10, justifyContent: 'center' }} onClick={addUrl} disabled={busy || !url.trim()}>
-                {busy ? 'Analyse…' : <><Icon name="sources" size={15} /> Charger la vidéo</>}
+                {busy ? 'Analyse…' : <><Icon name="twitch" size={15} /> Charger la VOD</>}
               </button>
-              <p className="muted small" style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <MIcon name="warning" size={14} /> Sur ce serveur, YouTube par URL est souvent bloqué — préfère l’import de fichier.
+              <p className="muted small" style={{ marginTop: 10, display: 'flex', alignItems: 'flex-start', gap: 6, lineHeight: 1.4 }}>
+                <MIcon name="movie" size={14} style={{ marginTop: 1, flexShrink: 0 }} /> Colle le lien d’une VOD Twitch. Pour un long live, tu choisiras juste après la portion à analyser.
               </p>
             </div>
           </div>
@@ -1380,21 +1381,21 @@ function Clipage({ sources, progress, onRefresh, toast }: { sources: SourceDTO[]
           </div>
         )}
 
-        <label className="muted small">Nombre de clips à générer</label>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 8 }}>
-          <input type="range" min={1} max={10} value={clipCount} onChange={(e) => setClipCount(Number(e.target.value))} style={{ flex: 1 }} />
-          <div style={{ fontSize: 32, fontWeight: 800, color: 'var(--accent-strong)', minWidth: 42, textAlign: 'center', letterSpacing: '-0.02em' }}>{clipCount}</div>
+        <div className="clip-count-head">
+          <label className="muted small" style={{ margin: 0 }}>Nombre de clips à générer</label>
+          <span className="clip-count-badge">{clipCount}</span>
         </div>
-        <div style={{ display: 'flex', gap: 8, marginTop: 22, justifyContent: 'flex-end' }}>
-          <button
-            className="btn primary"
-            onClick={launch}
-            disabled={!newSource || busy || uploadPct !== null}
-            title={!newSource ? 'Importe d’abord une vidéo (fichier ou URL)' : undefined}
-          >
-            {busy ? 'Lancement…' : <><MIcon name="rocket_launch" size={15} /> Lancer la génération</>}
-          </button>
-        </div>
+        <input type="range" min={1} max={10} value={clipCount} onChange={(e) => setClipCount(Number(e.target.value))} style={{ width: '100%', marginTop: 10 }} />
+        <div className="clip-count-scale"><span>1</span><span>10</span></div>
+
+        <button
+          className="btn primary clip-launch"
+          onClick={launch}
+          disabled={!newSource || busy || uploadPct !== null}
+          title={!newSource ? 'Importe d’abord une vidéo (fichier ou VOD Twitch)' : undefined}
+        >
+          {busy ? 'Lancement…' : <><MIcon name="rocket_launch" size={16} /> Lancer la génération</>}
+        </button>
       </div>
 
       {active.length > 0 && (

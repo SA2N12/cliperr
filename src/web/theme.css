@@ -1809,6 +1809,56 @@ textarea:focus {
   padding: 22px;
   margin-bottom: 18px;
 }
+/* Nombre de clips : libellé + badge accent, échelle 1–10 sous le curseur. */
+.clip-count-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.clip-count-badge {
+  min-width: 40px;
+  height: 34px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.clip-count-scale {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--muted-2);
+  font-variant-numeric: tabular-nums;
+}
+/* Bouton de lancement : pleine largeur, présent, effet de survol pro. */
+.btn.clip-launch {
+  width: 100%;
+  justify-content: center;
+  margin-top: 22px;
+  padding: 13px 18px;
+  font-size: 15px;
+  box-shadow: 0 6px 18px -6px var(--accent);
+  transition: transform 0.14s ease, box-shadow 0.14s ease, background 0.14s ease;
+}
+.btn.clip-launch:not(:disabled):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px -6px var(--accent);
+}
+.btn.clip-launch:disabled {
+  box-shadow: none;
+}
+/* Zone de dépôt : léger soulèvement au survol (déjà l'icône, on ajoute la carte). */
+.dropzone.dz-big:hover {
+  box-shadow: 0 8px 22px -12px rgba(0, 0, 0, 0.25);
+}
 
 /* ── Carte d'idée (Inspiration) ── */
 .idea-card {
