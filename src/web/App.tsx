@@ -339,7 +339,10 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
       onProgress: (e: ProgressEvent) => {
         pushLog(`[${e.stage}] ${e.status} ${Math.round((e.progress || 0) * 100)}%${e.message ? ' — ' + e.message : ''}`)
         setProgress((pm) => ({ ...pm, [e.sourceId]: e }))
-        if (e.status === 'done' || e.status === 'error') refresh().catch(() => undefined)
+        // Fin de génération OU nouvelle étape de recadrage (un clip vient d'être
+        // créé) → on recharge les clips : ils apparaissent au fil de la génération
+        // dans la barre latérale du clipage.
+        if (e.status === 'done' || e.status === 'error' || e.stage === 'reframe') refresh().catch(() => undefined)
       },
       onIdeaVideo: (e) => {
         setIdeaVideo((m) => ({ ...m, [e.ideaId]: { status: e.status, message: e.message } }))
@@ -485,7 +488,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
         <TopBar state={pub} />
         {page === 'dashboard' && <Dashboard scope={scope} />}
         {page === 'autopilot' && <Autopilot toast={showToast} ideaVideo={ideaVideo} scope={scope} />}
-        {page === 'clipping' && <Clipage sources={sources} progress={progress} onRefresh={refresh} toast={showToast} />}
+        {page === 'clipping' && <Clipage sources={sources} clips={clips} progress={progress} onRefresh={refresh} toast={showToast} />}
         {page === 'genai' && <GenAI toast={showToast} />}
         {page === 'history' && <History sources={sources} clips={clips} progress={progress} onRefresh={refresh} toast={showToast} goClips={() => setPage('clips')} />}
         {page === 'clips' && <Clips clips={clips} sources={sources} onRefresh={refresh} toast={showToast} scope={scope} />}
@@ -1209,8 +1212,11 @@ function GenAI({ toast }: { toast: (m: string) => void }): JSX.Element {
   )
 }
 
-function Clipage({ sources, progress, onRefresh, toast }: { sources: SourceDTO[]; progress: Record<number, ProgressEvent>; onRefresh: () => Promise<void>; toast: (m: string) => void }): JSX.Element {
+function Clipage({ sources, clips, progress, onRefresh, toast }: { sources: SourceDTO[]; clips: ClipDTO[]; progress: Record<number, ProgressEvent>; onRefresh: () => Promise<void>; toast: (m: string) => void }): JSX.Element {
   const [url, setUrl] = useState('')
+  // Barre latérale : historique (tableau) au repos, avancée + clips pendant/après.
+  // `viewId` = génération affichée en détail (choisie ou lancée) ; sinon l'active.
+  const [viewId, setViewId] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
   const [uploadPct, setUploadPct] = useState<number | null>(null)
   const [dragging, setDragging] = useState(false)
@@ -1283,6 +1289,7 @@ function Clipage({ sources, progress, onRefresh, toast }: { sources: SourceDTO[]
     try {
       await api.runPipeline(newSource.id, clipCount, range)
       toast(`Génération lancée (${clipCount} clip${clipCount > 1 ? 's' : ''})`)
+      setViewId(newSource.id) // suit cette génération dans la barre latérale
       setNewSource(null)
       setClipCount(3)
       await onRefresh()
@@ -1293,10 +1300,110 @@ function Clipage({ sources, progress, onRefresh, toast }: { sources: SourceDTO[]
     }
   }
 
-  const active = sources.filter((s) => s.status === 'queued' || s.status === 'running')
+  // Génération suivie dans la barre latérale : une active (en cours) prime,
+  // sinon celle explicitement choisie/lancée (viewId). Rien → historique.
+  const active = sources.find((s) => s.status === 'queued' || s.status === 'running')
+  const focus = active ?? (viewId != null ? sources.find((s) => s.id === viewId) ?? null : null)
+  const focusClips = focus ? clips.filter((c) => c.sourceId === focus.id).sort((a, b) => a.startSec - b.startSec) : []
+  const isAiClip = (c: ClipDTO): boolean => (sources.find((s) => s.id === c.sourceId)?.url ?? '').startsWith('idea:')
+  const history = [...sources].filter((s) => s.status === 'done' || s.status === 'error').reverse()
+  const clipCountBySource = new Map<number, number>()
+  for (const c of clips) clipCountBySource.set(c.sourceId, (clipCountBySource.get(c.sourceId) ?? 0) + 1)
+
+  // Avancée de la génération suivie (barre de progression + étape).
+  const fp = focus ? progress[focus.id] : undefined
+  const focusPct = focus?.status === 'queued' ? 0 : focus?.status === 'done' ? 100 : Math.round((fp?.progress ?? 0) * 100)
+  const focusStage = focus?.status === 'queued'
+    ? 'En file d’attente'
+    : focus?.status === 'done'
+      ? 'Terminé'
+      : focus?.status === 'error'
+        ? focus.error || 'Échec'
+        : STAGE_LABELS[fp?.stage ?? 'ingest'] ?? fp?.stage ?? '…'
+  const focusRunning = focus?.status === 'queued' || focus?.status === 'running'
 
   return (
-    <>
+    <div className="clip-layout">
+      {/* ── Barre latérale : historique (tableau) au repos ; pendant/après une
+          génération, sa progression + les clips qui apparaissent au fil de l'eau. ── */}
+      <aside className="clip-side clip-anim">
+        {focus ? (
+          <>
+            <div className="clip-side-head">
+              <span className="clip-side-title" title={focus.title || focus.url || ''}>{focus.title || focus.url?.split(/[\\/]/).pop() || `Source #${focus.id}`}</span>
+              {focusRunning ? (
+                <button
+                  className="btn danger-ghost xsmall"
+                  title="Annuler la génération"
+                  onClick={async () => { try { await api.cancelPipeline(focus.id); toast('Génération annulée'); await onRefresh() } catch (e) { toast('Erreur : ' + (e as Error).message) } }}
+                ><MIcon name="cancel" size={13} /></button>
+              ) : (
+                <button className="btn xsmall" title="Retour à l’historique" onClick={() => setViewId(null)}><MIcon name="cancel" size={13} /></button>
+              )}
+            </div>
+            <div className={`clip-prog-line ${focus.status === 'error' ? 'err' : focus.status === 'done' ? 'ok' : ''}`}>
+              <MIcon name={focus.status === 'error' ? 'error' : focus.status === 'done' ? 'check_circle' : 'progress_activity'} size={13} spin={focusRunning} />
+              <span>{focusStage}{fp?.message && focusRunning ? ` — ${fp.message}` : ''}</span>
+            </div>
+            <div className="bar" style={{ marginBottom: 14 }}><div style={{ width: `${focusPct}%`, transition: 'width .4s' }} /></div>
+
+            <div className="clip-side-sub">{focusClips.length} clip{focusClips.length > 1 ? 's' : ''}{focusRunning ? ' — en cours…' : ''}</div>
+            {focusClips.length === 0 ? (
+              <div className="clip-side-empty">{focusRunning ? 'Les clips apparaîtront ici au fil de la génération.' : 'Aucun clip produit.'}</div>
+            ) : (
+              <div className="clip-side-clips">
+                {focusClips.map((c) => (
+                  <div key={c.id} className="clip-mini clip-anim" title={c.title ?? undefined}>
+                    <div className="clip-mini-thumb">
+                      {c.filePath ? (
+                        /\.(jpe?g|png|webp)$/i.test(c.filePath)
+                          ? <img src={clipUrl(c.filePath)} alt="" loading="lazy" />
+                          : <video src={clipUrl(c.filePath)} preload="metadata" muted />
+                      ) : <MIcon name="movie" size={16} />}
+                    </div>
+                    <div className="clip-mini-body">
+                      <div className="clip-mini-title">{c.title || `Clip ${Math.round(c.startSec)}s`}</div>
+                      <div className="clip-mini-meta">{isAiClip(c) ? 'IA' : 'Découpe'} · {Math.max(1, Math.round(c.endSec - c.startSec))}s</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            <div className="clip-side-head"><span className="clip-side-title">Historique</span></div>
+            {history.length === 0 ? (
+              <div className="clip-side-empty">Aucune génération pour l’instant.</div>
+            ) : (
+              <table className="clip-hist">
+                <thead><tr><th>Vidéo</th><th>Clips</th></tr></thead>
+                <tbody>
+                  {history.map((s) => {
+                    const ko = s.status === 'error'
+                    const n = clipCountBySource.get(s.id) ?? 0
+                    return (
+                      <tr key={s.id} onClick={() => setViewId(s.id)} title="Voir les clips">
+                        <td>
+                          <div className="clip-hist-row">
+                            <MIcon name={ko ? 'error' : 'check_circle'} size={13} style={{ color: ko ? 'var(--bad)' : 'var(--ap-green-strong)', flexShrink: 0 }} />
+                            <span className="clip-hist-title">{s.title || s.url?.split(/[\\/]/).pop() || `Source #${s.id}`}</span>
+                          </div>
+                          <div className="clip-hist-date">{new Date(s.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}</div>
+                        </td>
+                        <td className="clip-hist-n">{ko ? '—' : n}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            )}
+          </>
+        )}
+      </aside>
+
+      {/* ── Espace de travail : import + réglages ── */}
+      <div className="clip-workspace">
       <div className="page-head clip-anim">
         <div>
           <h1>Clipage</h1>
@@ -1397,41 +1504,8 @@ function Clipage({ sources, progress, onRefresh, toast }: { sources: SourceDTO[]
           {busy ? 'Lancement…' : <><MIcon name="rocket_launch" size={16} /> Lancer la génération</>}
         </button>
       </div>
-
-      {active.length > 0 && (
-        <div className="clip-anim" style={{ animationDelay: '0.1s', marginTop: 20 }}>
-          <h3 style={{ margin: '0 0 10px' }}>Générations en cours ({active.length})</h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {active.map((s, i) => {
-              const p = progress[s.id]
-              const pct = s.status === 'queued' ? 0 : Math.round((p?.progress ?? 0) * 100)
-              const stage = s.status === 'queued' ? 'En file d’attente' : STAGE_LABELS[p?.stage ?? 'ingest'] ?? p?.stage ?? '…'
-              return (
-                <div key={s.id} className="card clip-anim" style={{ animationDelay: `${0.12 + i * 0.05}s` }}>
-                  <div className="row" style={{ marginBottom: 8, gap: 8 }}>
-                    <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: 1 }}>{s.title || s.url?.split(/[\\/]/).pop()}</strong>
-                    <span className="pill-badge" style={{ flexShrink: 0 }}><span className="dot" /> {s.status === 'queued' ? 'En attente' : 'En cours'}</span>
-                    <button
-                      className="btn danger-ghost"
-                      style={{ flexShrink: 0, padding: '5px 10px', fontSize: 13 }}
-                      title="Annuler cette génération (arrête le téléchargement en cours)"
-                      onClick={async () => {
-                        try { await api.cancelPipeline(s.id); toast('Génération annulée'); await onRefresh() }
-                        catch (e) { toast('Erreur : ' + (e as Error).message) }
-                      }}
-                    >
-                      <MIcon name="cancel" size={14} /> Annuler
-                    </button>
-                  </div>
-                  <div className="muted small" style={{ marginBottom: 6 }}>{stage}{p?.message ? ` — ${p.message}` : ''}</div>
-                  <div className="bar"><div style={{ width: `${pct}%`, transition: 'width .4s' }} /></div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-    </>
+      </div>
+    </div>
   )
 }
 

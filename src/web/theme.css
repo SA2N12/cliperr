@@ -1717,6 +1717,199 @@ textarea:focus {
     animation: none;
   }
 }
+/* ── Clipage : barre latérale (historique / avancée) + espace de travail ── */
+.clip-layout {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+}
+.clip-workspace {
+  flex: 1;
+  min-width: 0;
+}
+.clip-side {
+  width: 300px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  max-height: calc(100vh - var(--topbar-h) - 42px);
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  padding: 14px;
+  scrollbar-width: thin;
+}
+@media (max-width: 900px) {
+  .clip-layout {
+    flex-direction: column-reverse;
+  }
+  .clip-side {
+    width: 100%;
+    position: static;
+    max-height: none;
+  }
+}
+.clip-side-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.clip-side-title {
+  font-weight: 700;
+  font-size: 14px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.clip-side-sub {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.clip-side-empty {
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.5;
+  padding: 6px 2px;
+}
+.btn.xsmall {
+  padding: 4px 6px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+/* Ligne d'état (étape en cours / terminé / échec). */
+.clip-prog-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-bottom: 8px;
+  line-height: 1.35;
+}
+.clip-prog-line.ok {
+  color: var(--ap-green-strong);
+}
+.clip-prog-line.err {
+  color: var(--bad);
+}
+/* Clips générés, empilés (apparition en cascade). */
+.clip-side-clips {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.clip-mini {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  padding: 7px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+}
+.clip-mini-thumb {
+  width: 34px;
+  height: 46px;
+  flex-shrink: 0;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  overflow: hidden;
+}
+.clip-mini-thumb img,
+.clip-mini-thumb video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.clip-mini-body {
+  min-width: 0;
+  flex: 1;
+}
+.clip-mini-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.clip-mini-meta {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 1px;
+}
+/* Tableau d'historique. `table-layout: fixed` : les longs titres sont rognés
+   (ellipsis) au lieu d'élargir la table et de pousser la colonne Clips hors-champ. */
+.clip-hist {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.clip-hist th:last-child,
+.clip-hist td:last-child {
+  width: 46px;
+}
+.clip-hist-title {
+  flex: 1;
+  min-width: 0;
+}
+.clip-hist thead th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border);
+}
+.clip-hist thead th:last-child {
+  text-align: right;
+}
+.clip-hist tbody tr {
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+}
+.clip-hist tbody tr:hover {
+  background: var(--panel-2);
+}
+.clip-hist td {
+  padding: 8px 6px;
+  vertical-align: middle;
+}
+.clip-hist-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.clip-hist-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.clip-hist-date {
+  color: var(--muted-2);
+  font-size: 11px;
+  margin-top: 2px;
+  padding-left: 19px;
+}
+.clip-hist-n {
+  text-align: right;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-strong);
+  white-space: nowrap;
+}
+
 /* Carte d'import : plus aérée. */
 .clip-hero {
   padding: 22px;
