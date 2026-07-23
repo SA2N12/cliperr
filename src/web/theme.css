@@ -494,6 +494,8 @@ button {
   margin: 0 0 4px;
   font-size: 26px;
   font-weight: 700;
+  /* Titres serrés, comme le dashboard SellExpert (tracking-tight). */
+  letter-spacing: -0.02em;
 }
 .page-head p {
   display: none; /* sous-titres de page masqués (seul le titre h1 reste) */
@@ -1838,7 +1840,8 @@ input[type='checkbox'] {
   --ap-green-deep: #065f46;
   --ap-green-soft: #ecfdf5;
   --ap-green-border: #a7f3d0;
-  --mono: ui-monospace, 'SF Mono', 'Cascadia Mono', 'Roboto Mono', Menlo, Consolas, monospace;
+  /* Même mono que le dashboard SellExpert. */
+  --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Cascadia Mono', 'Roboto Mono', Menlo, Consolas, monospace;
 }
 .btn.green {
   background: var(--ap-green);
