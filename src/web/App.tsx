@@ -484,7 +484,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
         <TopBar state={pub} />
         {page === 'dashboard' && <Dashboard scope={scope} />}
         {page === 'autopilot' && <Autopilot toast={showToast} ideaVideo={ideaVideo} scope={scope} />}
-        {page === 'clipping' && <Clipage sources={sources} clips={clips} progress={progress} onRefresh={refresh} toast={showToast} goHistory={() => setPage('history')} />}
+        {page === 'clipping' && <Clipage sources={sources} progress={progress} onRefresh={refresh} toast={showToast} />}
         {page === 'genai' && <GenAI toast={showToast} />}
         {page === 'history' && <History sources={sources} clips={clips} progress={progress} onRefresh={refresh} toast={showToast} goClips={() => setPage('clips')} />}
         {page === 'clips' && <Clips clips={clips} sources={sources} onRefresh={refresh} toast={showToast} scope={scope} />}
@@ -1208,8 +1208,7 @@ function GenAI({ toast }: { toast: (m: string) => void }): JSX.Element {
   )
 }
 
-function Clipage({ sources, clips, progress, onRefresh, toast, goHistory }: { sources: SourceDTO[]; clips: ClipDTO[]; progress: Record<number, ProgressEvent>; onRefresh: () => Promise<void>; toast: (m: string) => void; goHistory: () => void }): JSX.Element {
-  const [step, setStep] = useState<'import' | 'count'>('import')
+function Clipage({ sources, progress, onRefresh, toast }: { sources: SourceDTO[]; progress: Record<number, ProgressEvent>; onRefresh: () => Promise<void>; toast: (m: string) => void }): JSX.Element {
   const [tab, setTab] = useState<'upload' | 'url'>('upload')
   const [url, setUrl] = useState('')
   const [busy, setBusy] = useState(false)
@@ -1227,7 +1226,6 @@ function Clipage({ sources, clips, progress, onRefresh, toast, goHistory }: { so
     setNewSource(src)
     setFromMin(0)
     setLenMin(15)
-    setStep('count')
   }
   async function addUrl(): Promise<void> {
     if (!url.trim()) return
@@ -1287,7 +1285,6 @@ function Clipage({ sources, clips, progress, onRefresh, toast, goHistory }: { so
       toast(`Génération lancée (${clipCount} clip${clipCount > 1 ? 's' : ''})`)
       setNewSource(null)
       setClipCount(3)
-      setStep('import')
       setTab('upload')
       await onRefresh()
     } catch (e) {
@@ -1298,143 +1295,112 @@ function Clipage({ sources, clips, progress, onRefresh, toast, goHistory }: { so
   }
 
   const active = sources.filter((s) => s.status === 'queued' || s.status === 'running')
-  const recent = sources.filter((s) => s.status === 'done' || s.status === 'error').slice(-4).reverse()
-  const clipCounts = new Map<number, number>()
-  for (const c of clips) clipCounts.set(c.sourceId, (clipCounts.get(c.sourceId) ?? 0) + 1)
 
   return (
     <>
-      <div className="page-head">
+      <div className="page-head clip-anim">
         <div>
           <h1>Clipage</h1>
-          <p>Importe une vidéo à découper en clips.</p>
+          <p>Importe une vidéo — Cliperr en extrait les meilleurs moments en clips verticaux.</p>
         </div>
-        <button className="btn" onClick={goHistory}><Icon name="list" size={16} /> Historique</button>
       </div>
 
-      <div className="card" style={{ marginBottom: 18 }}>
-        <div className="stepper">
-          <div className={`step ${step === 'import' ? 'on' : 'done'}`}><span className="n">1</span> Importer</div>
-          <div className="step-line" />
-          <div className={`step ${step === 'count' ? 'on' : ''}`}><span className="n">2</span> Nombre de clips</div>
+      {/* Import (aucune vidéo choisie) ↔ configuration (vidéo prête). Transition
+          animée, sans wizard numéroté. */}
+      {!newSource ? (
+        <div className="card clip-hero clip-anim" style={{ animationDelay: '0.05s' }}>
+          <div className="tabs">
+            <button className={`tab ${tab === 'upload' ? 'on' : ''}`} onClick={() => setTab('upload')}><Icon name="upload" size={16} /> Importer un fichier</button>
+            <button className={`tab ${tab === 'url' ? 'on' : ''}`} onClick={() => setTab('url')}><Icon name="sources" size={16} /> Télécharger (URL)</button>
+          </div>
+          {tab === 'upload' ? (
+            <div>
+              <div
+                className={`dropzone dz-big ${dragging ? 'drag' : ''}`}
+                onClick={() => uploadPct === null && fileRef.current?.click()}
+                onDragOver={(e) => { e.preventDefault(); if (!dragging) setDragging(true) }}
+                onDragLeave={(e) => { e.preventDefault(); setDragging(false) }}
+                onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files?.[0]; if (f) void uploadFile(f) }}
+              >
+                <div className="dz-icon"><Icon name="upload" size={26} /></div>
+                <div style={{ fontWeight: 700, fontSize: 17 }}>{uploadPct !== null ? `Upload en cours… ${uploadPct}%` : 'Glisse ton fichier vidéo ici'}</div>
+                <div className="small" style={{ marginTop: 5 }}>ou clique pour parcourir · mp4, mov, mkv, webm</div>
+              </div>
+              {uploadPct !== null && <div className="bar" style={{ marginTop: 14 }}><div style={{ width: `${uploadPct}%` }} /></div>}
+              <input ref={fileRef} type="file" accept="video/*" hidden onChange={onFile} />
+            </div>
+          ) : (
+            <div>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <input className="input-full" style={{ flex: 1, minWidth: 260 }} placeholder="URL YouTube / Twitch…" value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addUrl()} />
+                <button className="btn primary" onClick={addUrl} disabled={busy}>{busy ? 'Analyse…' : 'Continuer'}</button>
+              </div>
+              <p className="muted small" style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <MIcon name="warning" size={14} /> Sur ce serveur, YouTube par URL est souvent bloqué — préfère l’import de fichier.
+              </p>
+            </div>
+          )}
         </div>
-
-        {step === 'import' && (
-          <div style={{ marginTop: 18 }}>
-            <div className="tabs">
-              <button className={`tab ${tab === 'upload' ? 'on' : ''}`} onClick={() => setTab('upload')}><Icon name="upload" size={16} /> Importer un fichier</button>
-              <button className={`tab ${tab === 'url' ? 'on' : ''}`} onClick={() => setTab('url')}><Icon name="sources" size={16} /> Télécharger (URL)</button>
+      ) : (
+        <div className="card clip-config clip-anim">
+          <div className="row" style={{ marginBottom: 16, gap: 10 }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 16, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{newSource.title || newSource.url?.split(/[\\/]/).pop()}</div>
+              <div className="muted small" style={{ marginTop: 2 }}>Vidéo prête{dur != null ? ` · ${fmtDur(dur)}` : ''}</div>
             </div>
-            {tab === 'upload' ? (
-              <div>
-                <div
-                  className={`dropzone ${dragging ? 'drag' : ''}`}
-                  onClick={() => uploadPct === null && fileRef.current?.click()}
-                  onDragOver={(e) => { e.preventDefault(); if (!dragging) setDragging(true) }}
-                  onDragLeave={(e) => { e.preventDefault(); setDragging(false) }}
-                  onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files?.[0]; if (f) void uploadFile(f) }}
-                >
-                  <div className="dz-icon"><Icon name="upload" size={24} /></div>
-                  <div style={{ fontWeight: 600, fontSize: 15 }}>{uploadPct !== null ? `Upload en cours… ${uploadPct}%` : 'Glisse ton fichier vidéo ici'}</div>
-                  <div className="small" style={{ marginTop: 4 }}>ou clique pour parcourir · mp4, mov, mkv, webm</div>
-                </div>
-                {uploadPct !== null && <div className="bar" style={{ marginTop: 12 }}><div style={{ width: `${uploadPct}%` }} /></div>}
-                <input ref={fileRef} type="file" accept="video/*" hidden onChange={onFile} />
-              </div>
-            ) : (
-              <div>
-                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                  <input className="input-full" style={{ flex: 1, minWidth: 260 }} placeholder="URL YouTube / Twitch…" value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addUrl()} />
-                  <button className="btn primary" onClick={addUrl} disabled={busy}>Continuer</button>
-                </div>
-                <p className="muted small" style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <MIcon name="warning" size={14} /> Sur ce serveur, YouTube par URL est souvent bloqué — préfère l’import de fichier.
-                </p>
-              </div>
-            )}
+            <button className="btn small" style={{ flexShrink: 0, marginLeft: 'auto' }} onClick={() => setNewSource(null)}><MIcon name="cancel" size={14} /> Changer</button>
           </div>
-        )}
 
-        {step === 'count' && newSource && (
-          <div style={{ marginTop: 18 }}>
-            <div className="muted small">Vidéo{dur != null ? ` · durée ${fmtDur(dur)}` : ''}</div>
-            <div style={{ fontWeight: 600, marginBottom: 18 }}>{newSource.title || newSource.url?.split(/[\\/]/).pop()}</div>
-
-            {/* Vidéo longue : on choisit la PORTION à cliper (sinon la VOD entière —
-                plusieurs Go et des heures de transcription — passe par le pipeline). */}
-            {isLong && (
-              <div className="sp-note accent" style={{ marginBottom: 18 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, color: 'var(--text)', marginBottom: 8 }}>
-                  <MIcon name="movie" size={14} /> Vidéo longue ({fmtDur(dur!)}) — choisis la portion à cliper
-                </div>
-                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 120 }}>
-                    <span className="muted small">Début (minute)</span>
-                    <input type="number" min={0} max={Math.max(0, totalMin - 1)} value={fromMin}
-                      onChange={(e) => setFromMin(Math.max(0, Math.min(totalMin - 1, Math.round(Number(e.target.value)) || 0)))} />
-                  </label>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 120 }}>
-                    <span className="muted small">Durée à analyser (min, max {MAX_LEN})</span>
-                    <input type="number" min={1} max={MAX_LEN} value={lenMin}
-                      onChange={(e) => setLenMin(Math.max(1, Math.min(MAX_LEN, Math.round(Number(e.target.value)) || 1)))} />
-                  </label>
-                </div>
-                {range && (
-                  <div className="muted small" style={{ marginTop: 8 }}>
-                    Extrait analysé : <b>{fmtDur(range.startSec)}</b> → <b>{fmtDur(range.endSec)}</b> ({Math.round((range.endSec - range.startSec) / 60)} min). Seule cette portion est téléchargée.
-                  </div>
-                )}
+          {/* Vidéo longue : on choisit la PORTION à cliper (sinon la VOD entière —
+              plusieurs Go et des heures de transcription — passe par le pipeline). */}
+          {isLong && (
+            <div className="sp-note accent" style={{ marginBottom: 18 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, color: 'var(--text)', marginBottom: 8 }}>
+                <MIcon name="movie" size={14} /> Vidéo longue ({fmtDur(dur!)}) — choisis la portion à cliper
               </div>
-            )}
-
-            <label className="muted small">Nombre de clips à générer</label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 8 }}>
-              <input type="range" min={1} max={10} value={clipCount} onChange={(e) => setClipCount(Number(e.target.value))} style={{ flex: 1 }} />
-              <div style={{ fontSize: 30, fontWeight: 700, color: 'var(--accent-strong)', minWidth: 40, textAlign: 'center' }}>{clipCount}</div>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 120 }}>
+                  <span className="muted small">Début (minute)</span>
+                  <input type="number" min={0} max={Math.max(0, totalMin - 1)} value={fromMin}
+                    onChange={(e) => setFromMin(Math.max(0, Math.min(totalMin - 1, Math.round(Number(e.target.value)) || 0)))} />
+                </label>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 120 }}>
+                  <span className="muted small">Durée à analyser (min, max {MAX_LEN})</span>
+                  <input type="number" min={1} max={MAX_LEN} value={lenMin}
+                    onChange={(e) => setLenMin(Math.max(1, Math.min(MAX_LEN, Math.round(Number(e.target.value)) || 1)))} />
+                </label>
+              </div>
+              {range && (
+                <div className="muted small" style={{ marginTop: 8 }}>
+                  Extrait analysé : <b>{fmtDur(range.startSec)}</b> → <b>{fmtDur(range.endSec)}</b> ({Math.round((range.endSec - range.startSec) / 60)} min). Seule cette portion est téléchargée.
+                </div>
+              )}
             </div>
-            <div style={{ display: 'flex', gap: 8, marginTop: 20, justifyContent: 'flex-end' }}>
-              <button className="btn" onClick={() => { setStep('import'); setNewSource(null) }}>Retour</button>
-              <button className="btn primary" onClick={launch} disabled={busy}>
-                {busy ? 'Lancement…' : <><MIcon name="rocket_launch" size={15} /> Lancer la génération</>}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+          )}
 
-      {/* Page vide sinon : on montre les derniers imports, avec l'action suivante. */}
-      {active.length === 0 && recent.length > 0 && (
-        <div className="card">
-          <div className="row" style={{ marginBottom: 6 }}>
-            <strong>Derniers imports</strong>
-            <button className="btn small" onClick={goHistory}>Tout l’historique</button>
+          <label className="muted small">Nombre de clips à générer</label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 8 }}>
+            <input type="range" min={1} max={10} value={clipCount} onChange={(e) => setClipCount(Number(e.target.value))} style={{ flex: 1 }} />
+            <div style={{ fontSize: 32, fontWeight: 800, color: 'var(--accent-strong)', minWidth: 42, textAlign: 'center', letterSpacing: '-0.02em' }}>{clipCount}</div>
           </div>
-          {recent.map((s) => {
-            const n = clipCounts.get(s.id) ?? 0
-            const ko = s.status === 'error'
-            return (
-              <div key={s.id} className="recent-row">
-                <MIcon name={ko ? 'error' : 'check_circle'} size={15} style={{ color: ko ? 'var(--bad)' : 'var(--ap-green-strong)' }} />
-                <span className="r-title" title={s.title || s.url || ''}>{s.title || s.url?.split(/[\\/]/).pop() || `Source #${s.id}`}</span>
-                <span className="muted small" style={{ flexShrink: 0 }}>
-                  {ko ? 'échec' : `${n} clip${n > 1 ? 's' : ''}`}
-                </span>
-              </div>
-            )
-          })}
+          <div style={{ display: 'flex', gap: 8, marginTop: 22, justifyContent: 'flex-end' }}>
+            <button className="btn primary" onClick={launch} disabled={busy}>
+              {busy ? 'Lancement…' : <><MIcon name="rocket_launch" size={15} /> Lancer la génération</>}
+            </button>
+          </div>
         </div>
       )}
 
       {active.length > 0 && (
-        <div>
+        <div className="clip-anim" style={{ animationDelay: '0.1s', marginTop: 20 }}>
           <h3 style={{ margin: '0 0 10px' }}>Générations en cours ({active.length})</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {active.map((s) => {
+            {active.map((s, i) => {
               const p = progress[s.id]
               const pct = s.status === 'queued' ? 0 : Math.round((p?.progress ?? 0) * 100)
               const stage = s.status === 'queued' ? 'En file d’attente' : STAGE_LABELS[p?.stage ?? 'ingest'] ?? p?.stage ?? '…'
               return (
-                <div key={s.id} className="card">
+                <div key={s.id} className="card clip-anim" style={{ animationDelay: `${0.12 + i * 0.05}s` }}>
                   <div className="row" style={{ marginBottom: 8, gap: 8 }}>
                     <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: 1 }}>{s.title || s.url?.split(/[\\/]/).pop()}</strong>
                     <span className="pill-badge" style={{ flexShrink: 0 }}><span className="dot" /> {s.status === 'queued' ? 'En attente' : 'En cours'}</span>
