@@ -18,6 +18,11 @@ export function isLocalFile(s: string): boolean {
  * qu'ils restent valides même après une mise à jour des binaires.
  */
 async function ffmpegLocationDir(ctx: PipelineContext): Promise<string> {
+  // ffmpeg SYSTÈME (Debian) en priorité : robuste sur les flux HLS (Twitch/
+  // CloudFront), là où le ffmpeg-static 7.0.2 segfaute (code -11). Il fournit
+  // aussi ffprobe à côté, requis par --download-sections.
+  if (existsSync('/usr/bin/ffmpeg') && existsSync('/usr/bin/ffprobe')) return '/usr/bin'
+  // Repli (dev local sans ffmpeg système) : dossier de liens vers les statiques.
   const dir = join(ctx.dirs.bin, 'ffsuite')
   await mkdir(dir, { recursive: true })
   for (const [name, target] of [
@@ -192,9 +197,15 @@ export async function downloadVideo(
   const outBase = join(ctx.dirs.downloads, String(sourceId))
   const outTemplate = `${outBase}.%(ext)s`
   const expected = `${outBase}.mp4`
+  // PAS de --force-keyframes-at-cuts : cette option ré-encode la vidéo autour des
+  // bornes (pour des coupes au keyframe près), ce qui fait segfaulter le ffmpeg
+  // statique sur une longue portion (« ffmpeg exited with code -11 »). Sans elle,
+  // la coupe se fait en COPIE de flux au keyframe le plus proche — quelques
+  // secondes d'imprécision aux bornes, sans importance pour analyser un extrait,
+  // et surtout rapide et sans ré-encodage.
   const sectionArgs =
     section && section.end > section.start
-      ? ['--download-sections', `*${Math.max(0, Math.floor(section.start))}-${Math.ceil(section.end)}`, '--force-keyframes-at-cuts']
+      ? ['--download-sections', `*${Math.max(0, Math.floor(section.start))}-${Math.ceil(section.end)}`]
       : []
   // Dossier ffmpeg+ffprobe co-localisés (requis par --download-sections).
   const ffLocation = await ffmpegLocationDir(ctx)

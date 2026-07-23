@@ -6,8 +6,12 @@ FROM node:20-bookworm-slim
 # Outils de build pour better-sqlite3 + polices pour les sous-titres (libass).
 # fonts-liberation fournit "Liberation Sans" (équivalent Arial) + fontconfig
 # permet à libass de trouver/substituer la police du fichier .ass.
+# ffmpeg (Debian) EN PLUS du ffmpeg-static : le binaire statique 7.0.2 segfaute
+# en lisant les flux HLS de Twitch (CloudFront) — code -11. Le ffmpeg système
+# (5.1.x) les gère sans problème. yt-dlp l'utilise pour extraire une portion de
+# VOD ; ffmpeg-static reste pour le montage local (recadrage, sous-titres).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 make g++ ca-certificates fontconfig fonts-liberation \
+    python3 make g++ ca-certificates fontconfig fonts-liberation ffmpeg \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
