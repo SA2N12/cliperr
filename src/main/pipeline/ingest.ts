@@ -165,16 +165,19 @@ export async function downloadVideo(
         ...proxyArgs(),
         '--ffmpeg-location',
         ctx.bin.ffmpeg,
-        // Plafonne à 720p : la sortie est un clip vertical 1080×1920 recadré, une
-        // source 720p suffit largement. Surtout, ça évite qu'une VOD Twitch de
-        // plusieurs heures se télécharge en 1080p60 (~23 Go → disque saturé).
-        // Repli en cascade sur le meilleur format ≤720, puis n'importe lequel.
+        // PRÉFÈRE un format COMBINÉ (vidéo+audio déjà dans un seul fichier) : `b`
+        // avant `bv*+ba`. Décisif pour les VOD Twitch de plusieurs heures — sinon
+        // yt-dlp fusionne vidéo + audio via un remux ffmpeg qui écrit un `.temp.mp4`
+        // aussi gros que la source (12 Go + 12 Go → disque de 38 Go saturé, échec
+        // « Conversion failed »). Un format combiné se télécharge d'un bloc, sans
+        // remux, donc sans doubler l'espace. Plafond 480p : amplement suffisant
+        // pour un clip vertical recadré, et ~5 Go pour une longue VOD au lieu de 23.
         '-f',
-        'bv*[height<=720]+ba/b[height<=720]/bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b',
-        // Garde-fou dur : abandonne un téléchargement qui dépasserait 8 Go
-        // (protège le disque même si l'estimation de format se trompe).
+        'b[height<=480]/bv*[height<=480]+ba/b[height<=720]/b',
+        // Garde-fou taille (efficace sur les téléchargements progressifs ; les flux
+        // HLS de Twitch l'ignorent, d'où le plafond de résolution ci-dessus).
         '--max-filesize',
-        '8G',
+        '6G',
         '--merge-output-format',
         'mp4',
         '-o',
