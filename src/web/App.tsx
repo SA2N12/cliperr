@@ -6,7 +6,6 @@ import {
   type SourceDTO,
   type ClipDTO,
   type ProgressEvent,
-  type PublishOverrides,
   type ViralIdea,
   type SavedIdea
 } from './api'
@@ -488,7 +487,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
         {page === 'clipping' && <Clipage sources={sources} clips={clips} progress={progress} onRefresh={refresh} toast={showToast} goHistory={() => setPage('history')} />}
         {page === 'genai' && <GenAI toast={showToast} />}
         {page === 'history' && <History sources={sources} clips={clips} progress={progress} onRefresh={refresh} toast={showToast} goClips={() => setPage('clips')} />}
-        {page === 'clips' && <Clips clips={clips} sources={sources} onRefresh={refresh} toast={showToast} ttProfile={ttProfile} scope={scope} />}
+        {page === 'clips' && <Clips clips={clips} sources={sources} onRefresh={refresh} toast={showToast} scope={scope} />}
         {page === 'providers' && <Providers go={setPage} />}
         {page === 'settings' && <Settings toast={showToast} onTtProfile={setTtProfile} />}
       </main>
@@ -1522,7 +1521,7 @@ const STATE_LABEL: Record<ClipDTO['publishStatus'], string> = {
 }
 
 /** Vignette d'un clip : aperçu 9:16, statut et origine en surimpression, actions en pied. */
-function ClipCard({ c, ai, onReview, onPublish, onSetPublishable }: { c: ClipDTO; ai: boolean; onReview: (id: number, s: ClipDTO['reviewStatus']) => void; onPublish: (c: ClipDTO) => void; onSetPublishable: (id: number, value: boolean) => void }): JSX.Element {
+function ClipCard({ c, ai, onSetPublishable }: { c: ClipDTO; ai: boolean; onSetPublishable: (id: number, value: boolean) => void }): JSX.Element {
   const published = c.publishStatus === 'published'
   const account = c.publishedAccount || c.profile
   const when = new Date(c.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })
@@ -1553,53 +1552,34 @@ function ClipCard({ c, ai, onReview, onPublish, onSetPublishable }: { c: ClipDTO
         </div>
       </div>
       {/* Toggle « Publiable » (clips non publiés) : par défaut ON. Éteint = clip
-          protégé, ni publié par le pilote auto, ni par le bouton. */}
-      {!published && (
+          protégé, jamais publié par le pilote auto. Toutes les publications passent
+          désormais par le pilote — il n'y a plus de bouton publier/rejeter manuel. */}
+      {!published ? (
         <div className="clip-pub">
           <button
             className={`ap-switch mini${c.publishable ? ' on' : ''}`}
             role="switch"
             aria-checked={c.publishable}
-            title={c.publishable ? 'Publiable — clique pour protéger ce clip' : 'Protégé — clique pour l’autoriser à la publication'}
+            title={c.publishable ? 'Publiable par le pilote — clique pour protéger ce clip' : 'Protégé — clique pour l’autoriser à la publication'}
             onClick={() => onSetPublishable(c.id, !c.publishable)}
           >
             <span className="knob" />
           </button>
           {c.publishable ? <span><b>Publiable</b></span> : <span><MIcon name="block" size={13} /> Protégé</span>}
         </div>
-      )}
-      <div className="clip-actions">
-        {published ? (
-          c.postUrl && (
+      ) : (
+        c.postUrl && (
+          <div className="clip-actions">
             <a className="btn small" href={c.postUrl} target="_blank" rel="noreferrer">Voir le post</a>
-          )
-        ) : (
-          <>
-            {c.reviewStatus !== 'approved' && <button className="btn small" onClick={() => onReview(c.id, 'approved')}>Approuver</button>}
-            {c.reviewStatus !== 'rejected' && <button className="btn small" onClick={() => onReview(c.id, 'rejected')}>Rejeter</button>}
-          </>
-        )}
-        <button
-          className="btn primary small"
-          style={{ marginLeft: 'auto' }}
-          disabled={!published && !c.publishable}
-          title={!published && !c.publishable ? 'Clip protégé — active « Publiable » d’abord' : undefined}
-          onClick={() => onPublish(c)}
-        >
-          {published ? 'Republier' : 'Publier'}
-        </button>
-      </div>
+          </div>
+        )
+      )}
     </article>
   )
 }
 
-function Clips({ clips, sources, onRefresh, toast, ttProfile, scope }: { clips: ClipDTO[]; sources: SourceDTO[]; onRefresh: () => Promise<void>; toast: (m: string) => void; ttProfile: { nickname: string | null } | null; scope: string }): JSX.Element {
-  const [modal, setModal] = useState<ClipDTO | null>(null)
+function Clips({ clips, sources, onRefresh, toast, scope }: { clips: ClipDTO[]; sources: SourceDTO[]; onRefresh: () => Promise<void>; toast: (m: string) => void; scope: string }): JSX.Element {
   const [tab, setTab] = useState<'stock' | 'published'>('stock')
-  async function review(id: number, status: ClipDTO['reviewStatus']): Promise<void> {
-    await api.reviewClip(id, status)
-    await onRefresh()
-  }
   async function setPublishable(id: number, value: boolean): Promise<void> {
     try {
       await api.setClipPublishable(id, value)
@@ -1620,7 +1600,6 @@ function Clips({ clips, sources, onRefresh, toast, ttProfile, scope }: { clips: 
   const published = mine.filter((c) => c.publishStatus === 'published').sort(byDate)
   const stock = mine.filter((c) => c.publishStatus !== 'published').sort(byDate)
   const list = tab === 'published' ? published : stock
-  const modalNode = modal && <PublishModal clip={modal} ttNickname={ttProfile?.nickname ?? null} onClose={() => setModal(null)} onDone={onRefresh} toast={toast} />
 
   return (
     <>
@@ -1655,119 +1634,11 @@ function Clips({ clips, sources, onRefresh, toast, ttProfile, scope }: { clips: 
       ) : (
         <div className="clip-grid">
           {list.map((c) => (
-            <ClipCard key={c.id} c={c} ai={isAI(c)} onReview={review} onPublish={(x) => setModal(x)} onSetPublishable={setPublishable} />
+            <ClipCard key={c.id} c={c} ai={isAI(c)} onSetPublishable={setPublishable} />
           ))}
         </div>
       )}
-      {modalNode}
     </>
-  )
-}
-
-function PublishModal({ clip, ttNickname, onClose, onDone, toast }: { clip: ClipDTO; ttNickname: string | null; onClose: () => void; onDone: () => Promise<void>; toast: (m: string) => void }): JSX.Element {
-  const [mode, setMode] = useState<string>('export')
-  const [caption, setCaption] = useState([clip.description, clip.hashtags].filter(Boolean).join(' '))
-  const [privacy, setPrivacy] = useState('SELF_ONLY')
-  const [opts, setOpts] = useState<string[]>([])
-  const [allow, setAllow] = useState({ comment: true, duet: true, stitch: true })
-  const [disabledFlags, setDisabledFlags] = useState({ comment: false, duet: false, stitch: false })
-  const [commercial, setCommercial] = useState(false)
-  const [brand, setBrand] = useState({ organic: false, content: false })
-  const [busy, setBusy] = useState(false)
-
-  useEffect(() => {
-    api.getFlag('publish_mode').then((r) => {
-      const m = r.value || 'export'
-      setMode(m)
-      if (m === 'uploadpost') {
-        setOpts(['PUBLIC_TO_EVERYONE', 'MUTUAL_FOLLOW_FRIENDS', 'FOLLOWER_OF_CREATOR', 'SELF_ONLY'])
-        setPrivacy('PUBLIC_TO_EVERYONE')
-      } else if (m === 'tiktok') {
-        api.tiktokCheck().then((info) => {
-          setOpts(info.privacyOptions)
-          setPrivacy(info.privacyOptions[0] ?? 'SELF_ONLY')
-          setDisabledFlags({ comment: info.commentDisabled, duet: info.duetDisabled, stitch: info.stitchDisabled })
-          setAllow({ comment: !info.commentDisabled, duet: !info.duetDisabled, stitch: !info.stitchDisabled })
-        }).catch(() => setOpts(['SELF_ONLY']))
-      }
-    }).catch(() => undefined)
-  }, [])
-
-  async function publish(): Promise<void> {
-    setBusy(true)
-    const overrides: PublishOverrides = {
-      caption,
-      privacyLevel: privacy,
-      disableComment: !allow.comment,
-      disableDuet: !allow.duet,
-      disableStitch: !allow.stitch,
-      brandOrganic: commercial && brand.organic,
-      brandContent: commercial && brand.content
-    }
-    try {
-      await api.publishClip(clip.id, overrides)
-      toast('Publication envoyée ✅')
-      onClose()
-      await onDone()
-    } catch (e) {
-      toast(`Erreur : ${String((e as Error).message)}`)
-      setBusy(false)
-    }
-  }
-
-  const privacyLabel = (o: string): string =>
-    ({ PUBLIC_TO_EVERYONE: 'Public (Tout le monde)', MUTUAL_FOLLOW_FRIENDS: 'Amis', FOLLOWER_OF_CREATOR: 'Abonnés', SELF_ONLY: 'Privé (Seulement moi)' } as Record<string, string>)[o] || o
-
-  return (
-    <div className="modal-overlay" onClick={() => !busy && onClose()}>
-      <div className="card" style={{ width: 720, maxWidth: '92vw', maxHeight: '90vh', overflow: 'auto', display: 'flex', gap: 18 }} onClick={(e) => e.stopPropagation()}>
-        <div style={{ width: 190, flexShrink: 0 }}>
-          {clip.filePath ? <video src={clipUrl(clip.filePath)} controls style={{ width: 190, borderRadius: 10, background: '#000', aspectRatio: '9 / 16' }} /> : <div className="muted">Pas d'aperçu</div>}
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <h3 style={{ marginTop: 0 }}>Vérifier &amp; publier</h3>
-          <div className="muted small" style={{ marginBottom: 8 }}>
-            Compte : {ttNickname ? `@${ttNickname}` : '—'} · mode {mode === 'tiktok' ? 'Direct' : mode === 'tiktok_draft' ? 'Brouillon' : mode === 'uploadpost' ? 'upload-post' : 'Export'}
-          </div>
-          <label className="muted small">Légende</label>
-          <textarea className="input-full" rows={4} maxLength={2200} value={caption} onChange={(e) => setCaption(e.target.value)} style={{ marginTop: 4 }} />
-          {(mode === 'tiktok' || mode === 'uploadpost') && (
-            <>
-              <label className="muted small" style={{ display: 'block', marginTop: 10 }}>Confidentialité</label>
-              <select className="input-full" value={privacy} onChange={(e) => setPrivacy(e.target.value)} style={{ marginTop: 4 }}>
-                {(opts.length ? opts : ['SELF_ONLY']).map((o) => <option key={o} value={o}>{privacyLabel(o)}</option>)}
-              </select>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 12 }}>
-                {(['comment', 'duet', 'stitch'] as const).map((k) => (
-                  <label key={k} className="small">
-                    <input type="checkbox" checked={allow[k]} disabled={disabledFlags[k]} onChange={(e) => setAllow((a) => ({ ...a, [k]: e.target.checked }))} />{' '}
-                    Autoriser {k === 'comment' ? 'les commentaires' : k === 'duet' ? 'les Duos' : 'les Stitch'}
-                  </label>
-                ))}
-                {mode === 'tiktok' && (
-                  <>
-                    <label className="small" style={{ marginTop: 6 }}>
-                      <input type="checkbox" checked={commercial} onChange={(e) => setCommercial(e.target.checked)} /> Divulguer un contenu commercial
-                    </label>
-                    {commercial && (
-                      <div style={{ marginLeft: 18 }}>
-                        <label className="small" style={{ display: 'block' }}><input type="checkbox" checked={brand.organic} onChange={(e) => setBrand((b) => ({ ...b, organic: e.target.checked }))} /> Votre marque</label>
-                        <label className="small" style={{ display: 'block' }}><input type="checkbox" checked={brand.content} onChange={(e) => setBrand((b) => ({ ...b, content: e.target.checked }))} /> Contenu de marque (tiers)</label>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            </>
-          )}
-          {mode === 'tiktok_draft' && <div className="muted small" style={{ marginTop: 8 }}>Brouillon : la vidéo arrive dans ta boîte de réception TikTok ; tu finalises la légende là-bas.</div>}
-          <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
-            <button className="btn" onClick={onClose} disabled={busy}>Annuler</button>
-            <button className="btn primary" onClick={publish} disabled={busy}>{busy ? 'Publication…' : 'Publier'}</button>
-          </div>
-        </div>
-      </div>
-    </div>
   )
 }
 
