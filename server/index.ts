@@ -813,11 +813,21 @@ async function runAutopilotTick(force = false): Promise<void> {
     for (let j = 1; set.size < doneOf(u) && j <= perDayFor(u); j++) set.add(j)
     return set
   }
-  const markDone = (u: string, ord: number): void => {
+  const markDone = (u: string, ord: number, title?: string | null): void => {
     const set = doneOrdOf(u)
     set.add(ord)
     repo.setSetting(`autopilot_doneord_${u}_${today}`, JSON.stringify([...set].sort((a, b) => a - b)))
     repo.setSetting(`autopilot_count_${u}_${today}`, String(set.size))
+    // Heure RÉELLE (et titre) de publication, par ordinal : le plan les affiche
+    // tels quels. Les déduire des clips du jour échouait pour un clip en stock
+    // créé un autre jour → bloc « Publiée » avec « — » à la place de l'heure.
+    try {
+      const dt = JSON.parse(repo.getSetting(`autopilot_donetime_${u}_${today}`) || '{}') as Record<string, { hm: number; title?: string }>
+      dt[String(ord)] = { hm: parisClock().hm, ...(title ? { title } : {}) }
+      repo.setSetting(`autopilot_donetime_${u}_${today}`, JSON.stringify(dt))
+    } catch {
+      /* ignore */
+    }
     // Réussi : on efface les traces de tentative/échec de ce créneau.
     try {
       const f = JSON.parse(repo.getSetting(`autopilot_failed_${u}_${today}`) || '{}') as Record<string, string>
@@ -960,7 +970,7 @@ async function runAutopilotTick(force = false): Promise<void> {
         repo.setClipReview(clip.id, 'pending')
         throw e
       }
-      markDone(user, ordinal)
+      markDone(user, ordinal, clip.title)
       produced = true
       clearStock()
       emitLog(`Pilote auto : clip en stock publié sur « ${user} » (${done + 1}/${perDayFor(user)} aujourd'hui).`)
@@ -978,7 +988,7 @@ async function runAutopilotTick(force = false): Promise<void> {
           // Publication en DIRECT par le pilote (publishClipById marque 'published' en
           // cas de succès → le planificateur l'ignore ensuite).
           await publishClipById(clip.id, paths, emitLog, { uploadPostUser: user, videoType: 'clip' })
-          markDone(user, ordinal)
+          markDone(user, ordinal, clip.title)
           produced = true
           emitLog(`Pilote auto : clip publié sur « ${user} » (${done + 1}/${perDayFor(user)} aujourd'hui).`)
           return true
@@ -1083,7 +1093,7 @@ async function runAutopilotTick(force = false): Promise<void> {
         })
         repo.setClipReview(clip.id, 'approved')
         await publishClipById(clip.id, paths, emitLog, { uploadPostUser: user, videoType: 'niche' })
-        markDone(user, ordinal)
+        markDone(user, ordinal, carousel.title)
         produced = true
         emitLog(`Pilote auto : diaporama de ${files.length} images publié sur « ${user} »${musicPath ? ` (musique : ${basename(musicPath)})` : ' (sans musique)'}.`)
         return
@@ -1121,7 +1131,7 @@ async function runAutopilotTick(force = false): Promise<void> {
         postUrl: url,
         postId
       })
-      markDone(user, ordinal)
+      markDone(user, ordinal, carousel.title)
       produced = true
       emitLog(`Pilote auto : carrousel de ${files.length} images publié sur « ${user} » (${done + 1}/${perDayFor(user)} aujourd'hui).`)
       return
@@ -1183,7 +1193,7 @@ async function runAutopilotTick(force = false): Promise<void> {
     videoChain = job.then(() => undefined, () => undefined)
     const clipId = await job.catch(() => null)
     if (clipId) {
-      markDone(user, ordinal)
+      markDone(user, ordinal, idea.title)
       produced = true
       if (series && nextRecap != null) advanceSeries(user, nextRecap) // mémoire + épisode suivant
       emitLog(`Pilote auto : vidéo publiée sur « ${user} » (${done + 1}/${perDayFor(user)} aujourd'hui).`)
@@ -2352,17 +2362,28 @@ app.get('/api/autopilot/plan', wrap(async (req, res) => {
     const doneSet = new Set(doneArr)
     for (let j = 1; doneSet.size < done && j <= perDayForProfile(user); j++) doneSet.add(j) // rétro-compat
     const doneOrds = [...doneSet].sort((a, b) => a - b)
+    // Heure + titre enregistrés PAR markDone à la publication : source de vérité.
+    // (La déduction via les clips du jour reste en secours : elle rate un clip en
+    // stock créé un autre jour → « — » et niche du compte à la place du titre.)
+    let doneRec: Record<string, { hm: number; title?: string }> = {}
+    try {
+      const p = JSON.parse(repo.getSetting(`autopilot_donetime_${user}_${today}`) || '{}')
+      if (p && typeof p === 'object') doneRec = p as Record<string, { hm: number; title?: string }>
+    } catch {
+      /* ignore */
+    }
     doneOrds.forEach((ord, idx) => {
+      const rec = doneRec[String(ord)]
       const t = times[idx]
       const pp = t ? parisPartsOf(t.at) : null
       // Pour les publiées : on affiche le TITRE RÉEL de la vidéo (pas la config
       // actuelle du compte, qui a pu changer depuis — ex. passage en mode série).
       slots.push({
         ...info,
-        niche: t?.title || info.niche,
+        niche: rec?.title || t?.title || info.niche,
         ordinal: ord,
-        etaHm: pp ? pp.hm : 0,
-        eta: pp ? pp.label : '—',
+        etaHm: rec ? rec.hm : pp ? pp.hm : 0,
+        eta: rec ? fmt(rec.hm) : pp ? pp.label : '—',
         done: true,
         credits: estimateCredits(ovToday[`${user}:${ord}`]?.type)
       })
