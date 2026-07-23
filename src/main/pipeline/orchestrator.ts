@@ -38,6 +38,9 @@ export interface PipelineOptions {
   cookiesFromBrowser: string | null
   cookiesFile: string | null
   clipCount: number
+  // Portion à cliper (secondes) : seule cette tranche de la vidéo source est
+  // téléchargée puis analysée. `null`/absent = vidéo entière.
+  section?: { start: number; end: number } | null
 }
 
 export interface PipelineSource {
@@ -71,12 +74,16 @@ export async function runPipeline(
     sid,
     (r) => emit('ingest', 'running', 0.05 + r * 0.9),
     opts.cookiesFromBrowser,
-    opts.cookiesFile
+    opts.cookiesFile,
+    opts.section
   )
   cb.onSourceFile(file)
   emit('ingest', 'done', 1, 'Vidéo téléchargée')
 
-  const duration = meta.durationSec ?? (await probeDuration(ctx, file))
+  // Avec une portion choisie, le fichier téléchargé ne fait que la longueur de la
+  // tranche : on SONDE sa vraie durée (les métadonnées donnent la durée totale de
+  // la VOD, qui fausserait la sélection des moments forts).
+  const duration = opts.section ? await probeDuration(ctx, file) : meta.durationSec ?? (await probeDuration(ctx, file))
 
   // 2) Transcription (fail-soft) avec indicateur de temps écoulé
   let words: Word[] | null = null

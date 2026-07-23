@@ -197,7 +197,7 @@ function getContext(): Promise<PipelineContext> {
 // ── Pipeline (un seul à la fois) ──
 let pipelineChain: Promise<void> = Promise.resolve()
 
-async function runForSource(sourceId: number, clipCount: number, profileOverride?: string): Promise<void> {
+async function runForSource(sourceId: number, clipCount: number, profileOverride?: string, section?: { start: number; end: number } | null): Promise<void> {
   const source = repo.getSource(sourceId)
   if (!source) throw new Error(`Source #${sourceId} introuvable`)
   const send = (ev: ProgressEvent): void => emitProgress(ev)
@@ -293,7 +293,7 @@ async function runForSource(sourceId: number, clipCount: number, profileOverride
         },
         onUsage: (m, usage) => addSpend(m, usage)
       },
-      { apiKey, model, transcribe, reframeFocus, detectFace, cookiesFromBrowser: null, cookiesFile, clipCount }
+      { apiKey, model, transcribe, reframeFocus, detectFace, cookiesFromBrowser: null, cookiesFile, clipCount, section }
     )
     repo.updateSource(sourceId, { status: 'done' })
   } catch (err) {
@@ -1316,6 +1316,22 @@ app.post('/api/sources', wrap((req, res) => {
   if (!url) return res.status(400).json({ error: 'URL manquante' })
   res.json(repo.createSource(url))
 }))
+// Crée la source ET récupère ses métadonnées (titre + durée) tout de suite, pour
+// que l'UI puisse proposer de ne cliper qu'une PORTION d'une longue VOD.
+app.post('/api/sources/probe', wrap(async (req, res) => {
+  const url = String(req.body?.url ?? '').trim()
+  if (!url) return res.status(400).json({ error: 'URL manquante' })
+  const src = repo.createSource(url)
+  try {
+    const ctx = await getContext()
+    const cookiesFile = repo.getSetting('ytdlp_cookies_file') || null
+    const meta = await fetchMetadata(ctx, url, null, cookiesFile)
+    repo.updateSource(src.id, { title: meta.title, author: meta.author, durationSec: meta.durationSec })
+  } catch {
+    /* durée inconnue → l'UI proposera la vidéo entière */
+  }
+  res.json(repo.getSource(src.id))
+}))
 app.post('/api/sources/upload', upload.single('file'), wrap((req, res) => {
   const f = (req as Request & { file?: Express.Multer.File }).file
   if (!f) return res.status(400).json({ error: 'Fichier manquant' })
@@ -1342,10 +1358,14 @@ app.post('/api/pipeline/run', wrap((req, res) => {
   const sourceId = Number(req.body?.sourceId)
   const clipCount = Math.min(10, Math.max(1, Math.round(Number(req.body?.clipCount ?? 3))))
   if (!sourceId) return res.status(400).json({ error: 'sourceId manquant' })
+  // Portion à cliper (optionnelle) : ne télécharge/analyse que cet intervalle.
+  const s = Number(req.body?.startSec)
+  const e = Number(req.body?.endSec)
+  const section = Number.isFinite(s) && Number.isFinite(e) && e > s ? { start: Math.max(0, s), end: e } : null
   // Marque la source « en file d'attente » immédiatement (avant son tour).
   repo.updateSource(sourceId, { status: 'queued', error: null })
   emitProgress({ sourceId, stage: 'ingest', status: 'running', progress: 0, message: 'En file d’attente…' })
-  const job = pipelineChain.then(() => runForSource(sourceId, clipCount))
+  const job = pipelineChain.then(() => runForSource(sourceId, clipCount, undefined, section))
   pipelineChain = job.then(() => undefined, () => undefined)
   res.json({ ok: true })
 }))

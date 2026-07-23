@@ -45,6 +45,9 @@ export const api = {
   // Sources / clips
   listSources: () => req<SourceDTO[]>('/api/sources'),
   addSource: (url: string) => post<SourceDTO>('/api/sources', { url }),
+  // Récupère la source AVEC ses métadonnées (titre + durée) : permet de proposer
+  // de ne cliper qu'une portion d'une longue vidéo avant de lancer le pipeline.
+  probeSource: (url: string) => post<SourceDTO>('/api/sources/probe', { url }),
   uploadSource: (file: File, onProgress?: (ratio: number) => void) =>
     new Promise<SourceDTO>((resolve, reject) => {
       const fd = new FormData()
@@ -69,7 +72,8 @@ export const api = {
   reviewClip: (id: number, status: ClipDTO['reviewStatus']) => post(`/api/clips/${id}/review`, { status }),
   publishClip: (id: number, overrides?: PublishOverrides) =>
     post(`/api/clips/${id}/publish`, { overrides }),
-  runPipeline: (sourceId: number, clipCount: number) => post('/api/pipeline/run', { sourceId, clipCount }),
+  runPipeline: (sourceId: number, clipCount: number, range?: { startSec: number; endSec: number }) =>
+    post('/api/pipeline/run', { sourceId, clipCount, ...(range ?? {}) }),
 
   // Publication : profil actif + état du quota
   publishState: () =>

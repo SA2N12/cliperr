@@ -1218,17 +1218,24 @@ function Clipage({ sources, clips, progress, onRefresh, toast, goHistory }: { so
   const [dragging, setDragging] = useState(false)
   const [newSource, setNewSource] = useState<SourceDTO | null>(null)
   const [clipCount, setClipCount] = useState(3)
+  // Portion à cliper (en minutes) : proposée quand la vidéo est longue, pour ne
+  // traiter qu'un extrait au lieu de télécharger/transcrire des heures de VOD.
+  const [fromMin, setFromMin] = useState(0)
+  const [lenMin, setLenMin] = useState(15)
   const fileRef = useRef<HTMLInputElement>(null)
 
   function imported(src: SourceDTO): void {
     setNewSource(src)
+    setFromMin(0)
+    setLenMin(15)
     setStep('count')
   }
   async function addUrl(): Promise<void> {
     if (!url.trim()) return
     setBusy(true)
     try {
-      const src = await api.addSource(url.trim())
+      // probeSource récupère la durée → l'étape suivante peut proposer un extrait.
+      const src = await api.probeSource(url.trim())
       setUrl('')
       await onRefresh()
       imported(src)
@@ -1264,11 +1271,20 @@ function Clipage({ sources, clips, progress, onRefresh, toast, goHistory }: { so
     const f = e.target.files?.[0]
     if (f) void uploadFile(f)
   }
+  // Vidéo « longue » (> 20 min) : on propose de n'en cliper qu'une portion.
+  const dur = newSource?.durationSec ?? null
+  const isLong = dur != null && dur > 20 * 60
+  const totalMin = dur != null ? Math.floor(dur / 60) : 0
+  const MAX_LEN = 90 // minutes : au-delà, la transcription dépasse la limite de l'API
+  const range = isLong
+    ? { startSec: fromMin * 60, endSec: Math.min(dur, fromMin * 60 + Math.min(lenMin, MAX_LEN) * 60) }
+    : undefined
+
   async function launch(): Promise<void> {
     if (!newSource) return
     setBusy(true)
     try {
-      await api.runPipeline(newSource.id, clipCount)
+      await api.runPipeline(newSource.id, clipCount, range)
       toast(`Génération lancée (${clipCount} clip${clipCount > 1 ? 's' : ''})`)
       setNewSource(null)
       setClipCount(3)
@@ -1342,8 +1358,36 @@ function Clipage({ sources, clips, progress, onRefresh, toast, goHistory }: { so
 
         {step === 'count' && newSource && (
           <div style={{ marginTop: 18 }}>
-            <div className="muted small">Vidéo</div>
+            <div className="muted small">Vidéo{dur != null ? ` · durée ${fmtDur(dur)}` : ''}</div>
             <div style={{ fontWeight: 600, marginBottom: 18 }}>{newSource.title || newSource.url?.split(/[\\/]/).pop()}</div>
+
+            {/* Vidéo longue : on choisit la PORTION à cliper (sinon la VOD entière —
+                plusieurs Go et des heures de transcription — passe par le pipeline). */}
+            {isLong && (
+              <div className="sp-note accent" style={{ marginBottom: 18 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, color: 'var(--text)', marginBottom: 8 }}>
+                  <MIcon name="movie" size={14} /> Vidéo longue ({fmtDur(dur!)}) — choisis la portion à cliper
+                </div>
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 120 }}>
+                    <span className="muted small">Début (minute)</span>
+                    <input type="number" min={0} max={Math.max(0, totalMin - 1)} value={fromMin}
+                      onChange={(e) => setFromMin(Math.max(0, Math.min(totalMin - 1, Math.round(Number(e.target.value)) || 0)))} />
+                  </label>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 120 }}>
+                    <span className="muted small">Durée à analyser (min, max {MAX_LEN})</span>
+                    <input type="number" min={1} max={MAX_LEN} value={lenMin}
+                      onChange={(e) => setLenMin(Math.max(1, Math.min(MAX_LEN, Math.round(Number(e.target.value)) || 1)))} />
+                  </label>
+                </div>
+                {range && (
+                  <div className="muted small" style={{ marginTop: 8 }}>
+                    Extrait analysé : <b>{fmtDur(range.startSec)}</b> → <b>{fmtDur(range.endSec)}</b> ({Math.round((range.endSec - range.startSec) / 60)} min). Seule cette portion est téléchargée.
+                  </div>
+                )}
+              </div>
+            )}
+
             <label className="muted small">Nombre de clips à générer</label>
             <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 8 }}>
               <input type="range" min={1} max={10} value={clipCount} onChange={(e) => setClipCount(Number(e.target.value))} style={{ flex: 1 }} />
@@ -2921,6 +2965,15 @@ function IdeaCard({ idea, onCopy, meta, onDelete, onGenVideo, gen }: { idea: Vir
 
 type AnalyticsProfile = { profile: string; handle: string | null; avatarUrl: string | null; followers: number; views: number; likes: number; comments: number; shares: number; videoCount: number; timeseries: { date: string; value: number }[] }
 
+// Secondes → « 1h23 » / « 12:05 » / « 0:42 » (durées et repères vidéo).
+function fmtDur(sec: number): string {
+  const s = Math.max(0, Math.round(sec))
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const ss = s % 60
+  if (h > 0) return `${h}h${String(m).padStart(2, '0')}`
+  return `${m}:${String(ss).padStart(2, '0')}`
+}
 function fmtNum(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M'
   if (n >= 1000) return (n / 1000).toFixed(n >= 10000 ? 0 : 1) + 'k'

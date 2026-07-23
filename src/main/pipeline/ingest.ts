@@ -1,5 +1,5 @@
 import { join, basename } from 'path'
-import { mkdir } from 'fs/promises'
+import { mkdir, symlink, rm } from 'fs/promises'
 import { existsSync } from 'fs'
 import { spawn } from 'child_process'
 import { run, runCapture, type PipelineContext } from './context'
@@ -7,6 +7,28 @@ import { run, runCapture, type PipelineContext } from './context'
 /** Vrai si `s` désigne un fichier local existant (et non une URL http(s)). */
 export function isLocalFile(s: string): boolean {
   return !/^[a-z][a-z0-9+.-]*:\/\//i.test(s) && existsSync(s)
+}
+
+/**
+ * Répertoire contenant ffmpeg ET ffprobe côte à côte, à passer en
+ * `--ffmpeg-location` : les binaires statiques (npm) vivent dans des dossiers
+ * séparés, or yt-dlp déduit ffprobe du même dossier que ffmpeg. Sans ça,
+ * `--download-sections` échoue avec « ffmpeg is not installed » (il lui faut
+ * ffprobe pour découper la portion). On recrée les liens à chaque fois pour
+ * qu'ils restent valides même après une mise à jour des binaires.
+ */
+async function ffmpegLocationDir(ctx: PipelineContext): Promise<string> {
+  const dir = join(ctx.dirs.bin, 'ffsuite')
+  await mkdir(dir, { recursive: true })
+  for (const [name, target] of [
+    ['ffmpeg', ctx.bin.ffmpeg],
+    ['ffprobe', ctx.bin.ffprobe]
+  ] as const) {
+    const link = join(dir, name)
+    await rm(link, { force: true }).catch(() => undefined)
+    await symlink(target, link).catch(() => undefined)
+  }
+  return dir
 }
 
 export interface SourceMeta {
@@ -141,7 +163,12 @@ export async function downloadVideo(
   sourceId: number,
   onProgress?: (ratio: number) => void,
   cookiesFromBrowser?: string | null,
-  cookiesFile?: string | null
+  cookiesFile?: string | null,
+  // Portion à télécharger (secondes) : ne récupère QUE cet intervalle au lieu de
+  // la VOD entière. Indispensable pour les longs streams Twitch (plusieurs heures)
+  // — évite de télécharger des dizaines de Go et de dépasser la limite de l'API de
+  // transcription. Le fichier produit démarre à 0 (l'intervalle est extrait).
+  section?: { start: number; end: number } | null
 ): Promise<string> {
   // Fichier local importé : on l'utilise tel quel, aucun téléchargement.
   if (isLocalFile(url)) {
@@ -153,6 +180,12 @@ export async function downloadVideo(
   const outBase = join(ctx.dirs.downloads, String(sourceId))
   const outTemplate = `${outBase}.%(ext)s`
   const expected = `${outBase}.mp4`
+  const sectionArgs =
+    section && section.end > section.start
+      ? ['--download-sections', `*${Math.max(0, Math.floor(section.start))}-${Math.ceil(section.end)}`, '--force-keyframes-at-cuts']
+      : []
+  // Dossier ffmpeg+ffprobe co-localisés (requis par --download-sections).
+  const ffLocation = await ffmpegLocationDir(ctx)
 
   try {
     await run(
@@ -160,11 +193,12 @@ export async function downloadVideo(
       [
         '--no-warnings',
         '--no-playlist',
+        ...sectionArgs,
         ...cookieArgs(cookiesFromBrowser, cookiesFile),
         ...pluginArgs(ctx.dirs.bin),
         ...proxyArgs(),
         '--ffmpeg-location',
-        ctx.bin.ffmpeg,
+        ffLocation,
         // PRÉFÈRE un format COMBINÉ (vidéo+audio déjà dans un seul fichier) : `b`
         // avant `bv*+ba`. Décisif pour les VOD Twitch de plusieurs heures — sinon
         // yt-dlp fusionne vidéo + audio via un remux ffmpeg qui écrit un `.temp.mp4`
