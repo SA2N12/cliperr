@@ -2795,11 +2795,20 @@ app.post('/api/golinks', wrap((req, res) => {
 // Médias (clips) — statiques protégés
 app.use('/media/clips', express.static(paths.clips))
 
-// Front web (build Vite) — servi en dernier
+// Front web (build Vite) — servi en dernier.
+// Cache DÉTERMINISTE : index.html en no-cache (toujours revalidé → un simple
+// rechargement suffit après un déploiement, fini le Ctrl+Shift+R), bundles
+// hashés immuables un an (leur nom change à chaque build).
 const webDir = join(process.cwd(), 'dist-web')
 if (existsSync(webDir)) {
-  app.use(express.static(webDir))
-  app.get(/^(?!\/(api|media)\/).*/, (_req, res) => res.sendFile(join(webDir, 'index.html')))
+  app.use(express.static(webDir, {
+    setHeaders: (res, filePath) => {
+      res.setHeader('Cache-Control', /[\\/]assets[\\/]/.test(filePath) ? 'public, max-age=31536000, immutable' : 'no-cache')
+    }
+  }))
+  app.get(/^(?!\/(api|media)\/).*/, (_req, res) =>
+    res.sendFile(join(webDir, 'index.html'), { headers: { 'Cache-Control': 'no-cache' } })
+  )
 }
 
 app.listen(config.port, () => {
