@@ -342,10 +342,20 @@ button {
   opacity: 1;
   pointer-events: auto;
 }
+/* Séparateurs : même géométrie que les pastilles — 36 px centrés dans le rail
+   (avant : largeur de la barre DÉPLIÉE, rognée au bord → tronçon décalé à
+   droite, d'épaisseur perçue inégale). Pleine largeur au déploiement. */
 .nav-sep-line {
   height: 1px;
   background: var(--border);
-  margin: 8px 10px;
+  width: 36px;
+  margin: 8px 0 8px calc((var(--rail) - 36px) / 2 - 12px);
+  transition: width 0.18s ease, margin-left 0.18s ease;
+}
+.sidebar.expanded .nav-sep-line,
+.sidebar.hoverable:hover .nav-sep-line {
+  width: calc(var(--side-w) - 24px);
+  margin-left: 0;
 }
 /* ── Contrôle d'affichage de la sidebar (bouton en bas de barre, façon Supabase).
    Le menu est en `fixed` hors de la sidebar : jamais rogné par son overflow. ── */
@@ -1167,7 +1177,8 @@ button {
 }
 .stat-grid .value {
   font-size: 25px;
-  font-weight: 700;
+  /* Graisse des gros chiffres SellExpert (Inter 800). */
+  font-weight: 800;
   letter-spacing: -0.5px;
   line-height: 1.1;
 }
