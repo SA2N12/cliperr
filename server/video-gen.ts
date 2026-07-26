@@ -54,6 +54,8 @@ export interface VideoGenOptions {
   falKey?: string | null
   /** Modèle fal.ai (image-to-video) — défaut Seedance lite. */
   falVideoModel?: string
+  /** Modèle fal.ai de synchronisation labiale (cale la bouche sur la voix TTS). */
+  falLipsyncModel?: string
   /** Active l'animation vidéo des scènes (mode série). */
   animateScenes?: boolean
   /** Mode dialogue : les personnages parlent (voix + intonation par personnage), pas de narrateur. */
@@ -526,6 +528,55 @@ async function genVideoFal(
   }
 }
 
+// ── fal.ai : synchronisation labiale (lip-sync) ──
+// Cale la BOUCHE d'un clip vidéo sur une piste audio (la voix TTS du personnage).
+// Combiné à une voix TTS FIXE par personnage → voix constante d'un bout à l'autre
+// ET lèvres synchronisées, sans dépendre de Veo. Changeable via `fal_lipsync_model`.
+export const FAL_LIPSYNC_MODEL = 'fal-ai/sync-lipsync'
+async function genLipsyncFal(
+  falKey: string,
+  videoPath: string,
+  audioPath: string,
+  dest: string,
+  model: string = FAL_LIPSYNC_MODEL
+): Promise<void> {
+  const auth = { Authorization: `Key ${falKey}` }
+  const videoB64 = (await readFile(videoPath)).toString('base64')
+  const audioB64 = (await readFile(audioPath)).toString('base64')
+  const submit = await fetch(`${FAL_QUEUE}/${model}`, {
+    method: 'POST',
+    headers: { ...auth, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      video_url: `data:video/mp4;base64,${videoB64}`,
+      audio_url: `data:audio/mpeg;base64,${audioB64}`
+    })
+  })
+  if (!submit.ok) throw new Error(`fal.ai lipsync ${submit.status} : ${(await submit.text()).slice(0, 160)}`)
+  const sub = (await submit.json()) as { request_id?: string; status_url?: string; response_url?: string }
+  if (!sub.request_id) throw new Error('fal.ai lipsync : réponse sans request_id')
+  const statusUrl = sub.status_url ?? `${FAL_QUEUE}/${model}/requests/${sub.request_id}/status`
+  const resultUrl = sub.response_url ?? `${FAL_QUEUE}/${model}/requests/${sub.request_id}`
+  const t0 = Date.now()
+  for (;;) {
+    if (Date.now() - t0 > 8 * 60 * 1000) throw new Error('fal.ai lipsync : délai dépassé')
+    await new Promise((r) => setTimeout(r, 6000))
+    const st = await fetch(statusUrl, { headers: auth })
+    if (!st.ok) throw new Error(`fal.ai lipsync suivi ${st.status}`)
+    const sj = (await st.json()) as { status?: string }
+    if (sj.status === 'FAILED' || sj.status === 'ERROR') throw new Error('fal.ai lipsync : génération échouée')
+    if (sj.status !== 'COMPLETED') continue
+    const rr = await fetch(resultUrl, { headers: auth })
+    if (!rr.ok) throw new Error(`fal.ai lipsync résultat ${rr.status}`)
+    const j = (await rr.json()) as { video?: { url?: string } }
+    const url = j.video?.url
+    if (!url) throw new Error('fal.ai lipsync : réponse sans vidéo')
+    const dl = await fetch(url)
+    if (!dl.ok) throw new Error(`fal.ai lipsync téléchargement ${dl.status}`)
+    await writeFile(dest, Buffer.from(await dl.arrayBuffer()))
+    return
+  }
+}
+
 // ── Veo (Gemini) : scène PARLÉE — le personnage prononce sa réplique avec
 // voix native + lipsync + bruitages, à partir de l'image de la scène. ──
 const VEO_MODELS = ['veo-3.1-fast-generate-001', 'veo-3.1-fast-generate-preview', 'veo-3.0-fast-generate-001']
@@ -746,6 +797,7 @@ export async function generateVideoFromIdea(
       const dur = (await mediaDuration(ctx.bin.ffprobe, mp3)) + 0.4
 
       let animClip: string | null = null
+      let lipSynced = false
       if (opts.animateScenes && opts.falKey) {
         log?.(`Scène ${i + 1}/${scenes.length} — animation vidéo (fal.ai)…`)
         try {
@@ -765,11 +817,43 @@ export async function generateVideoFromIdea(
           animClip = null
           log?.(`Scène ${i + 1}/${scenes.length} — fal.ai indisponible (${e instanceof Error ? e.message : String(e)}) → image animée`)
         }
+        // Moteur « lipsync » : cale la BOUCHE du clip animé sur la voix TTS (fixe
+        // par personnage) → voix constante + lèvres synchro sur toutes les scènes.
+        if (animClip && opts.videoEngine === 'lipsync') {
+          log?.(`Scène ${i + 1}/${scenes.length} — synchronisation labiale (fal.ai)…`)
+          try {
+            const synced = join(work, `ls${i}.mp4`)
+            await genLipsyncFal(opts.falKey, animClip, mp3, synced, opts.falLipsyncModel || FAL_LIPSYNC_MODEL)
+            animClip = synced
+            lipSynced = true
+          } catch (e) {
+            log?.(`Scène ${i + 1}/${scenes.length} — lip-sync indisponible (${e instanceof Error ? e.message : String(e)}) → animation simple`)
+          }
+        }
       }
 
       log?.(`Scène ${i + 1}/${scenes.length} — montage…`)
       await writeFile(ass, sceneAss(subText, dur))
-      if (animClip) {
+      if (animClip && lipSynced) {
+        // Clip DÉJÀ synchronisé (bouche calée sur la voix) : on garde la vidéo
+        // TELLE QUELLE — surtout PAS de setpts (ça désynchroniserait les lèvres)
+        // — on recadre, on brûle le sous-titre et on remet la voix TTS d'origine
+        // (garantie présente et déjà celle sur laquelle la bouche a été calée).
+        const clipDur = await mediaDuration(ctx.bin.ffprobe, animClip)
+        await writeFile(ass, sceneAss(subText, clipDur))
+        await run(ctx.bin.ffmpeg, [
+          '-y', '-loglevel', 'error',
+          '-i', animClip,
+          '-i', mp3,
+          '-filter_complex',
+          `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,setsar=1,subtitles=${ass}[v]`,
+          '-map', '[v]', '-map', '1:a',
+          '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+          '-c:a', 'aac', '-ar', '44100', '-ac', '2', '-b:a', '128k',
+          '-shortest',
+          scene
+        ])
+      } else if (animClip) {
         // Clip animé : recadré 1080x1920 et ÉTIRÉ/COMPRESSÉ en douceur (setpts)
         // pour couvrir exactement la durée de la voix — plus aucun gel d'image.
         const clipDur = await mediaDuration(ctx.bin.ffprobe, animClip)

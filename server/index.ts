@@ -449,6 +449,7 @@ async function runVideoGen(
       characterRefPath: opts.characterRefPath,
       falKey: getEncrypted('fal_key'),
       falVideoModel: repo.getSetting('fal_video_model') || undefined,
+      falLipsyncModel: repo.getSetting('fal_lipsync_model') || undefined,
       // Reproduction fidèle : la source est une VIDÉO, pas un diaporama. On anime
       // donc les scènes (fal.ai) si la clé est là, au lieu d'un simple Ken Burns
       // sur des images fixes.
@@ -456,7 +457,12 @@ async function runVideoGen(
       // Reproduction : voix PAR PERSONNAGE si la source est un dialogue (détecté à
       // l'inspiration), sinon voix off unique. Les séries forcent déjà dialogue=true.
       dialogue: opts.dialogue || (!!idea.reproduce && !!idea.dialogue),
-      videoEngine: repo.getSetting('series_video_engine') || 'seedance',
+      // Reproduction d'un DIALOGUE : moteur « lipsync » — voix TTS FIXE par
+      // personnage (constante de bout en bout) + synchro labiale fal.ai calée
+      // dessus. Sinon, moteur de série habituel (Veo / Seedance).
+      videoEngine: reproDialogue && !!getEncrypted('fal_key')
+        ? 'lipsync'
+        : repo.getSetting('series_video_engine') || 'seedance',
       onProgress: (m) => emitIdeaVideo({ ideaId, status: 'running', message: m })
     })
     if (usage) addSpend(model, usage)
