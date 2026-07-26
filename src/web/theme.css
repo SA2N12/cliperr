@@ -2521,22 +2521,20 @@ textarea:focus {
 .genai-platforms .msym {
   color: var(--ap-green-strong);
 }
-/* Bouton « enregistrer pour plus tard » dans la barre : ghost, icône seule. */
+/* Bouton « enregistrer pour plus tard » dans la barre : bouton secondaire net
+   (bordé, libellé) — bien visible à côté du primaire « Reproduire ». */
 .btn.genai-save {
   flex-shrink: 0;
   margin: 5px 0;
-  padding: 10px 12px;
-  border: none;
-  background: transparent;
-  color: var(--muted);
+  padding: 10px 14px;
 }
 .btn.genai-save:hover:not(:disabled) {
-  color: var(--accent-strong);
+  border-color: var(--accent);
   background: var(--accent-soft);
+  color: var(--accent-strong);
 }
 .btn.genai-save:disabled {
-  opacity: 0.35;
-  background: transparent;
+  opacity: 0.4;
 }
 /* Liste « à reproduire plus tard ». */
 .genai-saved {
@@ -3056,6 +3054,13 @@ input[type='checkbox'] {
   /* Liens « à reproduire plus tard » : on masque la date pour aérer la ligne. */
   .genai-saved-date {
     display: none;
+  }
+  /* Barre étroite : bouton « Enregistrer » en icône seule. */
+  .genai-save-lbl {
+    display: none;
+  }
+  .btn.genai-save {
+    padding: 10px 11px;
   }
 
   /* ── Pilote auto : le compte passe au-dessus de ses créneaux ── */

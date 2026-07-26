@@ -1136,8 +1136,8 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
             /* eslint-disable-next-line jsx-a11y/no-autofocus */
             autoFocus
           />
-          <button className="btn genai-save" onClick={saveLink} disabled={busy || !url.trim()} title="Enregistrer ce lien pour le reproduire plus tard">
-            <MIcon name="bookmark_add" size={18} />
+          <button className="btn genai-save" onClick={saveLink} disabled={busy || !url.trim()} title="Mettre ce lien de côté pour le reproduire plus tard">
+            <MIcon name="bookmark_add" size={17} /> <span className="genai-save-lbl">Enregistrer</span>
           </button>
           <button className="btn primary genai-go" onClick={() => void inspire()} disabled={busy || !url.trim()}>
             {busy ? <><MIcon name="progress_activity" size={16} spin /> Analyse…</> : <><MIcon name="movie" size={16} /> Reproduire</>}
