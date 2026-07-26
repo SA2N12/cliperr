@@ -1036,17 +1036,9 @@ const STAGE_LABELS: Record<string, string> = {
 // (hook, structure, levier émotionnel) — jamais son contenu.
 function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
   const [url, setUrl] = useState('')
-  const [niche, setNiche] = useState('')
-  const [mode, setMode] = useState<'reproduce' | 'inspire'>('reproduce')
   const [busy, setBusy] = useState(false)
   const [idea, setIdea] = useState<SavedIdea | null>(null)
   const [launched, setLaunched] = useState(false)
-  const [niches, setNiches] = useState<string[]>([])
-  useEffect(() => {
-    api.autopilotState()
-      .then((s) => setNiches([...new Set(s.profiles.map((p) => p.niche).filter(Boolean))]))
-      .catch(() => undefined)
-  }, [])
 
   const inspire = async (): Promise<void> => {
     if (!url.trim() || busy) return
@@ -1054,7 +1046,7 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
     setIdea(null)
     setLaunched(false)
     try {
-      const r = await api.inspireIdea(url.trim(), mode === 'inspire' ? niche.trim() : '', mode)
+      const r = await api.inspireIdea(url.trim(), '', 'reproduce')
       setIdea(r.idea)
     } catch (e) {
       toast('Erreur : ' + (e as Error).message)
@@ -1076,18 +1068,6 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
 
   return (
     <div>
-      {/* Mode : reproduire fidèlement la source, ou s'en inspirer pour de l'original. */}
-      <div style={{ display: 'inline-flex', gap: 3, background: 'var(--panel-2)', borderRadius: 0, padding: 3, marginBottom: 10 }}>
-        {([['reproduce', 'movie', 'Reproduire (fidèle)'], ['inspire', 'lightbulb', 'S’inspirer (original)']] as const).map(([m, icon, lbl]) => (
-          <button
-            key={m}
-            onClick={() => setMode(m)}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: 'none', cursor: 'pointer', borderRadius: 0, padding: '5px 14px', fontSize: 13, fontWeight: mode === m ? 700 : 500, background: mode === m ? '#fff' : 'transparent', color: mode === m ? 'var(--text)' : 'var(--muted)', fontFamily: 'inherit' }}
-          >
-            <MIcon name={icon} size={14} /> {lbl}
-          </button>
-        ))}
-      </div>
       <input
         className="input-full"
         placeholder="Lien TikTok, Instagram (Reel) ou YouTube Short…"
@@ -1096,27 +1076,12 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
         onKeyDown={(e) => e.key === 'Enter' && void inspire()}
       />
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
-        {mode === 'inspire' && (
-          <>
-            <input
-              className="input-full"
-              style={{ flex: 1, minWidth: 220 }}
-              list="inspire-niches"
-              placeholder="Niche cible (optionnel — sinon même thème que la source)"
-              value={niche}
-              onChange={(e) => setNiche(e.target.value)}
-            />
-            <datalist id="inspire-niches">{niches.map((n) => <option key={n} value={n} />)}</datalist>
-          </>
-        )}
-        <button className="btn primary" onClick={() => void inspire()} disabled={busy || !url.trim()} style={mode === 'reproduce' ? { marginLeft: 'auto' } : undefined}>
-          <Icon name="bulb" size={15} /> {busy ? 'Analyse en cours…' : mode === 'reproduce' ? 'Reproduire la vidéo' : 'Créer une idée inspirée'}
+        <button className="btn primary" onClick={() => void inspire()} disabled={busy || !url.trim()} style={{ marginLeft: 'auto' }}>
+          <Icon name="bulb" size={15} /> {busy ? 'Analyse en cours…' : 'Reproduire la vidéo'}
         </button>
       </div>
       <p className="muted small" style={{ marginTop: 10 }}>
-        {mode === 'reproduce'
-          ? <>La vidéo est téléchargée, transcrite et analysée visuellement, puis l’IA la <b>reproduit fidèlement</b> : même sujet, même déroulé, même chute et même style — sans repasser par le format « niche ». La <b>voix s’adapte à la source</b> : une voix par personnage si c’est un dialogue, une seule voix off sinon. <b>Aucune musique n’est ajoutée</b> (la bande-son fait partie de la source) et les scènes sont <b>animées</b> si ta clé fal.ai est configurée, sinon ce sera un enchaînement d’images. Compte 1 à 2 minutes.</>
-          : <>La vidéo est téléchargée et transcrite, puis l’IA écrit une vidéo <b>originale</b> qui reprend sa mécanique virale (hook, structure, émotion) — jamais son contenu. Compte 1 à 2 minutes.</>}
+        La vidéo est téléchargée, transcrite et analysée visuellement, puis l’IA la <b>reproduit fidèlement</b> : même sujet, même déroulé, même chute et même style. La <b>voix s’adapte à la source</b> : une voix par personnage si c’est un dialogue, une seule voix off sinon. <b>Aucune musique n’est ajoutée</b> (la bande-son fait partie de la source) et les scènes sont <b>animées</b> si ta clé fal.ai est configurée, sinon ce sera un enchaînement d’images. Compte 1 à 2 minutes.
       </p>
       {busy && (
         <div style={{ marginTop: 6, padding: '12px 14px', borderRadius: 10, background: 'var(--panel-2)', border: '1px solid var(--border)' }}>
@@ -1180,7 +1145,7 @@ function GenAI({ toast }: { toast: (m: string) => void }): JSX.Element {
       <div className="page-head">
         <div>
           <h1>Génération IA</h1>
-          <p>Inspire-toi d’un TikTok qui marche : idées, vidéo IA ou diaporama.</p>
+          <p>Colle un TikTok, Reel ou Short qui marche — l’IA le reproduit fidèlement en vidéo.</p>
         </div>
       </div>
       <div className="card">
