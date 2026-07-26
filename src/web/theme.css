@@ -1743,7 +1743,11 @@ textarea:focus {
   border: none;
   border-right: 1px solid var(--border);
   padding: 18px;
-  scrollbar-width: thin;
+  /* Défilement possible mais barre masquée (molette/trackpad/clavier). */
+  scrollbar-width: none;
+}
+.clip-side::-webkit-scrollbar {
+  display: none;
 }
 @media (max-width: 900px) {
   .clip-layout {
