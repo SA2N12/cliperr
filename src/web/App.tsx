@@ -1306,7 +1306,12 @@ function Clipage({ sources, clips, progress, onRefresh, toast }: { sources: Sour
   const focus = active ?? (viewId != null ? sources.find((s) => s.id === viewId) ?? null : null)
   const focusClips = focus ? clips.filter((c) => c.sourceId === focus.id).sort((a, b) => a.startSec - b.startSec) : []
   const isAiClip = (c: ClipDTO): boolean => (sources.find((s) => s.id === c.sourceId)?.url ?? '').startsWith('idea:')
-  const history = [...sources].filter((s) => s.status === 'done' || s.status === 'error').reverse()
+  // Historique des CLIPAGES : uploads + URL terminés/échoués, du plus récent au
+  // plus ancien. On exclut les sources `idea:*` (vidéos/carrousels du pilote auto,
+  // pas des découpages lancés ici) qui n'ont rien à faire dans cet historique.
+  const history = sources
+    .filter((s) => (s.status === 'done' || s.status === 'error') && !(s.url ?? '').startsWith('idea:'))
+    .sort((a, b) => b.createdAt - a.createdAt)
   const clipCountBySource = new Map<number, number>()
   for (const c of clips) clipCountBySource.set(c.sourceId, (clipCountBySource.get(c.sourceId) ?? 0) + 1)
 

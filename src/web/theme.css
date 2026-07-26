@@ -1717,15 +1717,19 @@ textarea:focus {
     animation: none;
   }
 }
-/* ── Clipage : barre latérale (historique / avancée) + espace de travail ── */
+/* ── Clipage : barre latérale (historique / avancée) + espace de travail ──
+   La barre est AFFLEURANTE : marge négative pour annuler le padding de .main
+   (0 marge autour), padding interne pour l'aération. Bordure à droite seule. */
 .clip-layout {
   display: flex;
-  gap: 18px;
+  gap: 0;
   align-items: flex-start;
+  margin: -14px -20px -28px;
 }
 .clip-workspace {
   flex: 1;
   min-width: 0;
+  padding: 14px 20px 28px;
 }
 .clip-side {
   width: 300px;
@@ -1733,21 +1737,25 @@ textarea:focus {
   position: sticky;
   top: 0;
   align-self: flex-start;
-  max-height: calc(100vh - var(--topbar-h) - 42px);
+  max-height: calc(100vh - var(--topbar-h));
   overflow-y: auto;
   background: var(--panel);
-  border: 1px solid var(--border);
-  padding: 14px;
+  border: none;
+  border-right: 1px solid var(--border);
+  padding: 18px;
   scrollbar-width: thin;
 }
 @media (max-width: 900px) {
   .clip-layout {
     flex-direction: column-reverse;
+    margin: -14px -20px -28px;
   }
   .clip-side {
-    width: 100%;
+    width: auto;
     position: static;
     max-height: none;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
   }
 }
 .clip-side-head {
