@@ -104,6 +104,8 @@ Règles de TEXTE (le plus important) :
 - Concret et vérifiable : des faits, des chiffres, des noms, des dates — jamais de généralités.
 - Sujets connus/googlables plutôt qu'obscurs : on doit pouvoir reconnaître de quoi on parle.
 
+⚠️ SÉCURITÉ (règles de la communauté TikTok — un manquement fait RETIRER le post et pénalise TOUT le compte) : reste FACTUEL et sobre. INTERDIT : détails graphiques (violence, mort, sang, corps), victimes réelles, crimes violents réels, suicide/automutilation, actes dangereux, désinformation présentée comme un fait. Choisis un sujet qui intrigue par le MYSTÈRE (phénomènes inexpliqués, énigmes historiques/scientifiques, curiosités) plutôt que par l'horreur — ça performe aussi bien sans se faire supprimer.
+
 Règles d'IMAGE (le générateur refuse sinon) : aucun ENFANT ni mineur, aucune personne réelle identifiable, pas de gore ni de contenu sexuel. Illustre autrement (objet, décor, document, symbole, main d'adulte).
 Chaque imagePrompt est en anglais, très détaillé, cinématographique, vertical, et NE CONTIENT AUCUN TEXTE (le texte est ajouté après).
 Garde une cohérence visuelle forte entre les ${SLIDES} diapos (même ambiance, même palette).
