@@ -2521,6 +2521,84 @@ textarea:focus {
 .genai-platforms .msym {
   color: var(--ap-green-strong);
 }
+/* Bouton « enregistrer pour plus tard » dans la barre : ghost, icône seule. */
+.btn.genai-save {
+  flex-shrink: 0;
+  margin: 5px 0;
+  padding: 10px 12px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+}
+.btn.genai-save:hover:not(:disabled) {
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+}
+.btn.genai-save:disabled {
+  opacity: 0.35;
+  background: transparent;
+}
+/* Liste « à reproduire plus tard ». */
+.genai-saved {
+  margin-top: 14px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+}
+.genai-saved-head {
+  padding: 11px 16px;
+  background: var(--panel-2);
+}
+.genai-saved-head h3 {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.genai-saved-n {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  padding: 1px 8px;
+  border-radius: 999px;
+}
+.genai-saved-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+}
+.genai-saved-ic {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+.genai-saved-url {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13.5px;
+  color: var(--text);
+}
+.genai-saved-url:hover {
+  text-decoration: underline;
+}
+.genai-saved-date {
+  color: var(--muted-2);
+  font-size: 12px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
 /* Étapes : 4 blocs en ligne, empilés sur mobile. */
 .genai-steps {
   display: grid;
@@ -2973,6 +3051,11 @@ input[type='checkbox'] {
   }
   .set-tab {
     flex: 0 0 auto;
+  }
+
+  /* Liens « à reproduire plus tard » : on masque la date pour aérer la ligne. */
+  .genai-saved-date {
+    display: none;
   }
 
   /* ── Pilote auto : le compte passe au-dessus de ses créneaux ── */

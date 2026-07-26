@@ -1039,20 +1039,75 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
   const [busy, setBusy] = useState(false)
   const [idea, setIdea] = useState<SavedIdea | null>(null)
   const [launched, setLaunched] = useState(false)
+  // Liens mis de côté pour être reproduits plus tard (persistés côté serveur
+  // via un flag JSON → on les retrouve depuis n'importe quel appareil).
+  const [saved, setSaved] = useState<{ url: string; addedAt: number }[]>([])
 
-  const inspire = async (): Promise<void> => {
-    if (!url.trim() || busy) return
+  useEffect(() => {
+    api.getFlag('genai_watchlist').then((r) => {
+      if (!r.value) return
+      try {
+        const a = JSON.parse(r.value) as { url?: unknown; addedAt?: unknown }[]
+        if (Array.isArray(a)) {
+          setSaved(
+            a.filter((x) => x && typeof x.url === 'string').map((x) => ({ url: String(x.url), addedAt: typeof x.addedAt === 'number' ? x.addedAt : Date.now() }))
+          )
+        }
+      } catch {
+        /* ignore */
+      }
+    }).catch(() => undefined)
+  }, [])
+
+  const persistSaved = (list: { url: string; addedAt: number }[]): void => {
+    setSaved(list)
+    void api.setFlag('genai_watchlist', JSON.stringify(list)).catch(() => undefined)
+  }
+
+  const inspire = async (srcUrl?: string): Promise<void> => {
+    const u = (srcUrl ?? url).trim()
+    if (!u || busy) return
     setBusy(true)
     setIdea(null)
     setLaunched(false)
     try {
-      const r = await api.inspireIdea(url.trim(), '', 'reproduce')
+      const r = await api.inspireIdea(u, '', 'reproduce')
       setIdea(r.idea)
     } catch (e) {
       toast('Erreur : ' + (e as Error).message)
     } finally {
       setBusy(false)
     }
+  }
+  // Mettre le lien de côté sans l'analyser : il rejoint la liste « plus tard ».
+  const saveLink = (): void => {
+    const u = url.trim()
+    if (!u) return
+    if (saved.some((s) => s.url === u)) {
+      toast('Ce lien est déjà enregistré')
+      setUrl('')
+      return
+    }
+    persistSaved([{ url: u, addedAt: Date.now() }, ...saved])
+    setUrl('')
+    toast('Lien enregistré — à reproduire quand tu veux')
+  }
+  const removeSaved = (u: string): void => persistSaved(saved.filter((s) => s.url !== u))
+  // Reproduire un lien enregistré : il quitte la liste et passe en analyse.
+  const reproduceSaved = (u: string): void => {
+    setUrl(u)
+    persistSaved(saved.filter((s) => s.url !== u))
+    void inspire(u)
+  }
+  const platformOf = (u: string): { icon: string; label: string } => {
+    if (/tiktok\.com/i.test(u)) return { icon: 'music_note', label: 'TikTok' }
+    if (/instagram\.com/i.test(u)) return { icon: 'photo_camera', label: 'Instagram' }
+    if (/youtube\.com|youtu\.be/i.test(u)) return { icon: 'smart_display', label: 'YouTube' }
+    return { icon: 'link', label: 'Lien' }
+  }
+  const ago = (t: number): string => {
+    const d = Math.floor((Date.now() - t) / 86400000)
+    return d <= 0 ? "aujourd'hui" : d === 1 ? 'hier' : `il y a ${d} j`
   }
   // Vidéo montée (voix off + images + sous-titres) — arrive dans « Clips ».
   const genVideo = async (): Promise<void> => {
@@ -1081,6 +1136,9 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
             /* eslint-disable-next-line jsx-a11y/no-autofocus */
             autoFocus
           />
+          <button className="btn genai-save" onClick={saveLink} disabled={busy || !url.trim()} title="Enregistrer ce lien pour le reproduire plus tard">
+            <MIcon name="bookmark_add" size={18} />
+          </button>
           <button className="btn primary genai-go" onClick={() => void inspire()} disabled={busy || !url.trim()}>
             {busy ? <><MIcon name="progress_activity" size={16} spin /> Analyse…</> : <><MIcon name="movie" size={16} /> Reproduire</>}
           </button>
@@ -1089,6 +1147,27 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
           <MIcon name="check_circle" size={13} /> Fonctionne avec <b>TikTok</b> · <b>Instagram Reels</b> · <b>YouTube Shorts</b> (10 min max)
         </div>
       </div>
+
+      {/* Liens mis de côté : à reproduire plus tard, d'un clic. */}
+      {saved.length > 0 && (
+        <div className="genai-saved clip-anim" style={{ animationDelay: '0.08s' }}>
+          <div className="genai-saved-head">
+            <h3><MIcon name="bookmark" size={16} /> À reproduire plus tard <span className="genai-saved-n">{saved.length}</span></h3>
+          </div>
+          {saved.map((s) => {
+            const p = platformOf(s.url)
+            return (
+              <div key={s.url} className="genai-saved-row">
+                <div className="genai-saved-ic" title={p.label}><MIcon name={p.icon} size={18} /></div>
+                <a className="genai-saved-url" href={s.url} target="_blank" rel="noreferrer" title={s.url}>{s.url}</a>
+                <span className="genai-saved-date">{ago(s.addedAt)}</span>
+                <button className="btn xsmall" onClick={() => reproduceSaved(s.url)} disabled={busy}><MIcon name="movie" size={13} /> Reproduire</button>
+                <button className="btn xsmall icon-btn" onClick={() => removeSaved(s.url)} title="Retirer de la liste"><MIcon name="delete" size={15} /></button>
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       {/* Comment ça marche — 4 étapes illustrées. */}
       <div className="genai-steps clip-anim" style={{ animationDelay: '0.1s' }}>
