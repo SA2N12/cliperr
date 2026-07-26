@@ -2528,10 +2528,13 @@ textarea:focus {
   margin: 5px 0;
   padding: 10px 14px;
 }
-.btn.genai-save:hover:not(:disabled) {
+/* Actif (un lien est prêt à enregistrer) : bordure + texte NOIRS → bien marqué. */
+.btn.genai-save:not(:disabled) {
   border-color: var(--accent);
-  background: var(--accent-soft);
   color: var(--accent-strong);
+}
+.btn.genai-save:hover:not(:disabled) {
+  background: var(--accent-soft);
 }
 .btn.genai-save:disabled {
   opacity: 0.4;
