@@ -2257,6 +2257,188 @@ textarea:focus {
   padding: 3px 12px;
 }
 
+/* ── Fournisseurs : page pleine hauteur, sans scroll, grille 2 colonnes ── */
+.prov-fit {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.prov-fit > .page-head {
+  flex-shrink: 0;
+}
+/* Bandeau récap : une carte, trois segments séparés par un filet vertical. */
+.prov-summary {
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border: 1px solid var(--border);
+  background: var(--panel);
+  margin-bottom: 12px;
+}
+.prov-summary > div {
+  padding: 12px 18px;
+  border-left: 1px solid var(--border);
+}
+.prov-summary > div:first-child {
+  border-left: 0;
+}
+.prov-summary .lbl {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.prov-summary .val {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  margin-top: 3px;
+  font-variant-numeric: tabular-nums;
+}
+.prov-summary .val small {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--muted-2);
+}
+.prov-summary .sub {
+  color: var(--muted);
+  font-size: 11.5px;
+  margin-top: 2px;
+}
+/* Grille des fournisseurs : remplit pile la hauteur restante (5 lignes 1fr). */
+.prov-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-auto-rows: 1fr;
+  gap: 10px;
+}
+.prov-tile {
+  display: grid;
+  grid-template-columns: 42px 1fr auto;
+  align-items: center;
+  gap: 14px;
+  min-height: 0;
+  padding: 0 16px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  transition: border-color 0.12s ease;
+}
+.prov-tile:hover {
+  border-color: var(--muted-2);
+}
+/* Essentiel manquant : alerte discrète (bordure + fond rougeâtres). */
+.prov-tile.is-missing {
+  border-color: #f0c9c9;
+  background: #fdf7f7;
+}
+.prov-ic {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  background: var(--accent);
+  color: #fff;
+}
+.prov-tile.is-off .prov-ic {
+  background: var(--accent-soft-2);
+  color: var(--muted);
+}
+.prov-tile.is-missing .prov-ic {
+  background: var(--bad);
+  color: #fff;
+}
+.prov-body {
+  min-width: 0;
+}
+.prov-name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+.prov-name > span:first-child {
+  font-weight: 700;
+  font-size: 14.5px;
+  letter-spacing: -0.01em;
+}
+.prov-role {
+  color: var(--muted);
+  font-size: 12.5px;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.prov-cost {
+  color: var(--muted-2);
+  font-size: 11.5px;
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.prov-tag {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  padding: 1px 6px;
+}
+.prov-tag.alt {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent-soft-2);
+}
+.prov-status {
+  align-self: start;
+  margin-top: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.prov-status i {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+.prov-status.ok {
+  color: var(--good);
+}
+.prov-status.ok i {
+  background: var(--good);
+}
+.prov-status.bad {
+  color: var(--bad);
+}
+.prov-status.bad i {
+  background: var(--bad);
+}
+.prov-status.warn {
+  color: #b45309;
+}
+.prov-status.warn i {
+  background: #d97706;
+}
+.prov-status.off {
+  color: var(--muted-2);
+}
+.prov-status.off i {
+  background: var(--muted-2);
+}
+
 /* ── Génération IA : barre « coller un lien » + étapes ── */
 .genai-bar {
   display: flex;

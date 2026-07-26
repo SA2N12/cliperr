@@ -3187,43 +3187,41 @@ function Providers({ go }: { go: (p: Page) => void }): JSX.Element {
       setChecking(false)
     }
   }
-  // Badge d'état EN DIRECT (après « Vérifier l'état ») pour les fournisseurs pingables.
-  const LIVE_STYLE: Record<string, { txt: string; color: string; bg: string; bd: string } | null> = {
-    ok: { txt: '✓ Opérationnel', color: 'var(--good)', bg: '#e9f9ef', bd: '#b7ebc6' },
-    credits: { txt: '⚠ Crédits épuisés', color: 'var(--bad)', bg: '#fdeaea', bd: '#f6c9c9' },
-    invalid: { txt: '✗ Clé invalide', color: 'var(--bad)', bg: '#fdeaea', bd: '#f6c9c9' },
-    error: { txt: '⚠ Injoignable', color: '#b45309', bg: '#fff7ed', bd: '#fed7aa' },
-    unconfigured: null
-  }
-  const liveBadge = (id: string): JSX.Element | null => {
-    const c = live?.[id]
-    if (!c) return null
-    const m = LIVE_STYLE[c.state]
-    if (!m) return null
-    return (
-      <span
-        title={c.detail}
-        style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, padding: '4px 12px', borderRadius: 999, color: m.color, background: m.bg, border: `1px solid ${m.bd}` }}
-      >
-        {m.txt}
-      </span>
-    )
-  }
   const st = data?.providers ?? {}
   const nConf = PROVIDER_META.filter((p) => st[p.id]).length
+  // Petite étiquette contextuelle (voix off active, moteur Veo…).
   const note = (id: string): string | null => {
     if (id === 'openai' && data?.voiceProvider === 'openai') return 'Voix off active'
     if (id === 'elevenlabs' && data?.voiceProvider === 'elevenlabs' && st.elevenlabs) return 'Voix off active'
-    if (id === 'elevenlabs' && st.elevenlabs && data?.voiceProvider !== 'elevenlabs') return 'Configuré, mais OpenAI est actif'
-    if (id === 'gemini' && data?.seriesEngine === 'veo' && st.gemini) return 'Moteur Veo activé (séries)'
+    if (id === 'elevenlabs' && st.elevenlabs && data?.voiceProvider !== 'elevenlabs') return 'OpenAI est actif'
+    if (id === 'gemini' && data?.seriesEngine === 'veo' && st.gemini) return 'Moteur Veo (séries)'
     return null
   }
+  // Icône Material par fournisseur.
+  const ICON: Record<string, string> = {
+    claude: 'auto_awesome', openai: 'image', uploadpost: 'ios_share', elevenlabs: 'record_voice_over',
+    gemini: 'auto_awesome_motion', fal: 'animation', groq: 'subtitles', rapidapi: 'trending_up',
+    cookies: 'cookie', proxy: 'vpn_lock'
+  }
+  // État unifié : la vérification EN DIRECT prime sur l'état « configuré ».
+  const statusOf = (p: { id: string; essential: boolean }): { cls: string; txt: string; title?: string } => {
+    const c = live?.[p.id]
+    if (c && c.state !== 'unconfigured') {
+      if (c.state === 'ok') return { cls: 'ok', txt: 'Opérationnel', title: c.detail }
+      if (c.state === 'credits') return { cls: 'bad', txt: 'Crédits épuisés', title: c.detail }
+      if (c.state === 'invalid') return { cls: 'bad', txt: 'Clé invalide', title: c.detail }
+      if (c.state === 'error') return { cls: 'warn', txt: 'Injoignable', title: c.detail }
+    }
+    if (st[p.id]) return { cls: 'ok', txt: 'Configuré' }
+    if (p.essential) return { cls: 'bad', txt: 'Manquant' }
+    return { cls: 'off', txt: 'Non configuré' }
+  }
   return (
-    <>
+    <div className="prov-fit">
       <div className="page-head">
         <div>
           <h1>Fournisseurs</h1>
-          <p>Services externes du projet — état et coûts. Configure/modifie les clés dans les Réglages.</p>
+          <p>Services externes du projet — état et coûts.</p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className="btn primary" onClick={() => void runCheck()} disabled={checking} title="Ping chaque service pour vérifier crédits et clé">
@@ -3233,60 +3231,46 @@ function Providers({ go }: { go: (p: Page) => void }): JSX.Element {
         </div>
       </div>
 
-      <div className="grid-3" style={{ marginBottom: 16 }}>
-        <div className="card">
-          <div className="muted small">Fournisseurs configurés</div>
-          <div style={{ fontSize: 30, fontWeight: 700 }}>{nConf}<span className="muted" style={{ fontSize: 18 }}> / {PROVIDER_META.length}</span></div>
+      <div className="prov-summary">
+        <div>
+          <div className="lbl">Fournisseurs configurés</div>
+          <div className="val">{nConf}<small> / {PROVIDER_META.length}</small></div>
         </div>
-        <div className="card">
-          <div className="muted small">Dépense Claude suivie</div>
-          <div style={{ fontSize: 30, fontWeight: 700 }}>{spend ? `$${spend.usd.toFixed(2)}` : '—'}</div>
-          <div className="muted small">cumul depuis la dernière remise à zéro</div>
+        <div>
+          <div className="lbl">Dépense Claude suivie</div>
+          <div className="val">{spend ? `$${spend.usd.toFixed(2)}` : '—'}</div>
+          <div className="sub">cumul depuis la dernière remise à zéro</div>
         </div>
-        <div className="card">
-          <div className="muted small">Voix off active</div>
-          <div style={{ fontSize: 20, fontWeight: 700, marginTop: 6 }}>{data?.voiceProvider === 'elevenlabs' ? 'ElevenLabs' : 'OpenAI'}</div>
-          <div className="muted small">Séries : moteur {data?.seriesEngine === 'veo' ? 'Veo (voix native)' : data?.seriesEngine ?? '—'}</div>
+        <div>
+          <div className="lbl">Voix off active</div>
+          <div className="val">{data?.voiceProvider === 'elevenlabs' ? 'ElevenLabs' : 'OpenAI'}</div>
+          <div className="sub">Séries : moteur {data?.seriesEngine === 'veo' ? 'Veo (voix native)' : data?.seriesEngine ?? '—'}</div>
         </div>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div className="prov-grid">
         {PROVIDER_META.map((p) => {
           const on = !!st[p.id]
           const n = note(p.id)
+          const s = statusOf(p)
           return (
-            <div key={p.id} className="card" style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-              <div style={{ flex: 1, minWidth: 220 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <span style={{ fontWeight: 700 }}>{p.name}</span>
-                  {p.essential && <span className="chip" style={{ fontSize: 10 }}>essentiel</span>}
-                  {n && <span className="pill-badge" style={{ fontSize: 11 }}>{n}</span>}
+            <div key={p.id} className={`prov-tile ${on ? '' : p.essential ? 'is-missing' : 'is-off'}`}>
+              <div className="prov-ic"><MIcon name={ICON[p.id] ?? 'extension'} size={21} /></div>
+              <div className="prov-body">
+                <div className="prov-name">
+                  <span>{p.name}</span>
+                  {p.essential && <span className="prov-tag">essentiel</span>}
+                  {n && <span className="prov-tag alt">{n}</span>}
                 </div>
-                <div className="muted small" style={{ marginTop: 2 }}>{p.role}</div>
-                <div className="small" style={{ marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>💳 {p.cost}</div>
+                <div className="prov-role">{p.role}</div>
+                <div className="prov-cost">{p.cost}</div>
               </div>
-              {/* État EN DIRECT (après vérification) prioritaire sur l'état « configuré ». */}
-              {liveBadge(p.id) ?? (
-                <span
-                  style={{
-                    flexShrink: 0,
-                    fontSize: 12,
-                    fontWeight: 700,
-                    padding: '4px 12px',
-                    borderRadius: 999,
-                    color: on ? 'var(--good)' : p.essential ? 'var(--bad)' : 'var(--muted)',
-                    background: on ? '#e9f9ef' : p.essential ? '#fdeaea' : 'var(--panel-2)',
-                    border: `1px solid ${on ? '#b7ebc6' : p.essential ? '#f6c9c9' : 'var(--border)'}`
-                  }}
-                >
-                  {on ? '✓ Configuré' : p.essential ? '✗ Manquant' : '– Non configuré'}
-                </span>
-              )}
+              <span className={`prov-status ${s.cls}`} title={s.title}><i />{s.txt}</span>
             </div>
           )
         })}
       </div>
-    </>
+    </div>
   )
 }
 
