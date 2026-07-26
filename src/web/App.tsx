@@ -3274,7 +3274,16 @@ function Providers({ go }: { go: (p: Page) => void }): JSX.Element {
   )
 }
 
+const SET_TABS: { id: string; label: string }[] = [
+  { id: 'ia', label: 'IA (Claude)' },
+  { id: 'download', label: 'Téléchargement' },
+  { id: 'genai', label: 'Génération vidéos' },
+  { id: 'links', label: 'Liens courts' },
+  { id: 'transcribe', label: 'Transcription & recadrage' },
+  { id: 'publish', label: 'Publication' }
+]
 function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProfile: (p: { nickname: string | null; avatarUrl: string | null }) => void }): JSX.Element {
+  const [tab, setTab] = useState('ia')
   const [flags, setFlags] = useState<Record<string, string>>({})
   const [apiKey, setApiKey] = useState('')
   const [keyStatus, setKeyStatus] = useState<{ has: boolean; masked: string | null }>({ has: false, masked: null })
@@ -3375,7 +3384,14 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
     <>
       <div className="page-head"><div><h1>Réglages</h1><p>Clés, modèle IA, transcription, recadrage, publication et planification.</p></div></div>
 
-      <div className="card" style={{ marginBottom: 16 }}>
+      <div className="set-tabs">
+        {SET_TABS.map((t) => (
+          <button key={t.id} className={`set-tab ${tab === t.id ? 'on' : ''}`} onClick={() => setTab(t.id)}>{t.label}</button>
+        ))}
+      </div>
+
+      {tab === 'ia' && (
+      <div className="card">
         <h3 style={{ marginTop: 0 }}>IA (Claude)</h3>
         <Field label={keyStatus.has ? `Clé configurée ✓ (${keyStatus.masked})` : 'Clé API Anthropic'}>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -3398,8 +3414,10 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
           </select>
         </Field>
       </div>
+      )}
 
-      <div className="card" style={{ marginBottom: 16 }}>
+      {tab === 'download' && (
+      <div className="card">
         <h3 style={{ marginTop: 0 }}>Téléchargement des vidéos (clips YouTube)</h3>
         <p className="small" style={{ marginTop: 0 }}>
           Sur le serveur, YouTube exige une session connectée pour télécharger
@@ -3440,8 +3458,10 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
           <div className="muted small" style={{ marginTop: 6 }}>Sert à la recherche et au choix automatique des vidéos à cliper. Son téléchargement direct est souvent bloqué par YouTube (403) — privilégie les cookies ci-dessus.</div>
         </Field>
       </div>
+      )}
 
-      <div className="card" style={{ marginBottom: 16 }}>
+      {tab === 'genai' && (
+      <div className="card">
         <h3 style={{ marginTop: 0 }}>Génération de vidéos (IA)</h3>
         <p className="small" style={{ marginTop: 0 }}>
           Sert à produire les vidéos verticales du pilote auto : voix off + images IA + sous-titres.
@@ -3507,8 +3527,10 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
           </div>
         </Field>
       </div>
+      )}
 
-      <div className="card" style={{ marginBottom: 16 }}>
+      {tab === 'links' && (
+      <div className="card">
         <h3 style={{ marginTop: 0 }}>Liens courts (bio TikTok)</h3>
         <p className="small" style={{ marginTop: 0 }}>
           Adresses courtes <b>publiques</b> qui redirigent vers tes liens (affiliés…) : <b>cliperr.juleslecorre.fr/nom</b>.
@@ -3528,8 +3550,10 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
           <button className="btn primary" onClick={() => void saveLinks()}>Enregistrer</button>
         </div>
       </div>
+      )}
 
-      <div className="card" style={{ marginBottom: 16 }}>
+      {tab === 'transcribe' && (
+      <div className="card">
         <h3 style={{ marginTop: 0 }}>Transcription &amp; recadrage</h3>
         <Field label="Transcription + sous-titres">
           <label className="small"><input type="checkbox" checked={flags.transcribe_enabled === '1'} onChange={(e) => setFlag('transcribe_enabled', e.target.checked ? '1' : '0')} /> Activer</label>
@@ -3555,8 +3579,10 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
           </select>
         </Field>
       </div>
+      )}
 
-      <div className="card" style={{ marginBottom: 16 }}>
+      {tab === 'publish' && (
+      <div className="card">
         <h3 style={{ marginTop: 0 }}>Publication</h3>
         <Field label="Mode">
           <select value={flags.publish_mode || 'export'} onChange={(e) => setFlag('publish_mode', e.target.value)}>
@@ -3637,6 +3663,7 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
           </div>
         </Field>
       </div>
+      )}
 
     </>
   )
