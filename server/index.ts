@@ -1378,7 +1378,7 @@ app.post('/api/clips/:id/publish', wrap(async (req, res) => {
 // Pipeline
 app.post('/api/pipeline/run', wrap((req, res) => {
   const sourceId = Number(req.body?.sourceId)
-  const clipCount = Math.min(10, Math.max(1, Math.round(Number(req.body?.clipCount ?? 3))))
+  const clipCount = Math.min(30, Math.max(1, Math.round(Number(req.body?.clipCount ?? 3))))
   if (!sourceId) return res.status(400).json({ error: 'sourceId manquant' })
   // Portion à cliper (optionnelle) : ne télécharge/analyse que cet intervalle.
   const s = Number(req.body?.startSec)

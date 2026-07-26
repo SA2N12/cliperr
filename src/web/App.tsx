@@ -1497,8 +1497,8 @@ function Clipage({ sources, clips, progress, onRefresh, toast }: { sources: Sour
           <label className="muted small" style={{ margin: 0 }}>Nombre de clips à générer</label>
           <span className="clip-count-badge">{clipCount}</span>
         </div>
-        <input type="range" min={1} max={10} value={clipCount} onChange={(e) => setClipCount(Number(e.target.value))} style={{ width: '100%', marginTop: 10 }} />
-        <div className="clip-count-scale"><span>1</span><span>10</span></div>
+        <input type="range" min={1} max={30} value={clipCount} onChange={(e) => setClipCount(Number(e.target.value))} style={{ width: '100%', marginTop: 10 }} />
+        <div className="clip-count-scale"><span>1</span><span>30</span></div>
 
         <button
           className="btn primary clip-launch"
@@ -1552,7 +1552,7 @@ function History({ sources, clips, onRefresh, toast, goClips }: { sources: Sourc
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <label className="muted small" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                   Clips
-                  <input type="number" min={1} max={10} value={counts[s.id] ?? 3} disabled={busy(s.status)} onChange={(e) => setCounts((m) => ({ ...m, [s.id]: Math.min(10, Math.max(1, Math.round(Number(e.target.value) || 1))) }))} style={{ width: 56 }} />
+                  <input type="number" min={1} max={30} value={counts[s.id] ?? 3} disabled={busy(s.status)} onChange={(e) => setCounts((m) => ({ ...m, [s.id]: Math.min(30, Math.max(1, Math.round(Number(e.target.value) || 1))) }))} style={{ width: 56 }} />
                 </label>
                 <button className="btn" onClick={() => run(s.id)} disabled={busy(s.status)}>{busy(s.status) ? '…' : 'Relancer'}</button>
                 <button className="btn" onClick={goClips}>Voir clips</button>
