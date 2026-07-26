@@ -2803,3 +2803,231 @@ input[type='checkbox'] {
   letter-spacing: -0.02em;
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   RESPONSIVE TÉLÉPHONE (≤ 768 px)
+   • navigation = barre d'icônes en bas (réutilise .sidebar)
+   • barre du haut compacte (pas de recherche)
+   • pages « pleine hauteur » → défilement naturel
+   • grilles/tableaux → 1 colonne, volets → plein écran
+   ══════════════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  /* ── Coquille : une seule colonne, la barre du haut reste, le contenu défile ── */
+  .app,
+  .app:has(.sidebar.expanded),
+  .app:has(.side-panel),
+  .app:has(.sidebar.expanded):has(.side-panel) {
+    grid-template-columns: 1fr;
+  }
+  .main {
+    grid-column: 1;
+    padding: 12px 14px calc(66px + env(safe-area-inset-bottom, 0px));
+  }
+  .card {
+    padding: 14px;
+  }
+  /* Titre au-dessus, actions en dessous (jamais tronquées). */
+  .page-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .page-head h1 {
+    font-size: 22px;
+  }
+
+  /* ── Barre du haut compacte ── */
+  .topbar {
+    gap: 8px;
+    padding-right: 10px;
+  }
+  .topbar .tb-search {
+    display: none;
+  }
+  .topbar .tb-picker {
+    max-width: 48vw;
+    overflow: hidden;
+    padding: 6px;
+    font-size: 13px;
+  }
+  /* Console → icône seule (le libellé texte est masqué par font-size:0). */
+  .topbar .tb-console {
+    padding: 8px;
+    gap: 0;
+    font-size: 0;
+  }
+
+  /* ── Navigation en BAS : la sidebar devient une barre d'icônes horizontale ── */
+  .sidebar {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    height: 58px;
+    flex-direction: row;
+    align-items: stretch;
+    padding: 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    gap: 0;
+    border-right: none;
+    border-top: 1px solid var(--border);
+    overflow-x: hidden;
+    overflow-y: hidden;
+    transition: none;
+  }
+  .sidebar.expanded,
+  .sidebar.collapsed,
+  .sidebar.hoverable:hover {
+    width: 100%;
+  }
+  .sidebar > * {
+    width: auto !important;
+  }
+  /* Les groupes s'effacent (display:contents) → leurs boutons deviennent les
+     items de la barre ; l'espaceur et le contrôle d'affichage disparaissent. */
+  .sidebar > div {
+    display: contents;
+  }
+  .sidebar > .spacer,
+  .sidebar > div:last-child {
+    display: none !important;
+  }
+  .nav-sep-line {
+    display: none !important;
+  }
+  .sidebar .nav-item,
+  .sidebar.expanded .nav-item,
+  .sidebar.hoverable:hover .nav-item {
+    flex: 1 1 0;
+    min-width: 0;
+    width: auto !important;
+    height: 100%;
+    margin: 0 !important;
+    padding: 0 !important;
+    flex-direction: column;
+    gap: 3px;
+    justify-content: center;
+    border-radius: 0;
+    color: var(--muted-2);
+  }
+  .sidebar .nav-item .lbl {
+    display: none;
+  }
+  .sidebar .nav-item svg {
+    width: 22px;
+    height: 22px;
+  }
+  .sidebar .nav-item.active {
+    background: none;
+    color: var(--accent-strong);
+    box-shadow: inset 0 2px 0 var(--accent);
+  }
+
+  /* ── Pages « pleine hauteur » → défilement naturel ── */
+  .dash-fit,
+  .ap-fit,
+  .hist-fit,
+  .prov-fit {
+    height: auto;
+    min-height: 0;
+    display: block;
+  }
+  .ap-fit > .ap-plan-card {
+    display: block;
+  }
+  .ap-fit .ap-rows {
+    overflow: visible !important;
+  }
+
+  /* ── Grilles → 1 colonne ── */
+  .grid-3,
+  .grid-2 {
+    grid-template-columns: 1fr;
+  }
+  .dash-row {
+    grid-template-columns: 1fr !important;
+  }
+  .stat-grid .value {
+    font-size: 26px;
+  }
+  .prov-grid {
+    grid-template-columns: 1fr;
+    grid-auto-rows: auto;
+  }
+  .prov-summary {
+    grid-template-columns: 1fr;
+  }
+  .prov-summary > div {
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
+  .prov-summary > div:first-child {
+    border-top: none;
+  }
+
+  /* ── Onglets Réglages : bande défilante horizontale ── */
+  .set-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+  .set-tab {
+    flex: 0 0 auto;
+  }
+
+  /* ── Pilote auto : le compte passe au-dessus de ses créneaux ── */
+  .ap-acc-row {
+    flex-direction: column;
+    align-items: stretch !important;
+  }
+  .ap-acc-row > div:first-child {
+    width: auto !important;
+  }
+
+  /* ── Historique : on masque « clips » et « date », plus de largeur mini ── */
+  .hist-fit > .hist-table {
+    display: block;
+    overflow-x: hidden;
+  }
+  .hist-head,
+  .hist-row {
+    grid-template-columns: 1fr auto auto;
+    min-width: 0;
+    gap: 10px;
+    padding: 9px 12px;
+  }
+  .hist-head > :nth-child(3),
+  .hist-head > :nth-child(4),
+  .hist-row > :nth-child(3),
+  .hist-row > :nth-child(4) {
+    display: none;
+  }
+
+  /* ── Volets (réglages compte/créneau, console) → plein écran ── */
+  .side-panel,
+  .app:has(.sidebar.expanded) .side-panel {
+    left: 0;
+    width: 100%;
+    max-width: 100%;
+    z-index: 90;
+  }
+  .console-panel {
+    width: 100%;
+    z-index: 90;
+  }
+  .console-backdrop {
+    z-index: 89;
+  }
+
+  /* ── Widget de génération : au-dessus de la barre de nav ── */
+  .genw {
+    bottom: 70px !important;
+  }
+
+  /* ── Écran de connexion ── */
+  .login-card {
+    width: 100%;
+    max-width: calc(100vw - 32px);
+  }
+}
+

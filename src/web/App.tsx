@@ -116,7 +116,7 @@ function GenerationsWidget({ sources, progress, ideaVideo }: { sources: SourceDT
   if (!items.length) return null
 
   return (
-    <div style={{ position: 'fixed', right: 16, bottom: 16, zIndex: 60, width: open ? 330 : 'auto', maxWidth: 'calc(100vw - 32px)' }}>
+    <div className="genw" style={{ position: 'fixed', right: 16, bottom: 16, zIndex: 60, width: open ? 330 : 'auto', maxWidth: 'calc(100vw - 32px)' }}>
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
         <button onClick={() => setOpen((o) => !o)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', background: 'var(--accent)', color: '#fff', border: 0, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
           <span className="dot" style={{ background: '#fff' }} />
