@@ -1068,25 +1068,53 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
 
   return (
     <div>
-      <input
-        className="input-full"
-        placeholder="Lien TikTok, Instagram (Reel) ou YouTube Short…"
-        value={url}
-        onChange={(e) => setUrl(e.target.value)}
-        onKeyDown={(e) => e.key === 'Enter' && void inspire()}
-      />
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
-        <button className="btn primary" onClick={() => void inspire()} disabled={busy || !url.trim()} style={{ marginLeft: 'auto' }}>
-          <Icon name="bulb" size={15} /> {busy ? 'Analyse en cours…' : 'Reproduire la vidéo'}
-        </button>
+      {/* Barre « coller un lien → reproduire » : champ + bouton attachés. */}
+      <div className="card clip-hero clip-anim" style={{ animationDelay: '0.05s' }}>
+        <div className={`genai-bar${url.trim() ? ' filled' : ''}`}>
+          <Icon name="sources" size={18} />
+          <input
+            className="genai-input"
+            placeholder="Colle un lien TikTok, Instagram (Reel) ou YouTube Short…"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && void inspire()}
+            /* eslint-disable-next-line jsx-a11y/no-autofocus */
+            autoFocus
+          />
+          <button className="btn primary genai-go" onClick={() => void inspire()} disabled={busy || !url.trim()}>
+            {busy ? <><MIcon name="progress_activity" size={16} spin /> Analyse…</> : <><MIcon name="movie" size={16} /> Reproduire</>}
+          </button>
+        </div>
+        <div className="genai-platforms">
+          <MIcon name="check_circle" size={13} /> Fonctionne avec <b>TikTok</b> · <b>Instagram Reels</b> · <b>YouTube Shorts</b> (10 min max)
+        </div>
       </div>
-      <p className="muted small" style={{ marginTop: 10 }}>
-        La vidéo est téléchargée, transcrite et analysée visuellement, puis l’IA la <b>reproduit fidèlement</b> : même sujet, même déroulé, même chute et même style. La <b>voix s’adapte à la source</b> : une voix par personnage si c’est un dialogue, une seule voix off sinon. <b>Aucune musique n’est ajoutée</b> (la bande-son fait partie de la source) et les scènes sont <b>animées</b> si ta clé fal.ai est configurée, sinon ce sera un enchaînement d’images. Compte 1 à 2 minutes.
+
+      {/* Comment ça marche — 4 étapes illustrées. */}
+      <div className="genai-steps clip-anim" style={{ animationDelay: '0.1s' }}>
+        {([
+          ['upload', 'Téléchargement', 'La vidéo source est récupérée'],
+          ['palette', 'Analyse', 'Transcription + style visuel décodés'],
+          ['movie', 'Reproduction', 'Recréée à l’identique — voix adaptée, scènes animées'],
+          ['check_circle', 'Prête', 'Arrive dans « Clips », prête à publier']
+        ] as const).map(([icon, title, desc], i) => (
+          <div key={title} className="genai-step">
+            <div className="genai-step-ic"><MIcon name={icon} size={18} /></div>
+            <div>
+              <div className="genai-step-t"><span className="genai-step-n">{i + 1}</span>{title}</div>
+              <div className="muted small">{desc}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <p className="muted small clip-anim" style={{ marginTop: 12, animationDelay: '0.14s' }}>
+        La <b>voix s’adapte à la source</b> : une voix par personnage si c’est un dialogue, une seule voix off sinon. <b>Aucune musique ajoutée</b> (elle fait partie de la source). Les scènes sont <b>animées</b> (Veo / fal.ai) si tes clés sont configurées. Compte 1 à 2 minutes.
       </p>
       {busy && (
-        <div style={{ marginTop: 6, padding: '12px 14px', borderRadius: 10, background: 'var(--panel-2)', border: '1px solid var(--border)' }}>
+        <div className="genai-progress clip-anim" style={{ marginTop: 12 }}>
           <div className="small" style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <MIcon name="progress_activity" size={14} spin /> Téléchargement → transcription → écriture de l’idée…
+            <MIcon name="progress_activity" size={14} spin /> Téléchargement → transcription → analyse → écriture…
           </div>
           <div className="muted small" style={{ marginTop: 3 }}>1 à 2 minutes selon la durée de la vidéo source.</div>
         </div>
@@ -1142,15 +1170,13 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
 function GenAI({ toast }: { toast: (m: string) => void }): JSX.Element {
   return (
     <>
-      <div className="page-head">
+      <div className="page-head clip-anim">
         <div>
           <h1>Génération IA</h1>
           <p>Colle un TikTok, Reel ou Short qui marche — l’IA le reproduit fidèlement en vidéo.</p>
         </div>
       </div>
-      <div className="card">
-        <InspireTab toast={toast} />
-      </div>
+      <InspireTab toast={toast} />
     </>
   )
 }
