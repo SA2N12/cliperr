@@ -1450,8 +1450,8 @@ app.post('/api/ideas/inspire', wrap(async (req, res) => {
   const url = String(req.body?.url ?? '').trim()
   const niche = String(req.body?.niche ?? '').trim().slice(0, 120)
   const mode: 'reproduce' | 'inspire' = (req.body as { mode?: unknown })?.mode === 'inspire' ? 'inspire' : 'reproduce'
-  if (!/^https?:\/\/([\w-]+\.)*(tiktok\.com|youtube\.com|youtu\.be)\//i.test(url)) {
-    return res.status(400).json({ error: 'Colle un lien TikTok (ou YouTube Short) valide.' })
+  if (!/^https?:\/\/([\w-]+\.)*(tiktok\.com|youtube\.com|youtu\.be|instagram\.com)\//i.test(url)) {
+    return res.status(400).json({ error: 'Colle un lien TikTok, Instagram (Reel) ou YouTube Short valide.' })
   }
   // Les liens courts vm.tiktok.com masquent parfois un DIAPORAMA PHOTO (/photo/),
   // que yt-dlp ne sait pas télécharger. On résout la redirection d'abord :

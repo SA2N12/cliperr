@@ -1090,7 +1090,7 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
       </div>
       <input
         className="input-full"
-        placeholder="Lien de la vidéo TikTok à reproduire — https://www.tiktok.com/@…/video/…"
+        placeholder="Lien TikTok, Instagram (Reel) ou YouTube Short…"
         value={url}
         onChange={(e) => setUrl(e.target.value)}
         onKeyDown={(e) => e.key === 'Enter' && void inspire()}
