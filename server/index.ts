@@ -2040,7 +2040,9 @@ app.post('/api/providers/check', wrap(async (_req, res) => {
     if (!key) return { state: 'unconfigured' }
     const to = withTimeout(15000)
     try {
-      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
+      // `gemini-flash-latest` : alias TOUJOURS disponible (les noms versionnés type
+      // gemini-2.5-flash sont bloqués « no longer available to new users » → 404).
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${key}`, {
         method: 'POST',
         signal: to.signal,
         headers: { 'content-type': 'application/json' },
