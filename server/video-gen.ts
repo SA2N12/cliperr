@@ -317,6 +317,37 @@ export async function listElevenVoices(key: string): Promise<{ id: string; name:
   return (j.voices ?? []).map((v) => ({ id: v.voice_id, name: v.name }))
 }
 
+/** Voix du compte avec leur genre (label ElevenLabs) → casting par personnage. */
+async function elevenVoicePool(key: string): Promise<{ id: string; name: string; gender: string }[]> {
+  const res = await fetch(`${ELEVEN}/voices`, { headers: { 'xi-api-key': key } })
+  if (!res.ok) throw new Error(`ElevenLabs voices ${res.status}`)
+  const j = (await res.json()) as { voices?: { voice_id: string; name: string; labels?: Record<string, string> }[] }
+  return (j.voices ?? []).map((v) => ({ id: v.voice_id, name: v.name, gender: (v.labels?.gender ?? '').toLowerCase() }))
+}
+/** Attribue à CHAQUE personnage une voix ElevenLabs DISTINCTE (genre respecté si
+ *  possible) → voix naturelles ET différenciables, constantes toute la vidéo. */
+function assignElevenVoices(pool: { id: string; name: string; gender: string }[], cast: CastMember[]): Map<string, string> {
+  const map = new Map<string, string>()
+  if (!pool.length) return map
+  const used = new Set<string>()
+  const wanted = (m: CastMember): string => {
+    const s = `${m.voiceSignature ?? ''} ${m.style ?? ''} ${m.name ?? ''}`.toLowerCase()
+    if (/\b(female|woman|girl|mother|m[eè]re|maman|femme|fille|feminine|soprano|high[- ]pitched)\b/.test(s)) return 'female'
+    if (/\b(male|man|boy|father|p[eè]re|papa|homme|gar[çc]on|masculine|deep|gravelly|baritone|bass)\b/.test(s)) return 'male'
+    return ''
+  }
+  for (const m of cast) {
+    const want = wanted(m)
+    const pick =
+      (want ? pool.find((v) => !used.has(v.id) && v.gender === want) : undefined) ??
+      pool.find((v) => !used.has(v.id)) ??
+      pool[0]
+    used.add(pick.id)
+    map.set(m.name.trim().toLowerCase(), pick.id)
+  }
+  return map
+}
+
 async function openaiSpeech(openaiKey: string, voice: string, text: string, instructions: string): Promise<Buffer> {
   // Voix inconnue (ex. un ID ElevenLabs en repli) → voix OpenAI sûre.
   const v = OPENAI_VOICES.includes(voice) ? voice : 'ash'
@@ -708,6 +739,24 @@ export async function generateVideoFromIdea(
   if (!scenes.length) throw new Error('Storyboard vide — réessaie')
   const castMap = new Map(cast.map((c) => [c.name.trim().toLowerCase(), c]))
 
+  // Reproduction dialoguée en ElevenLabs : on répartit des voix HUMAINES distinctes
+  // par personnage (naturelles + constantes) au lieu du TTS OpenAI (robotique).
+  const elevenMode = opts.voiceProvider === 'elevenlabs' && !!opts.elevenKey
+  let elevenCast = new Map<string, string>()
+  let elevenFallbackVoice = opts.voice || ''
+  if (elevenMode && opts.dialogue && cast.length && opts.elevenKey) {
+    try {
+      const pool = await elevenVoicePool(opts.elevenKey)
+      if (pool.length) {
+        if (!elevenFallbackVoice) elevenFallbackVoice = pool[0].id
+        elevenCast = assignElevenVoices(pool, cast)
+        log?.(`Voix ElevenLabs par personnage : ${cast.map((c) => c.name).join(', ')}`)
+      }
+    } catch (e) {
+      log?.(`ElevenLabs : liste des voix indisponible (${e instanceof Error ? e.message : String(e)}) → voix unique du compte`)
+    }
+  }
+
   const stamp = Date.now()
   const work = join(ctx.dirs.downloads, `idea-${stamp}`)
   await mkdir(work, { recursive: true })
@@ -781,10 +830,12 @@ export async function generateVideoFromIdea(
       if (sceneDone) continue
 
       // 2b) Chemin classique : voix TTS (jouée par personnage) puis animation fal.ai / Ken Burns.
-      const eleven = opts.voiceProvider === 'elevenlabs' && !!opts.elevenKey
-      // ElevenLabs : voix du compte pour toutes les scènes (les timbres par
-      // personnage n'existent qu'en OpenAI). Sinon : casting par personnage.
-      const sceneVoice = eleven ? voice : member && OPENAI_VOICES.includes(member.voice) ? member.voice : voice
+      const eleven = elevenMode
+      // ElevenLabs : une voix HUMAINE distincte par personnage (répartie plus haut) ;
+      // sinon casting OpenAI (timbre par personnage).
+      const sceneVoice = eleven
+        ? (sc.speaker && elevenCast.get(sc.speaker.trim().toLowerCase())) || elevenFallbackVoice || voice
+        : member && OPENAI_VOICES.includes(member.voice) ? member.voice : voice
       log?.(`Scène ${i + 1}/${scenes.length} — voix${member ? ` de ${member.name}` : ' off'}…`)
       const mp3 = join(work, `a${i}.mp3`)
       await tts(

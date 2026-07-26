@@ -423,16 +423,19 @@ async function runVideoGen(
     }
     // Voix off : le fournisseur suit la VOIX choisie sur le compte (un id ElevenLabs
     // ⇒ ElevenLabs), sinon le réglage global. Sans clé ElevenLabs → OpenAI.
-    // Reproduction d'un DIALOGUE : on force OpenAI — les voix distinctes PAR
-    // personnage n'existent qu'en OpenAI (ElevenLabs = une seule voix de compte).
+    // Reproduction d'un DIALOGUE : si ElevenLabs est configuré, on l'utilise avec
+    // une voix HUMAINE distincte PAR personnage (naturelles, réparties dans
+    // video-gen). Le TTS OpenAI (robotique) n'est plus qu'un repli sans ElevenLabs.
     const reproDialogue = !!idea.reproduce && !!idea.dialogue
     const elevenKey = getEncrypted('elevenlabs_key')
+    const dialogueEleven = reproDialogue && !!elevenKey
     const globalEleven = !reproDialogue && (repo.getSetting('voice_provider') || 'openai') === 'elevenlabs' && !!elevenKey
     const acctVoice = profileVoice()[targetProfile]
+    const elevenDefault = (acctVoice && providerForVoice(acctVoice) === 'elevenlabs' ? acctVoice : '') || repo.getSetting('elevenlabs_default_voice') || ''
     const narrationVoice = reproDialogue
-      ? (acctVoice && OPENAI_VOICES.includes(acctVoice) ? acctVoice : 'ash') // repli OpenAI valide (les répliques prennent la voix du casting)
+      ? (dialogueEleven ? elevenDefault : (acctVoice && OPENAI_VOICES.includes(acctVoice) ? acctVoice : 'ash')) // repli si un perso n'a pas de voix attribuée
       : acctVoice || (globalEleven ? repo.getSetting('elevenlabs_default_voice') || '' : repo.getSetting('tts_voice') || 'ash')
-    const useEleven = !reproDialogue && !!elevenKey && (globalEleven || providerForVoice(narrationVoice) === 'elevenlabs')
+    const useEleven = dialogueEleven || (!reproDialogue && !!elevenKey && (globalEleven || providerForVoice(narrationVoice) === 'elevenlabs'))
     const { filePath, durationSec, usage } = await generateVideoFromIdea(ctx, {
       anthropicKey,
       anthropicModel: model,
