@@ -1108,9 +1108,6 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
         ))}
       </div>
 
-      <p className="muted small clip-anim" style={{ marginTop: 12, animationDelay: '0.14s' }}>
-        La <b>voix s’adapte à la source</b> : une voix par personnage si c’est un dialogue, une seule voix off sinon. <b>Aucune musique ajoutée</b> (elle fait partie de la source). Les scènes sont <b>animées</b> (Veo / fal.ai) si tes clés sont configurées. Compte 1 à 2 minutes.
-      </p>
       {busy && (
         <div className="genai-progress clip-anim" style={{ marginTop: 12 }}>
           <div className="small" style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
