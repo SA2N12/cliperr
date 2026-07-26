@@ -1481,53 +1481,107 @@ function Clipage({ sources, clips, progress, onRefresh, toast }: { sources: Sour
 }
 
 function History({ sources, clips, onRefresh, toast, goClips }: { sources: SourceDTO[]; clips: ClipDTO[]; progress: Record<number, ProgressEvent>; onRefresh: () => Promise<void>; toast: (m: string) => void; goClips: () => void }): JSX.Element {
-  const [counts, setCounts] = useState<Record<number, number>>({})
+  const [tab, setTab] = useState<'all' | 'done' | 'error'>('all')
+  const [page, setPage] = useState(0)
+  const PER = 9
+  const busy = (s: string): boolean => s === 'running' || s === 'queued'
+  const clipCount = (id: number): number => clips.filter((c) => c.sourceId === id).length
   async function run(id: number): Promise<void> {
     try {
-      await api.runPipeline(id, counts[id] ?? 3)
+      await api.runPipeline(id, clipCount(id) || 3)
       await onRefresh()
       toast('Génération relancée')
     } catch (e) {
       toast(`Erreur : ${String((e as Error).message)}`)
     }
   }
-  const statusLabel = (s: string): string =>
-    ({ done: 'Terminé', running: 'En cours', queued: 'En attente', error: 'Erreur', pending: 'Non lancé' } as Record<string, string>)[s] || s
-  const busy = (s: string): boolean => s === 'running' || s === 'queued'
+
+  // Historique des CLIPAGES : uploads + URL, hors sources idea:* (pilote auto).
+  const all = sources
+    .filter((s) => !(s.url ?? '').startsWith('idea:'))
+    .sort((a, b) => b.createdAt - a.createdAt)
+  const nDone = all.filter((s) => s.status === 'done').length
+  const nErr = all.filter((s) => s.status === 'error').length
+  const filtered = tab === 'done' ? all.filter((s) => s.status === 'done') : tab === 'error' ? all.filter((s) => s.status === 'error') : all
+  const pages = Math.max(1, Math.ceil(filtered.length / PER))
+  const pg = Math.min(page, pages - 1)
+  const rows = filtered.slice(pg * PER, pg * PER + PER)
+  const from = filtered.length ? pg * PER + 1 : 0
+  const to = Math.min(filtered.length, pg * PER + PER)
+
+  const origin = (s: SourceDTO): string => {
+    const u = s.url ?? ''
+    if (!u.startsWith('http')) return 'Fichier importé'
+    try {
+      return new URL(u).hostname.replace(/^www\./, '')
+    } catch {
+      return 'URL'
+    }
+  }
+  const statusPill = (s: string): JSX.Element => {
+    const cls = s === 'done' ? 'ok' : s === 'error' ? 'bad' : ''
+    const icon = s === 'done' ? 'check_circle' : s === 'error' ? 'error' : 'progress_activity'
+    const lbl = ({ done: 'Terminé', running: 'En cours', queued: 'En attente', error: 'Échec', pending: 'Non lancé' } as Record<string, string>)[s] || s
+    return <span className={`hist-badge ${cls}`}><MIcon name={icon} size={13} spin={busy(s)} /> {lbl}</span>
+  }
+  const goTab = (t: 'all' | 'done' | 'error'): void => { setTab(t); setPage(0) }
 
   return (
-    <>
-      <div className="page-head">
+    <div className="hist-fit">
+      <div className="page-head clip-anim">
         <div>
           <h1>Historique</h1>
-          <p>Toutes tes générations (vidéos sources, statut, nombre de clips).</p>
+          <p>Toutes tes générations de clips — source, statut, nombre de clips.</p>
         </div>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {sources.length === 0 && <div className="card muted">Aucune génération pour l’instant.</div>}
-        {[...sources].reverse().map((s) => (
-          <div key={s.id} className="card">
-            <div className="row">
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.title || s.url}</div>
-                <div className="muted small">
-                  #{s.id} · {clips.filter((c) => c.sourceId === s.id).length} clip(s) · {statusLabel(s.status)}
-                  {s.error ? ` · ${s.error}` : ''}
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <label className="muted small" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  Clips
-                  <input type="number" min={1} max={30} value={counts[s.id] ?? 3} disabled={busy(s.status)} onChange={(e) => setCounts((m) => ({ ...m, [s.id]: Math.min(30, Math.max(1, Math.round(Number(e.target.value) || 1))) }))} style={{ width: 56 }} />
-                </label>
-                <button className="btn" onClick={() => run(s.id)} disabled={busy(s.status)}>{busy(s.status) ? '…' : 'Relancer'}</button>
-                <button className="btn" onClick={goClips}>Voir clips</button>
-              </div>
-            </div>
-          </div>
+
+      <div className="hist-tabs clip-anim" style={{ animationDelay: '0.05s' }}>
+        {([['all', 'Toutes', all.length], ['done', 'Terminées', nDone], ['error', 'Échecs', nErr]] as const).map(([t, lbl, n]) => (
+          <button key={t} className={`hist-tab${tab === t ? ' on' : ''}`} onClick={() => goTab(t)}>
+            {lbl} <span className="hist-tab-n">{n}</span>
+          </button>
         ))}
       </div>
-    </>
+
+      <div className="hist-table clip-anim" style={{ animationDelay: '0.1s' }}>
+        <div className="hist-head">
+          <span>Vidéo</span><span>Statut</span><span>Clips</span><span>Date</span><span />
+        </div>
+        {rows.length === 0 ? (
+          <div className="hist-empty">Aucune génération {tab === 'error' ? 'en échec' : tab === 'done' ? 'terminée' : ''} pour l’instant.</div>
+        ) : (
+          rows.map((s) => (
+            <div key={s.id} className="hist-row">
+              <div className="hist-vid">
+                <div className="hist-ic"><MIcon name={s.status === 'error' ? 'error' : 'movie'} size={16} /></div>
+                <div style={{ minWidth: 0 }}>
+                  <div className="hist-title" title={s.title || s.url || ''}>{s.title || s.url?.split(/[\\/]/).pop() || `Source #${s.id}`}</div>
+                  <div className="muted small hist-sub">#{s.id} · {origin(s)}{s.error ? ` · ${s.error}` : ''}</div>
+                </div>
+              </div>
+              <div>{statusPill(s.status)}</div>
+              <div className="hist-n">{s.status === 'error' ? '—' : clipCount(s.id)}</div>
+              <div className="muted small hist-date">{new Date(s.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: '2-digit' })}</div>
+              <div className="hist-act">
+                <button className="btn xsmall" title="Relancer la génération" onClick={() => void run(s.id)} disabled={busy(s.status)}><Icon name="refresh" size={13} /></button>
+                <button className="btn xsmall" onClick={goClips}>Voir</button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {filtered.length > 0 && (
+        <div className="hist-foot clip-anim">
+          <span className="muted small">{from}–{to} sur {filtered.length}</span>
+          <div className="hist-pager">
+            <button className="btn xsmall hist-arrow" disabled={pg <= 0} onClick={() => setPage(pg - 1)} aria-label="Page précédente">‹</button>
+            <span className="muted small" style={{ fontVariantNumeric: 'tabular-nums' }}>{pg + 1} / {pages}</span>
+            <button className="btn xsmall hist-arrow" disabled={pg >= pages - 1} onClick={() => setPage(pg + 1)} aria-label="Page suivante">›</button>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 
