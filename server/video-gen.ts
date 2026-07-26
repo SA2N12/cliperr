@@ -116,14 +116,20 @@ async function buildStoryboard(
   // Mode reproduction fidèle (inspiration) : on suit la source PAS À PAS, sans le
   // template « niche » (hook choc / boucle / CTA) qui la dénaturerait.
   const reproduce = !dialogue && !!idea.reproduce
+  // Plafond de scènes pour une reproduction : un Reel très bavard peut donner 13+
+  // étapes → prompt trop long à générer (tool-call tronqué par max_tokens → storyboard
+  // vide) ET vidéo interminable/coûteuse (une image IA par scène). On regroupe alors.
+  const REPRO_MAX = 8
+  const steps = (idea.script ?? []).slice(0, REPRO_MAX)
+  const grouped = (idea.script ?? []).length > REPRO_MAX
   const reproducePrompt = `Tu es monteur TikTok. On REPRODUIT FIDÈLEMENT une vidéo existante : garde son déroulé, son ordre, sa chute et son style. Ne la transforme PAS en vidéo « à la TikTok » (pas de hook choc réinventé, pas de boucle forcée, aucun CTA commentaire/partage si la source n'en a pas).
 Titre : ${idea.title}
 Hook (scène 1, à garder) : ${idea.hook}
-Déroulé à reproduire, une scène par étape, DANS L'ORDRE EXACT :
-${idea.script.map((step, i) => `${i + 1}. ${step}`).join('\n')}
+Déroulé à reproduire, DANS L'ORDRE EXACT :
+${(idea.script ?? []).map((step, i) => `${i + 1}. ${step}`).join('\n')}
 
 Règles :
-- Produis EXACTEMENT ${idea.script.length} scène(s) : une par étape ci-dessus, dans le même ordre. Ne fusionne pas, ne supprime pas, n'ajoute pas d'étape.
+- Produis ${grouped ? `AU PLUS ${REPRO_MAX}` : `EXACTEMENT ${steps.length}`} scène(s), dans le même ordre que le déroulé.${grouped ? ` Le déroulé compte ${(idea.script ?? []).length} étapes : REGROUPE les étapes proches en ${REPRO_MAX} scènes pour couvrir toute l'histoire (début → chute) sans rien perdre d'essentiel.` : ' Une par étape ; ne fusionne pas, ne supprime pas, n\'ajoute pas d\'étape.'}
 - La VOIX OFF de chaque scène = l'étape correspondante, en français oral fluide (nombres en toutes lettres, phrases courtes). Reste FIDÈLE au contenu ; ne remplace pas la fin par une question ou un CTA générique.
 ${styleHint ? `- STYLE VISUEL IMPOSÉ (celui de la source, à respecter À L'IDENTIQUE d'une scène à l'autre) : ${styleHint}` : "- Garde un style visuel cohérent et proche de la source d'une scène à l'autre."}
 - RÈGLES IMAGE (le générateur refuse sinon) : aucun ENFANT/mineur, aucune personne réelle identifiable, pas de gore ni de contenu sexuel → illustre autrement (objet seul, décor, main d'adulte, document, symbole).
@@ -157,7 +163,10 @@ Pour chaque scène : ${dialogue ? 'la RÉPLIQUE (speaker + narration)' : 'la phr
 
   const msg = await client.messages.create({
     model,
-    max_tokens: 3000,
+    // 6000 (au lieu de 3000) : un storyboard de 8 scènes avec des image-prompts
+    // « très détaillés » dépassait parfois 3000 tokens → tool-call tronqué → JSON
+    // invalide → « Storyboard vide ». On laisse de la marge.
+    max_tokens: 6000,
     tools: [tool],
     tool_choice: { type: 'tool', name: 'storyboard' },
     messages: [{ role: 'user', content: prompt }]
