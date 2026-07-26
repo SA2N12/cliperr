@@ -1040,7 +1040,6 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
   const [busy, setBusy] = useState(false)
   const [idea, setIdea] = useState<SavedIdea | null>(null)
   const [launched, setLaunched] = useState(false)
-  const [format, setFormat] = useState<'video' | 'slideshow'>('video')
   const [niches, setNiches] = useState<string[]>([])
   useEffect(() => {
     api.autopilotState()
@@ -1062,15 +1061,13 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
       setBusy(false)
     }
   }
-  // Format de sortie : vidéo montée (voix off + images) ou diaporama d'images
-  // (6 diapos illustrées, texte incrusté) — les deux arrivent dans « Clips ».
+  // Vidéo montée (voix off + images + sous-titres) — arrive dans « Clips ».
   const genVideo = async (): Promise<void> => {
     if (!idea) return
     try {
-      if (format === 'slideshow') await api.generateIdeaSlideshow(idea.id)
-      else await api.generateIdeaVideo(idea.id)
+      await api.generateIdeaVideo(idea.id)
       setLaunched(true)
-      toast(`${format === 'slideshow' ? 'Diaporama' : 'Vidéo'} lancé — suis la progression en bas à droite ; il arrivera dans « Clips »`)
+      toast('Vidéo lancée — suis la progression en bas à droite ; elle arrivera dans « Clips »')
     } catch (e) {
       toast('Erreur : ' + (e as Error).message)
     }
@@ -1159,33 +1156,13 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
             </details>
           )}
 
-          {/* Format de sortie : même déroulé, deux mises en forme. */}
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
-            <span className="muted small">Format :</span>
-            <div style={{ display: 'inline-flex', gap: 3, background: 'var(--panel-2)', padding: 3 }}>
-              {([['video', 'movie', 'Vidéo montée'], ['slideshow', 'image', 'Diaporama d’images']] as const).map(([f, icon, lbl]) => (
-                <button
-                  key={f}
-                  onClick={() => setFormat(f)}
-                  disabled={launched}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: 'none', cursor: launched ? 'default' : 'pointer', padding: '5px 12px', fontSize: 13, fontWeight: format === f ? 700 : 500, background: format === f ? '#fff' : 'transparent', color: format === f ? 'var(--text)' : 'var(--muted)', fontFamily: 'inherit' }}
-                >
-                  <MIcon name={icon} size={14} /> {lbl}
-                </button>
-              ))}
-            </div>
-            <span className="muted small">
-              {format === 'slideshow'
-                ? '6 diapos illustrées, texte incrusté, musique du compte.'
-                : 'Voix off + images + sous-titres.'}
-            </span>
-          </div>
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center', flexWrap: 'wrap' }}>
+            <span className="muted small" style={{ marginRight: 'auto' }}>Vidéo montée : voix off + images + sous-titres.</span>
             <button className="btn" onClick={() => { setIdea(null); setUrl('') }}>Nouvelle inspiration</button>
             <button className="btn primary" onClick={() => void genVideo()} disabled={launched}>
               {launched
                 ? <><MIcon name="check_circle" size={14} /> En cours — arrivera dans « Clips »</>
-                : <><MIcon name={format === 'slideshow' ? 'image' : 'movie'} size={14} /> Générer {format === 'slideshow' ? 'le diaporama' : 'la vidéo'}</>}
+                : <><MIcon name="movie" size={14} /> Générer la vidéo</>}
             </button>
           </div>
         </div>
@@ -1793,7 +1770,7 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
           ordinal: slot.ordinal,
           hm: Number.isFinite(h) && Number.isFinite(m) ? h + m / 60 : null,
           type: type === 'auto' ? null : type,
-          subject: ['custom', 'clip', 'carousel', 'slideshow', 'stock'].includes(type) ? subject : null,
+          subject: ['custom', 'clip', 'carousel', 'stock'].includes(type) ? subject : null,
           music
           // NB : pas de `day` ici — le différé (`from`) est posé UNIQUEMENT à la
           // création d'un bloc depuis « Demain » (bouton +) et survit à cet
@@ -1850,7 +1827,6 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
             <option value="auto">Vidéo de niche (défaut)</option>
             {slot.hasSeries && <option value="serie">Épisode de série</option>}
             <option value="carousel">Carrousel photo — musique imposée par TikTok</option>
-            <option value="slideshow">Diaporama vidéo — ta musique</option>
             <option value="clip">Clip (rediff live / reportage YouTube)</option>
             <option value="stock">Clip en stock — publier une vidéo déjà prête</option>
             <option value="custom">Sujet personnalisé…</option>
@@ -1876,14 +1852,11 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
               </div>
             </>
           )}
-          {(type === 'carousel' || type === 'slideshow') && (
+          {type === 'carousel' && (
             <>
               <input className="input-full" value={subject} placeholder="Sujet — ou laisse vide : l'IA suit la niche du compte" onChange={(e) => setSubject(e.target.value)} style={{ marginTop: 8 }} />
               <div className="sp-note">
-                6 diapos écrites par l’IA (hook → contenu → chute), une image par diapo, texte incrusté.{' '}
-                {type === 'slideshow'
-                  ? 'Publié en vidéo → la musique ci-dessous s’applique.'
-                  : 'Publié en post photo natif : TikTok choisit lui-même la musique (impossible d’en joindre une).'}
+                6 diapos écrites par l’IA (hook → contenu → chute), une image par diapo, texte incrusté. Publié en post photo natif : <b>TikTok choisit lui-même la musique</b> (impossible d’en joindre une).
               </div>
             </>
           )}
@@ -1901,7 +1874,9 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
           )}
         </div>
 
-        {type !== 'clip' && type !== 'stock' && (
+        {/* Pas de musique pour les carrousels (photo natif → TikTok l'impose),
+            ni pour clip/stock (vidéos déjà montées). */}
+        {type !== 'clip' && type !== 'stock' && type !== 'carousel' && (
           <div className="sp-field">
             <label className="sp-label">Musique de fond</label>
             <select className="input-full" value={music} onChange={(e) => setMusic(e.target.value)}>
