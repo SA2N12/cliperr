@@ -2688,7 +2688,7 @@ app.post('/api/autopilot/slot', wrap((req, res) => {
       if (!t || t === 'auto') {
         delete o.type
         delete o.subject
-      } else if (['niche', 'serie', 'custom', 'clip', 'carousel', 'stock'].includes(t)) {
+      } else if (['niche', 'serie', 'clip', 'carousel', 'stock'].includes(t)) {
         o.type = t
       }
     }

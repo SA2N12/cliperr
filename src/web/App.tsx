@@ -1770,7 +1770,7 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
           ordinal: slot.ordinal,
           hm: Number.isFinite(h) && Number.isFinite(m) ? h + m / 60 : null,
           type: type === 'auto' ? null : type,
-          subject: ['custom', 'clip', 'carousel', 'stock'].includes(type) ? subject : null,
+          subject: ['clip', 'carousel', 'stock'].includes(type) ? subject : null,
           music
           // NB : pas de `day` ici — le différé (`from`) est posé UNIQUEMENT à la
           // création d'un bloc depuis « Demain » (bouton +) et survit à cet
@@ -1829,7 +1829,6 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
             <option value="carousel">Carrousel photo — musique imposée par TikTok</option>
             <option value="clip">Clip (rediff live / reportage YouTube)</option>
             <option value="stock">Clip en stock — publier une vidéo déjà prête</option>
-            <option value="custom">Sujet personnalisé…</option>
           </select>
           {type === 'stock' && (
             <>
@@ -1861,9 +1860,6 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
             </>
           )}
           {!slot.hasSeries && <div className="sp-note">Pour proposer « Épisode de série » : configure la série du compte (<MIcon name="settings" size={13} /> de la ligne → onglet Série).</div>}
-          {type === 'custom' && (
-            <input className="input-full" value={subject} placeholder="Sujet exact de la vidéo — ex. le mystère du vol MH370" onChange={(e) => setSubject(e.target.value)} style={{ marginTop: 8 }} />
-          )}
           {type === 'clip' && (
             <>
               <input className="input-full" value={subject} placeholder="URL YouTube — ou laisse vide : l'IA choisit la vidéo" onChange={(e) => setSubject(e.target.value)} style={{ marginTop: 8 }} />
@@ -1934,7 +1930,7 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
       <div className="sp-foot">
         <button className="btn danger-ghost" disabled={busy} onClick={() => void removeSlot()} style={{ marginRight: 'auto' }} title="Retire cette vidéo (baisse la cadence du compte)"><MIcon name="delete" size={15} /> Supprimer</button>
         {(slot.pinned || slot.type) && <button className="btn" disabled={busy} onClick={() => void apply(true)}>Réinitialiser</button>}
-        <button className="btn primary" disabled={busy || ((type === 'custom' || type === 'stock') && !subject.trim())} onClick={() => void apply(false)}>
+        <button className="btn primary" disabled={busy || (type === 'stock' && !subject.trim())} onClick={() => void apply(false)}>
           {busy ? 'Enregistrement…' : 'Enregistrer'}
         </button>
       </div>
@@ -1977,7 +1973,7 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
   const [hasEleven, setHasEleven] = useState(false)
   const [clipChannels, setClipChannels] = useState('')
   const [serie, setSerie] = useState<SeriesCfg>({ enabled: false, title: '', universe: '', episode: 1 })
-  const [tab, setTab] = useState<'niche' | 'serie' | 'custom' | 'clips'>('niche')
+  const [tab, setTab] = useState<'niche' | 'serie' | 'clips'>('niche')
   const [busy, setBusy] = useState(false)
   const [testing, setTesting] = useState(false)
   const [chanResults, setChanResults] = useState<{ channel: string; status: string; videos: number; longCount: number; sample?: string }[] | null>(null)
@@ -2117,7 +2113,6 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
           <div className="tabs">
             <button className={`tab ${tab === 'niche' ? 'on' : ''}`} onClick={() => setTab('niche')}>Vidéos de niche</button>
             <button className={`tab ${tab === 'serie' ? 'on' : ''}`} onClick={() => setTab('serie')}>Série</button>
-            <button className={`tab ${tab === 'custom' ? 'on' : ''}`} onClick={() => setTab('custom')}>Sujet libre</button>
             <button className={`tab ${tab === 'clips' ? 'on' : ''}`} onClick={() => setTab('clips')}>Clips</button>
           </div>
         </div>
@@ -2197,16 +2192,6 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
             </div>
 
             {ctaField('niche', 'CTA des vidéos de niche', 'ex. 🔗 Mon guide est en bio')}
-          </>
-        )}
-
-        {tab === 'custom' && (
-          <>
-            <div className="small" style={{ fontWeight: 600, marginBottom: 6 }}>Vidéos à sujet imposé</div>
-            <div className="muted small">
-              Le sujet se choisit <b>bloc par bloc</b> sur le planning : clique un bloc « à venir », choisis le type <b>« Sujet personnalisé »</b> et écris le sujet exact (ex. « le mystère du vol MH370 »). L’IA écrit alors la vidéo sur CE sujet au lieu d’en trouver un dans la niche du compte — même hook fort, même script rétention, mêmes images IA.
-            </div>
-            {ctaField('custom', 'CTA des vidéos « Sujet libre »', 'ex. 🔗 Lien en bio')}
           </>
         )}
 
