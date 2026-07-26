@@ -2143,6 +2143,8 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
               </div>
             </div>
 
+            {ctaField('niche', 'CTA des vidéos de niche', 'ex. 🔗 Mon guide est en bio')}
+
             {/* Playlist : réglage du COMPTE (elle sert aussi aux séries dont le bloc
                 impose une piste) — logée ici, l'onglet principal du compte. */}
             <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
@@ -2177,8 +2179,6 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
                 </>
               )}
             </div>
-
-            {ctaField('niche', 'CTA des vidéos de niche', 'ex. 🔗 Mon guide est en bio')}
           </>
         )}
 
