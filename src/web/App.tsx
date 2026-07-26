@@ -2518,7 +2518,7 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
                 className={`ap-acc-row${drag?.from === accIdx ? ' dragging' : ''}`}
                 style={{ display: 'flex', alignItems: 'center', gap: 12, borderTop: '1px solid var(--border)', paddingTop: 12, ...dragStyle(accIdx) }}
               >
-                <div style={{ width: 176, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ width: 214, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
                   {/* Poignée : seule zone « draggable », sinon le glissement partirait
                       aussi depuis les blocs horaires et gênerait leur clic. */}
                   <span
@@ -2530,7 +2530,8 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
                   </span>
                   <Avatar url={a.avatarUrl} name={u} size={32} />
                   <div style={{ minWidth: 0, flex: 1 }}>
-                    <div className="small" style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.handle ? '@' + a.handle : u}</div>
+                    {/* Nom en entier (pas d'ellipsis) : la colonne est assez large. */}
+                    <div className="small" style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{a.handle ? '@' + a.handle : u}</div>
                     <div className="muted small">{userSlots.length === 0 ? 'Aucune vidéo prévue' : `${uDone}/${userSlots.length} publiée${uDone > 1 ? 's' : ''}${uCredits > 0 ? ` · ${uCredits} cr` : ''}`}</div>
                   </div>
                   <button className="btn icon-btn" title="Réglages du compte (cadence, niche, CTA, série)" onClick={() => { setEditSlot(null); setCfgUser(u) }} style={{ width: 30, height: 30, flexShrink: 0 }}>
