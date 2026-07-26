@@ -2195,7 +2195,10 @@ app.get('/api/autopilot', wrap(async (_req, res) => {
         niche: (niches[u] ?? '').trim() || nicheForProfile(u),
         ctas: ctaMapForProfile(u),
         music: (musicMap[u] ?? []).filter((t) => typeof t === 'string'),
-        voice: OPENAI_VOICES.includes(voiceMap[u]) ? voiceMap[u] : '',
+        // Renvoie la voix stockée qu'elle soit OpenAI OU ElevenLabs (id 12-48
+        // alphanum) — même validation qu'à la sauvegarde. Le filtre OpenAI seul
+        // renvoyait '' pour une voix ElevenLabs → l'UI retombait sur « ash ».
+        voice: voiceMap[u] && (OPENAI_VOICES.includes(voiceMap[u]) || /^[A-Za-z0-9]{12,48}$/.test(voiceMap[u])) ? voiceMap[u] : '',
         clipChannels: (clipChannelsMap()[u] ?? '').trim(),
         perDay: pdMap[u] == null ? globalPerDay : Math.max(0, Math.min(5, Math.round(Number(pdMap[u])) || 0)),
         series: {
