@@ -27,6 +27,7 @@ const ICONS: Record<string, string> = {
   search: 'M11 19a8 8 0 100-16 8 8 0 000 16zM21 21l-4.3-4.3',
   refresh: 'M21 12a9 9 0 11-3-6.7L21 8M21 3v5h-5',
   spark: 'M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4L12 3z',
+  sparkles: 'M9 8 l1.6 4.4 4.4 1.6 -4.4 1.6 -1.6 4.4 -1.6 -4.4 -4.4 -1.6 4.4 -1.6 z M17.5 3 l1 2.5 2.5 1 -2.5 1 -1 2.5 -1 -2.5 -2.5 -1 2.5 -1 z',
   check: 'M20 6L9 17l-5-5',
   send: 'M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z',
   clock: 'M12 7v5l3 2M12 3a9 9 0 100 18 9 9 0 000-18z',
@@ -394,7 +395,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
     ],
     [
       { id: 'clipping', label: 'Clipage', icon: 'scissors' },
-      { id: 'genai', label: 'Génération IA', icon: 'spark' },
+      { id: 'genai', label: 'Génération IA', icon: 'sparkles' },
       { id: 'clips', label: 'Clips', icon: 'clips' }
     ],
     [
