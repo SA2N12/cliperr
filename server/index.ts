@@ -423,11 +423,16 @@ async function runVideoGen(
     }
     // Voix off : le fournisseur suit la VOIX choisie sur le compte (un id ElevenLabs
     // ⇒ ElevenLabs), sinon le réglage global. Sans clé ElevenLabs → OpenAI.
+    // Reproduction d'un DIALOGUE : on force OpenAI — les voix distinctes PAR
+    // personnage n'existent qu'en OpenAI (ElevenLabs = une seule voix de compte).
+    const reproDialogue = !!idea.reproduce && !!idea.dialogue
     const elevenKey = getEncrypted('elevenlabs_key')
-    const globalEleven = (repo.getSetting('voice_provider') || 'openai') === 'elevenlabs' && !!elevenKey
+    const globalEleven = !reproDialogue && (repo.getSetting('voice_provider') || 'openai') === 'elevenlabs' && !!elevenKey
     const acctVoice = profileVoice()[targetProfile]
-    const narrationVoice = acctVoice || (globalEleven ? repo.getSetting('elevenlabs_default_voice') || '' : repo.getSetting('tts_voice') || 'ash')
-    const useEleven = !!elevenKey && (globalEleven || providerForVoice(narrationVoice) === 'elevenlabs')
+    const narrationVoice = reproDialogue
+      ? (acctVoice && OPENAI_VOICES.includes(acctVoice) ? acctVoice : 'ash') // repli OpenAI valide (les répliques prennent la voix du casting)
+      : acctVoice || (globalEleven ? repo.getSetting('elevenlabs_default_voice') || '' : repo.getSetting('tts_voice') || 'ash')
+    const useEleven = !reproDialogue && !!elevenKey && (globalEleven || providerForVoice(narrationVoice) === 'elevenlabs')
     const { filePath, durationSec, usage } = await generateVideoFromIdea(ctx, {
       anthropicKey,
       anthropicModel: model,
@@ -448,7 +453,9 @@ async function runVideoGen(
       // donc les scènes (fal.ai) si la clé est là, au lieu d'un simple Ken Burns
       // sur des images fixes.
       animateScenes: opts.animateScenes ?? (idea.reproduce && !!getEncrypted('fal_key')),
-      dialogue: opts.dialogue,
+      // Reproduction : voix PAR PERSONNAGE si la source est un dialogue (détecté à
+      // l'inspiration), sinon voix off unique. Les séries forcent déjà dialogue=true.
+      dialogue: opts.dialogue || (!!idea.reproduce && !!idea.dialogue),
       videoEngine: repo.getSetting('series_video_engine') || 'seedance',
       onProgress: (m) => emitIdeaVideo({ ideaId, status: 'running', message: m })
     })

@@ -64,6 +64,9 @@ export interface ViralIdea {
   imageStyle?: string
   /** Mode « reproduction fidèle » (inspiration) : le storyboard suit la source pas à pas au lieu du template niche. */
   reproduce?: boolean
+  /** Reproduction : la source fait parler PLUSIEURS personnages (vrai dialogue) → voix par
+   *  personnage. Faux/absent = une seule voix off (narration). */
+  dialogue?: boolean
 }
 
 export interface SavedIdea extends ViralIdea {

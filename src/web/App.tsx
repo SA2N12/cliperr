@@ -1115,7 +1115,7 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
       </div>
       <p className="muted small" style={{ marginTop: 10 }}>
         {mode === 'reproduce'
-          ? <>La vidéo est téléchargée, transcrite et analysée visuellement, puis l’IA la <b>reproduit fidèlement</b> : même sujet, même déroulé, même chute et même style — sans repasser par le format « niche ». <b>Aucune musique n’est ajoutée</b> (la bande-son fait partie de la source) et les scènes sont <b>animées</b> si ta clé fal.ai est configurée, sinon ce sera un enchaînement d’images. Compte 1 à 2 minutes.</>
+          ? <>La vidéo est téléchargée, transcrite et analysée visuellement, puis l’IA la <b>reproduit fidèlement</b> : même sujet, même déroulé, même chute et même style — sans repasser par le format « niche ». La <b>voix s’adapte à la source</b> : une voix par personnage si c’est un dialogue, une seule voix off sinon. <b>Aucune musique n’est ajoutée</b> (la bande-son fait partie de la source) et les scènes sont <b>animées</b> si ta clé fal.ai est configurée, sinon ce sera un enchaînement d’images. Compte 1 à 2 minutes.</>
           : <>La vidéo est téléchargée et transcrite, puis l’IA écrit une vidéo <b>originale</b> qui reprend sa mécanique virale (hook, structure, émotion) — jamais son contenu. Compte 1 à 2 minutes.</>}
       </p>
       {busy && (

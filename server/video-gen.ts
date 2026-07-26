@@ -114,8 +114,9 @@ async function buildStoryboard(
   } as Anthropic.Tool
 
   // Mode reproduction fidèle (inspiration) : on suit la source PAS À PAS, sans le
-  // template « niche » (hook choc / boucle / CTA) qui la dénaturerait.
-  const reproduce = !dialogue && !!idea.reproduce
+  // template « niche » (hook choc / boucle / CTA) qui la dénaturerait. Peut être en
+  // narration (une voix off) OU en dialogue (voix par personnage) selon la source.
+  const reproduce = !!idea.reproduce
   // Plafond de scènes pour une reproduction : un Reel très bavard peut donner 13+
   // étapes → prompt trop long à générer (tool-call tronqué par max_tokens → storyboard
   // vide) ET vidéo interminable/coûteuse (une image IA par scène). On regroupe alors.
@@ -136,7 +137,26 @@ ${styleHint ? `- STYLE VISUEL IMPOSÉ (celui de la source, à respecter À L'IDE
 
 Pour chaque scène : la phrase de VOIX OFF (français) + un IMAGE PROMPT en anglais respectant ${styleHint ? 'STRICTEMENT le style imposé ci-dessus' : 'le style de la source'}, très détaillé, sans aucun texte. Réponds uniquement via l'outil storyboard.`
 
-  const prompt = reproduce ? reproducePrompt : `Tu es un scénariste TikTok expert en RÉTENTION et en viralité. Transforme cette idée en storyboard de 4 à 5 scènes pour une vidéo verticale « faceless » COURTE de 20 à 28 secondes (la brièveté maximise le taux de complétion — le signal n°1 de l'algorithme TikTok pour être re-poussé au-delà du 1er lot de vues).
+  // Reproduction d'une saynète : une RÉPLIQUE par scène + un casting vocal (voix
+  // par personnage), au lieu d'une voix off unique.
+  const reproduceDialoguePrompt = `Tu es monteur TikTok. On REPRODUIT FIDÈLEMENT une saynète existante (un échange entre plusieurs personnages) : garde ses répliques, leur ordre, sa chute et son style. Ne la transforme PAS en vidéo « à la TikTok » (pas de hook réinventé, pas de CTA ajouté).
+Titre : ${idea.title}
+Répliques de la source, DANS L'ORDRE EXACT (souvent préfixées du nom du personnage) :
+${(idea.script ?? []).map((step, i) => `${i + 1}. ${step}`).join('\n')}
+
+Règles :
+- Produis ${grouped ? `AU PLUS ${REPRO_MAX}` : `EXACTEMENT ${steps.length}`} scène(s) : UNE réplique par scène, dans l'ordre.${grouped ? ` La source compte ${(idea.script ?? []).length} répliques : garde les ${REPRO_MAX} qui portent l'histoire du début à la chute, sans en perdre le sens.` : ''}
+- Chaque scène a un champ speaker = le personnage qui parle (même nom d'une scène à l'autre pour un même personnage).
+- CASTING (champ cast) : un membre par personnage récurrent, avec une voix TTS DISTINCTE et adaptée au personnage (père/homme = voix grave type onyx/echo ; mère/femme = coral/nova/sage ; enfant/ado = voix claire type shimmer/fable), et son intonation.
+- Reste FIDÈLE aux répliques et à la chute ; français oral fluide (nombres en toutes lettres).
+${styleHint ? `- STYLE VISUEL IMPOSÉ (celui de la source, à l'identique d'une scène à l'autre) : ${styleHint}` : "- Style visuel cohérent et proche de la source d'une scène à l'autre."}
+- RÈGLES IMAGE (le générateur refuse sinon) : le personnage qui parle au premier plan, expressif, mais AUCUN enfant/mineur ni personne réelle identifiable de façon photoréaliste → rends-le en style illustré/stylisé (celui de la source) ou de façon générique. Pas de gore ni de contenu sexuel.
+
+Pour chaque scène : la RÉPLIQUE (speaker + narration en français) + un IMAGE PROMPT en anglais respectant ${styleHint ? 'STRICTEMENT le style imposé ci-dessus' : 'le style de la source'}, très détaillé, sans aucun texte. Réponds uniquement via l'outil storyboard.`
+
+  const prompt = reproduce
+    ? (dialogue ? reproduceDialoguePrompt : reproducePrompt)
+    : `Tu es un scénariste TikTok expert en RÉTENTION et en viralité. Transforme cette idée en storyboard de 4 à 5 scènes pour une vidéo verticale « faceless » COURTE de 20 à 28 secondes (la brièveté maximise le taux de complétion — le signal n°1 de l'algorithme TikTok pour être re-poussé au-delà du 1er lot de vues).
 Titre : ${idea.title}
 Hook : ${idea.hook}
 Script de départ : ${idea.script.join(' ')}
