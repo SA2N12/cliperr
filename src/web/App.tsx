@@ -3106,13 +3106,48 @@ const PROVIDER_META: { id: string; name: string; role: string; cost: string; ess
   { id: 'proxy', name: 'Proxy résidentiel (Webshare)', role: 'IP française pour télécharger YouTube sans blocage', cost: '≈ 6 $/mois (250 Go)', essential: false }
 ]
 
+type ProviderLive = { state: 'ok' | 'credits' | 'invalid' | 'error' | 'unconfigured'; detail?: string }
 function Providers({ go }: { go: (p: Page) => void }): JSX.Element {
   const [data, setData] = useState<{ voiceProvider: string; seriesEngine: string; providers: Record<string, boolean> } | null>(null)
   const [spend, setSpend] = useState<{ usd: number } | null>(null)
+  const [live, setLive] = useState<Record<string, ProviderLive> | null>(null)
+  const [checking, setChecking] = useState(false)
   useEffect(() => {
     api.providers().then(setData).catch(() => undefined)
     api.spend().then((s) => setSpend({ usd: s.usd })).catch(() => undefined)
   }, [])
+  const runCheck = async (): Promise<void> => {
+    setChecking(true)
+    try {
+      setLive((await api.checkProviders()).providers)
+    } catch {
+      /* ignore */
+    } finally {
+      setChecking(false)
+    }
+  }
+  // Badge d'état EN DIRECT (après « Vérifier l'état ») pour les fournisseurs pingables.
+  const LIVE_STYLE: Record<string, { txt: string; color: string; bg: string; bd: string } | null> = {
+    ok: { txt: '✓ Opérationnel', color: 'var(--good)', bg: '#e9f9ef', bd: '#b7ebc6' },
+    credits: { txt: '⚠ Crédits épuisés', color: 'var(--bad)', bg: '#fdeaea', bd: '#f6c9c9' },
+    invalid: { txt: '✗ Clé invalide', color: 'var(--bad)', bg: '#fdeaea', bd: '#f6c9c9' },
+    error: { txt: '⚠ Injoignable', color: '#b45309', bg: '#fff7ed', bd: '#fed7aa' },
+    unconfigured: null
+  }
+  const liveBadge = (id: string): JSX.Element | null => {
+    const c = live?.[id]
+    if (!c) return null
+    const m = LIVE_STYLE[c.state]
+    if (!m) return null
+    return (
+      <span
+        title={c.detail}
+        style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, padding: '4px 12px', borderRadius: 999, color: m.color, background: m.bg, border: `1px solid ${m.bd}` }}
+      >
+        {m.txt}
+      </span>
+    )
+  }
   const st = data?.providers ?? {}
   const nConf = PROVIDER_META.filter((p) => st[p.id]).length
   const note = (id: string): string | null => {
@@ -3129,7 +3164,12 @@ function Providers({ go }: { go: (p: Page) => void }): JSX.Element {
           <h1>Fournisseurs</h1>
           <p>Services externes du projet — état et coûts. Configure/modifie les clés dans les Réglages.</p>
         </div>
-        <button className="btn" onClick={() => go('settings')}><Icon name="settings" size={16} /> Réglages</button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button className="btn primary" onClick={() => void runCheck()} disabled={checking} title="Ping chaque service pour vérifier crédits et clé">
+            {checking ? <><MIcon name="progress_activity" size={15} spin /> Vérification…</> : <><Icon name="refresh" size={16} /> Vérifier l’état</>}
+          </button>
+          <button className="btn" onClick={() => go('settings')}><Icon name="settings" size={16} /> Réglages</button>
+        </div>
       </div>
 
       <div className="grid-3" style={{ marginBottom: 16 }}>
@@ -3164,20 +3204,23 @@ function Providers({ go }: { go: (p: Page) => void }): JSX.Element {
                 <div className="muted small" style={{ marginTop: 2 }}>{p.role}</div>
                 <div className="small" style={{ marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>💳 {p.cost}</div>
               </div>
-              <span
-                style={{
-                  flexShrink: 0,
-                  fontSize: 12,
-                  fontWeight: 700,
-                  padding: '4px 12px',
-                  borderRadius: 999,
-                  color: on ? 'var(--good)' : p.essential ? 'var(--bad)' : 'var(--muted)',
-                  background: on ? '#e9f9ef' : p.essential ? '#fdeaea' : 'var(--panel-2)',
-                  border: `1px solid ${on ? '#b7ebc6' : p.essential ? '#f6c9c9' : 'var(--border)'}`
-                }}
-              >
-                {on ? '✓ Configuré' : p.essential ? '✗ Manquant' : '– Non configuré'}
-              </span>
+              {/* État EN DIRECT (après vérification) prioritaire sur l'état « configuré ». */}
+              {liveBadge(p.id) ?? (
+                <span
+                  style={{
+                    flexShrink: 0,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    padding: '4px 12px',
+                    borderRadius: 999,
+                    color: on ? 'var(--good)' : p.essential ? 'var(--bad)' : 'var(--muted)',
+                    background: on ? '#e9f9ef' : p.essential ? '#fdeaea' : 'var(--panel-2)',
+                    border: `1px solid ${on ? '#b7ebc6' : p.essential ? '#f6c9c9' : 'var(--border)'}`
+                  }}
+                >
+                  {on ? '✓ Configuré' : p.essential ? '✗ Manquant' : '– Non configuré'}
+                </span>
+              )}
             </div>
           )
         })}

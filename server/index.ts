@@ -1981,6 +1981,119 @@ app.get('/api/providers', wrap((_req, res) => {
   })
 }))
 
+// État EN DIRECT des fournisseurs LLM : un ping minimal par clé → détecte
+// spécifiquement « crédits épuisés » (le cas vécu sur Anthropic puis Veo),
+// « clé invalide » ou « OK ». Chaque appel est borné à 15 s et sans effet.
+type ProviderState = { state: 'ok' | 'credits' | 'invalid' | 'error' | 'unconfigured'; detail?: string }
+function withTimeout(ms: number): { signal: AbortSignal; done: () => void } {
+  const c = new AbortController()
+  const t = setTimeout(() => c.abort(), ms)
+  return { signal: c.signal, done: () => clearTimeout(t) }
+}
+app.post('/api/providers/check', wrap(async (_req, res) => {
+  const checkClaude = async (): Promise<ProviderState> => {
+    const key = getApiKey()
+    if (!key) return { state: 'unconfigured' }
+    const to = withTimeout(15000)
+    try {
+      const r = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        signal: to.signal,
+        headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+        body: JSON.stringify({ model: 'claude-haiku-4-5', max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] })
+      })
+      if (r.ok) return { state: 'ok' }
+      const t = await r.text()
+      if (/credit balance/i.test(t)) return { state: 'credits', detail: 'Crédits épuisés — recharge sur console.anthropic.com' }
+      if (r.status === 401) return { state: 'invalid', detail: 'Clé invalide' }
+      return { state: 'error', detail: `HTTP ${r.status}` }
+    } catch (e) {
+      return { state: 'error', detail: e instanceof Error ? e.message.slice(0, 80) : 'échec' }
+    } finally {
+      to.done()
+    }
+  }
+  const checkOpenai = async (): Promise<ProviderState> => {
+    const key = getEncrypted('openai_key')
+    if (!key) return { state: 'unconfigured' }
+    const to = withTimeout(15000)
+    try {
+      const r = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        signal: to.signal,
+        headers: { Authorization: `Bearer ${key}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ model: 'gpt-4o-mini', max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] })
+      })
+      if (r.ok) return { state: 'ok' }
+      const t = await r.text()
+      if (/insufficient_quota|exceeded your current quota|billing_hard_limit/i.test(t)) return { state: 'credits', detail: 'Quota / crédits épuisés' }
+      if (r.status === 401) return { state: 'invalid', detail: 'Clé invalide' }
+      return { state: 'error', detail: `HTTP ${r.status}` }
+    } catch (e) {
+      return { state: 'error', detail: e instanceof Error ? e.message.slice(0, 80) : 'échec' }
+    } finally {
+      to.done()
+    }
+  }
+  const checkGemini = async (): Promise<ProviderState> => {
+    const key = getEncrypted('gemini_key')
+    if (!key) return { state: 'unconfigured' }
+    const to = withTimeout(15000)
+    try {
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
+        method: 'POST',
+        signal: to.signal,
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: 'ping' }] }], generationConfig: { maxOutputTokens: 1 } })
+      })
+      if (r.ok) return { state: 'ok' }
+      const t = await r.text()
+      if (/prepayment credits are depleted|billing|quota|RESOURCE_EXHAUSTED/i.test(t)) return { state: 'credits', detail: 'Crédits épuisés — recharge sur aistudio.google.com' }
+      if (/API key not valid|API_KEY_INVALID/i.test(t) || r.status === 403) return { state: 'invalid', detail: 'Clé invalide' }
+      return { state: 'error', detail: `HTTP ${r.status}` }
+    } catch (e) {
+      return { state: 'error', detail: e instanceof Error ? e.message.slice(0, 80) : 'échec' }
+    } finally {
+      to.done()
+    }
+  }
+  const checkEleven = async (): Promise<ProviderState> => {
+    const key = getEncrypted('elevenlabs_key')
+    if (!key) return { state: 'unconfigured' }
+    const to = withTimeout(12000)
+    try {
+      // /v1/voices : accessible même avec une clé restreinte (Voix : Lire).
+      const r = await fetch('https://api.elevenlabs.io/v1/voices', { headers: { 'xi-api-key': key }, signal: to.signal })
+      if (r.ok) return { state: 'ok' }
+      if (r.status === 401) return { state: 'invalid', detail: 'Clé invalide' }
+      return { state: 'error', detail: `HTTP ${r.status}` }
+    } catch (e) {
+      return { state: 'error', detail: e instanceof Error ? e.message.slice(0, 80) : 'échec' }
+    } finally {
+      to.done()
+    }
+  }
+  const checkGroq = async (): Promise<ProviderState> => {
+    const key = getEncrypted('groq_key')
+    if (!key) return { state: 'unconfigured' }
+    const to = withTimeout(12000)
+    try {
+      const r = await fetch('https://api.groq.com/openai/v1/models', { headers: { Authorization: `Bearer ${key}` }, signal: to.signal })
+      if (r.ok) return { state: 'ok' }
+      if (r.status === 401) return { state: 'invalid', detail: 'Clé invalide' }
+      return { state: 'error', detail: `HTTP ${r.status}` }
+    } catch (e) {
+      return { state: 'error', detail: e instanceof Error ? e.message.slice(0, 80) : 'échec' }
+    } finally {
+      to.done()
+    }
+  }
+  const [claude, openai, gemini, elevenlabs, groq] = await Promise.all([
+    checkClaude(), checkOpenai(), checkGemini(), checkEleven(), checkGroq()
+  ])
+  res.json({ providers: { claude, openai, gemini, elevenlabs, groq } })
+}))
+
 // Analyse IA de la croissance : rassemble les VRAIES stats (comptes + titres) et
 // les fait analyser par Claude → diagnostic + recommandations classées. Mise en
 // cache 20 min (appel coûteux) ; `force` pour rafraîchir.

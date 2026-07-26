@@ -212,6 +212,8 @@ export const api = {
   setGroqKey: (key: string) => post('/api/settings/groq', { key }),
   providers: () =>
     req<{ voiceProvider: 'openai' | 'elevenlabs'; seriesEngine: string; providers: Record<string, boolean> }>('/api/providers'),
+  checkProviders: () =>
+    post<{ providers: Record<string, { state: 'ok' | 'credits' | 'invalid' | 'error' | 'unconfigured'; detail?: string }> }>('/api/providers/check', {}),
   analyze: (force?: boolean) =>
     post<{
       diagnostic: string
