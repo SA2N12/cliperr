@@ -2060,7 +2060,6 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
     <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
       <label className="muted small" style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>{label}</label>
       <input className="input-full" value={ctas[key] ?? ''} placeholder={ph} onChange={(e) => setCtas((c) => ({ ...c, [key]: e.target.value }))} />
-      <div className="muted small" style={{ marginTop: 4 }}>Ajouté à la fin de la légende. Laisse vide pour aucun CTA sur ce type.</div>
     </div>
   )
 
@@ -2122,10 +2121,7 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
         {tab === 'niche' && (
           <>
             <label className="muted small" style={{ display: 'block', marginBottom: 4 }}>Niche / thème des vidéos classiques</label>
-            <input className="input-full" value={niche} placeholder="ex. mystères non résolus, sport, psychologie…" onChange={(e) => setNiche(e.target.value)} style={{ marginBottom: 4 }} />
-            <div className="muted small">
-              Chaque vidéo « niche » est une idée originale générée dans ce thème (hook fort, script rétention, images IA, voix off). C’est le type par défaut des blocs du planning.
-            </div>
+            <input className="input-full" value={niche} placeholder="ex. mystères non résolus, sport, psychologie…" onChange={(e) => setNiche(e.target.value)} />
 
             {/* Voix off du compte : une voix différente par compte diversifie le "son"
                 (utile contre la détection de contenu IA) et casse l'effet monotone. */}
@@ -2145,22 +2141,12 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
                   {voicePlaying ? <MIcon name="progress_activity" size={14} spin /> : <MIcon name="play_arrow" size={14} />} Écouter
                 </button>
               </div>
-              <div className="muted small" style={{ marginTop: 4 }}>
-                {hasEleven
-                  ? 'Voix OpenAI et ElevenLabs dans la même liste — le fournisseur suit la voix choisie.'
-                  : 'Voix OpenAI. Ajoute ta clé ElevenLabs dans les Réglages pour voir aussi ses voix humaines ici.'}
-                {' '}S’applique à la narration (niche, sujet libre) ; les séries gardent la voix native Veo.
-              </div>
             </div>
 
-            {/* Playlist : réglage du COMPTE (elle sert aussi aux vidéos « Sujet libre »
-                et aux séries dont le bloc impose une piste) — logée ici, l'onglet
-                principal du compte, plutôt que dans un onglet dédié. */}
+            {/* Playlist : réglage du COMPTE (elle sert aussi aux séries dont le bloc
+                impose une piste) — logée ici, l'onglet principal du compte. */}
             <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
-              <label className="muted small" style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>Musique du compte</label>
-              <div className="muted small" style={{ marginBottom: 8 }}>
-                Coche les pistes à utiliser : les vidéos les jouent <b>à tour de rôle</b> (une différente à chaque fois, puis ça reboucle). Aucune cochée = l’IA choisit selon l’ambiance. Une piste choisie <b>sur un bloc</b> reste prioritaire.
-              </div>
+              <label className="muted small" style={{ display: 'block', marginBottom: 8, fontWeight: 600 }}>Musique du compte</label>
               {tracks.length === 0 ? (
                 <div className="muted small">Aucune musique disponible — ajoute des pistes dans Réglages → Musique, ou importe un MP3 depuis un bloc du planning.</div>
               ) : (
@@ -2198,25 +2184,17 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
 
         {tab === 'serie' && (
           <>
-            <div className="row" style={{ marginBottom: 10 }}>
-              <div className="muted small">Configure la série ici, puis choisis <b>« Épisode de série »</b> sur un bloc du planning pour publier l’épisode suivant.</div>
-              {serie.title.trim() && <span className="chip" style={{ flexShrink: 0, marginLeft: 8 }}>Ép. {serie.episode}</span>}
-            </div>
+            {serie.title.trim() && <div className="row" style={{ marginBottom: 10, justifyContent: 'flex-end' }}><span className="chip">Ép. {serie.episode}</span></div>}
             <label className="muted small" style={{ display: 'block', marginBottom: 4 }}>Titre de la série</label>
             <input className="input-full" value={serie.title} placeholder="ex. L’île des fruits skibidi" onChange={(e) => setSerie((s) => ({ ...s, title: e.target.value }))} style={{ marginBottom: 10 }} />
             <label className="muted small" style={{ display: 'block', marginBottom: 4 }}>Univers (personnages récurrents + style visuel)</label>
-            <textarea className="input-full" rows={4} value={serie.universe} placeholder="Décris les personnages (noms + traits visuels précis) et le style — c’est ce qui garde les personnages identiques d’un épisode à l’autre." onChange={(e) => setSerie((s) => ({ ...s, universe: e.target.value }))} style={{ marginBottom: 4 }} />
-            <div className="muted small">Épisodes en vidéo animée avec dialogues joués (voix par personnage) et cliffhanger. Mémoire de l’histoire conservée. Changer le titre relance à l’épisode 1.</div>
+            <textarea className="input-full" rows={4} value={serie.universe} placeholder="Décris les personnages (noms + traits visuels précis) et le style — c’est ce qui garde les personnages identiques d’un épisode à l’autre." onChange={(e) => setSerie((s) => ({ ...s, universe: e.target.value }))} />
             {ctaField('serie', 'CTA des épisodes de série', 'ex. 🔔 Abonne-toi pour la suite !')}
           </>
         )}
 
         {tab === 'clips' && (
           <>
-            <div className="small" style={{ fontWeight: 600, marginBottom: 6 }}>Clips depuis une rediff de live ou un reportage YouTube</div>
-            <div className="muted small" style={{ marginBottom: 10 }}>
-              L’IA télécharge la vidéo, repère les <b>meilleurs moments</b>, recadre en 9:16 avec sous-titres, et publie le clip sur ce compte. Sur un bloc : type <b>« Clip »</b> + URL YouTube — ou <b>URL vide = l’IA choisit la vidéo elle-même</b> (recherche selon la niche et tes sources ci-dessous).
-            </div>
             <label className="muted small" style={{ display: 'block', marginBottom: 4 }}>Chaînes / sources préférées (optionnel — une par ligne)</label>
             <textarea
               className="input-full"
@@ -2224,9 +2202,8 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
               value={clipChannels}
               placeholder={'ex.\nSqueezie\nHugoDécrypte\nZack en roue libre'}
               onChange={(e) => setClipChannels(e.target.value)}
-              style={{ marginBottom: 4 }}
+              style={{ marginBottom: 10 }}
             />
-            <div className="muted small" style={{ marginBottom: 10 }}>En mode choix auto, l’IA privilégie ces chaînes/émissions pour trouver des rediffs et reportages à cliper. Une même vidéo n’est jamais utilisée deux fois ; chaque analyse extrait 3 clips publiés au fil des blocs.</div>
             <button className="btn" disabled={testing || !clipChannels.trim()} onClick={() => void testChannels()}>
               🧪 {testing ? 'Test en cours…' : 'Tester la compatibilité des chaînes'}
             </button>
