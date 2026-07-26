@@ -13,7 +13,7 @@ import type { ViralIdea } from '../src/shared/types'
 const OPENAI = 'https://api.openai.com/v1'
 
 const SceneSchema = z.object({ narration: z.string(), imagePrompt: z.string(), speaker: z.string().optional() })
-const CastSchema = z.object({ name: z.string(), voice: z.string(), style: z.string() })
+const CastSchema = z.object({ name: z.string(), voice: z.string(), style: z.string(), voiceSignature: z.string().optional() })
 const StoryboardSchema = z.object({ scenes: z.array(SceneSchema), cast: z.array(CastSchema).optional() })
 export interface Scene {
   narration: string
@@ -25,6 +25,9 @@ export interface CastMember {
   name: string
   voice: string
   style: string
+  /** Signature vocale acoustique et DISTINCTE, réutilisée à l'identique à chaque
+   *  scène pour garder la même voix (crucial pour Veo, qui réinvente sinon une voix par clip). */
+  voiceSignature?: string
 }
 /** Voix disponibles côté OpenAI TTS (gpt-4o-mini-tts). */
 export const OPENAI_VOICES = ['alloy', 'ash', 'ballad', 'coral', 'echo', 'fable', 'onyx', 'nova', 'sage', 'shimmer']
@@ -101,9 +104,10 @@ async function buildStoryboard(
         properties: {
           name: { type: 'string', description: 'Nom du personnage' },
           voice: { type: 'string', enum: OPENAI_VOICES, description: 'Voix TTS attribuée — varie les timbres entre personnages (graves, aiguës…)' },
-          style: { type: 'string', description: 'Comment il parle, en français : timbre, débit, émotion, tics de langage (ex. « voix grave et lente, très bête, rit à la fin de ses phrases »)' }
+          style: { type: 'string', description: 'Comment il parle, en français : timbre, débit, émotion, tics de langage (ex. « voix grave et lente, très bête, rit à la fin de ses phrases »)' },
+          voiceSignature: { type: 'string', description: 'Signature VOCALE physique et DISTINCTE des autres personnages, en anglais : hauteur (deep/high-pitched), genre, âge, timbre, tempo, texture, accent. Elle sera reprise MOT POUR MOT à chaque scène pour garder EXACTEMENT la même voix. Ex : « a deep, low-pitched, gravelly adult male voice, slow measured tempo, warm raspy timbre, French accent ».' }
         },
-        required: ['name', 'voice', 'style']
+        required: ['name', 'voice', 'style', 'voiceSignature']
       }
     }
   }
@@ -146,8 +150,8 @@ ${(idea.script ?? []).map((step, i) => `${i + 1}. ${step}`).join('\n')}
 
 Règles :
 - Produis ${grouped ? `AU PLUS ${REPRO_MAX}` : `EXACTEMENT ${steps.length}`} scène(s) : UNE réplique par scène, dans l'ordre.${grouped ? ` La source compte ${(idea.script ?? []).length} répliques : garde les ${REPRO_MAX} qui portent l'histoire du début à la chute, sans en perdre le sens.` : ''}
-- Chaque scène a un champ speaker = le personnage qui parle (même nom d'une scène à l'autre pour un même personnage).
-- CASTING (champ cast) : un membre par personnage récurrent, avec une voix TTS DISTINCTE et adaptée au personnage (père/homme = voix grave type onyx/echo ; mère/femme = coral/nova/sage ; enfant/ado = voix claire type shimmer/fable), et son intonation.
+- Chaque scène a un champ speaker = le personnage qui parle, ÉCRIT EXACTEMENT comme son « name » dans le casting (orthographe IDENTIQUE d'une scène à l'autre, aucune variante ni surnom) — sinon sa voix changera en cours de vidéo.
+- CASTING (champ cast) : un membre par personnage récurrent, avec (a) une voix TTS DISTINCTE et adaptée (père/homme = voix grave type onyx/echo ; mère/femme = coral/nova/sage ; enfant/ado = voix claire type shimmer/fable), (b) son intonation (style), et (c) une voiceSignature acoustique précise et DISTINCTE de celle des autres, qui sera répétée à l'identique à CHAQUE scène pour que sa voix ne change JAMAIS.
 - Reste FIDÈLE aux répliques et à la chute ; français oral fluide (nombres en toutes lettres).
 ${styleHint ? `- STYLE VISUEL IMPOSÉ (celui de la source, à l'identique d'une scène à l'autre) : ${styleHint}` : "- Style visuel cohérent et proche de la source d'une scène à l'autre."}
 - RÈGLES IMAGE (le générateur refuse sinon) : le personnage qui parle au premier plan, expressif, mais AUCUN enfant/mineur ni personne réelle identifiable de façon photoréaliste → rends-le en style illustré/stylisé (celui de la source) ou de façon générique. Pas de gore ni de contenu sexuel.
@@ -688,36 +692,39 @@ export async function generateVideoFromIdea(
       // (voix native jouée + vraie synchro labiale + bruitages d'ambiance).
       let sceneDone = false
       if (opts.animateScenes && opts.videoEngine === 'veo' && opts.geminiKey) {
-        log?.(`Scène ${i + 1}/${scenes.length} — scène parlée (Veo)…`)
-        try {
-          const clip = join(work, `v${i}.mp4`)
-          const words = sc.narration.trim().split(/\s+/).length
-          const veoDur: 4 | 6 | 8 = words <= 6 ? 4 : words <= 12 ? 6 : 8
-          const who = member?.name ?? sc.speaker ?? 'the main character'
-          const style = member?.style ? ` (${member.style})` : ''
-          await genVideoVeoTalking(
-            opts.geminiKey,
-            `${sc.imagePrompt}. The character "${who}" speaks in French with an expressive cartoon voice${style}, saying EXACTLY: « ${sc.narration} ». Accurate lip-sync while talking, expressive face and hand gestures, other characters react, keep the characters and art style strictly identical to the first frame, vivid colors, no text, no captions.`,
-            clip,
-            png,
-            veoDur
-          )
-          const clipDur = await mediaDuration(ctx.bin.ffprobe, clip)
-          await writeFile(ass, sceneAss(subText, clipDur))
-          await run(ctx.bin.ffmpeg, [
-            '-y', '-loglevel', 'error',
-            '-i', clip,
-            '-filter_complex',
-            `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,setsar=1,subtitles=${ass}[v]`,
-            '-map', '[v]', '-map', '0:a?',
-            '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
-            '-c:a', 'aac', '-ar', '44100', '-ac', '2', '-b:a', '128k',
-            scene
-          ])
-          sceneFiles.push(scene)
-          sceneDone = true
-        } catch (e) {
-          log?.(`Scène ${i + 1}/${scenes.length} — Veo indisponible (${e instanceof Error ? e.message : String(e)}) → voix TTS + animation`)
+        const clip = join(work, `v${i}.mp4`)
+        const words = sc.narration.trim().split(/\s+/).length
+        const veoDur: 4 | 6 | 8 = words <= 6 ? 4 : words <= 12 ? 6 : 8
+        const who = member?.name ?? sc.speaker ?? 'the main character'
+        // Voix RÉUTILISÉE À L'IDENTIQUE à chaque scène pour ce personnage → Veo
+        // garde la même voix au lieu d'en réinventer une par clip.
+        const voiceDesc = member?.voiceSignature?.trim() || (member?.style ? `expressive cartoon voice, ${member.style}` : 'an expressive, distinctive cartoon voice')
+        const veoPrompt = `${sc.imagePrompt}. The character "${who}" says in French, EXACTLY: « ${sc.narration} ». VOICE — use this EXACT SAME voice for "${who}" in every single scene, never change it between scenes: ${voiceDesc}. Lip-sync must be perfectly accurate: the mouth shapes match each spoken syllable and start/stop exactly with the speech. Expressive face and natural hand gestures while speaking; the other characters stay silent and only listen. Keep the characters, their outfits and the art style strictly identical to the first frame. Vivid colors, no on-screen text, no captions.`
+        // Jusqu'à 2 tentatives : évite qu'une scène bascule en TTS (voix différente
+        // + pas de lipsync) au milieu de la vidéo sur une erreur Veo passagère.
+        for (let attempt = 1; attempt <= 2 && !sceneDone; attempt++) {
+          log?.(`Scène ${i + 1}/${scenes.length} — scène parlée (Veo)${attempt > 1 ? ' — nouvelle tentative' : ''}…`)
+          try {
+            await genVideoVeoTalking(opts.geminiKey, veoPrompt, clip, png, veoDur)
+            const clipDur = await mediaDuration(ctx.bin.ffprobe, clip)
+            await writeFile(ass, sceneAss(subText, clipDur))
+            await run(ctx.bin.ffmpeg, [
+              '-y', '-loglevel', 'error',
+              '-i', clip,
+              '-filter_complex',
+              `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,setsar=1,subtitles=${ass}[v]`,
+              '-map', '[v]', '-map', '0:a?',
+              '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+              '-c:a', 'aac', '-ar', '44100', '-ac', '2', '-b:a', '128k',
+              scene
+            ])
+            sceneFiles.push(scene)
+            sceneDone = true
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e)
+            if (attempt >= 2) log?.(`Scène ${i + 1}/${scenes.length} — Veo indisponible (${msg}) → voix TTS + animation`)
+            else await new Promise((r) => setTimeout(r, 8000))
+          }
         }
       }
       if (sceneDone) continue
