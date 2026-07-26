@@ -1483,7 +1483,26 @@ function Clipage({ sources, clips, progress, onRefresh, toast }: { sources: Sour
 function History({ sources, clips, onRefresh, toast, goClips }: { sources: SourceDTO[]; clips: ClipDTO[]; progress: Record<number, ProgressEvent>; onRefresh: () => Promise<void>; toast: (m: string) => void; goClips: () => void }): JSX.Element {
   const [tab, setTab] = useState<'all' | 'done' | 'error'>('all')
   const [page, setPage] = useState(0)
-  const PER = 7
+  // Nombre de lignes calculé pour remplir PILE la hauteur du tableau (pas de vide
+  // ni de scroll) : on mesure l'espace dispo ÷ la hauteur d'une ligne, au resize.
+  const tableRef = useRef<HTMLDivElement>(null)
+  const [PER, setPER] = useState(7)
+  useEffect(() => {
+    const el = tableRef.current
+    if (!el) return
+    const measure = (): void => {
+      const head = el.querySelector('.hist-head') as HTMLElement | null
+      const row = el.querySelector('.hist-row') as HTMLElement | null
+      const rowH = row?.offsetHeight || 56
+      const headH = head?.offsetHeight || 42
+      const n = Math.max(3, Math.floor((el.clientHeight - headH) / rowH))
+      setPER((p) => (p === n ? p : n))
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
   const busy = (s: string): boolean => s === 'running' || s === 'queued'
   const clipCount = (id: number): number => clips.filter((c) => c.sourceId === id).length
   async function run(id: number): Promise<void> {
@@ -1543,7 +1562,7 @@ function History({ sources, clips, onRefresh, toast, goClips }: { sources: Sourc
         ))}
       </div>
 
-      <div className="hist-table clip-anim" style={{ animationDelay: '0.1s' }}>
+      <div ref={tableRef} className="hist-table clip-anim" style={{ animationDelay: '0.1s' }}>
         <div className="hist-head">
           <span>Vidéo</span><span>Statut</span><span>Clips</span><span>Date</span><span />
         </div>
