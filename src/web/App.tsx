@@ -1483,7 +1483,7 @@ function Clipage({ sources, clips, progress, onRefresh, toast }: { sources: Sour
 function History({ sources, clips, onRefresh, toast, goClips }: { sources: SourceDTO[]; clips: ClipDTO[]; progress: Record<number, ProgressEvent>; onRefresh: () => Promise<void>; toast: (m: string) => void; goClips: () => void }): JSX.Element {
   const [tab, setTab] = useState<'all' | 'done' | 'error'>('all')
   const [page, setPage] = useState(0)
-  const PER = 9
+  const PER = 7
   const busy = (s: string): boolean => s === 'running' || s === 'queued'
   const clipCount = (id: number): number => clips.filter((c) => c.sourceId === id).length
   async function run(id: number): Promise<void> {
