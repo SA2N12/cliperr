@@ -1874,9 +1874,9 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
   useEffect(() => { api.musicList().then((r) => setTracks(r.tracks)).catch(() => undefined) }, [])
   useEffect(() => {
     api.listClips()
-      // Même pool que le pilote : on exclut les clips protégés (non publiables) —
-      // ils ne peuvent pas être choisis pour un créneau.
-      .then((cs) => setStockClips(cs.filter((c) => c.publishStatus !== 'published' && c.reviewStatus !== 'rejected' && c.filePath && c.publishable).sort((a, b) => b.createdAt - a.createdAt)))
+      // Tous les clips en stock, protégés INCLUS : les choisir à la main vaut
+      // consentement. Seul le tirage automatique les exclut (côté serveur).
+      .then((cs) => setStockClips(cs.filter((c) => c.publishStatus !== 'published' && c.reviewStatus !== 'rejected' && c.filePath).sort((a, b) => b.createdAt - a.createdAt)))
       .catch(() => undefined)
   }, [])
   // Import d'un MP3 depuis le bloc → stocké dans /data/music (partagé), puis auto-sélectionné pour ce bloc.
@@ -1990,7 +1990,7 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
                 <option value="">— Choisir un clip en stock —</option>
                 {stockClips.map((c) => {
                   const dur = Math.max(0, Math.round(c.endSec - c.startSec))
-                  return <option key={c.id} value={String(c.id)}>{c.title || `Clip n°${c.id}`}{dur > 0 ? ` · ${dur}s` : ''}</option>
+                  return <option key={c.id} value={String(c.id)}>{c.publishable ? '' : '🔒 '}{c.title || `Clip n°${c.id}`}{dur > 0 ? ` · ${dur}s` : ''}{c.publishable ? '' : ' · protégé'}</option>
                 })}
                 {/* Clip enregistré mais plus en stock (publié/supprimé depuis) : sans
                     cette option, le choix semblerait perdu à la réouverture. */}
@@ -2001,7 +2001,7 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
               <div className="sp-note">
                 {stockClips.length === 0
                   ? 'Aucun clip en stock : la page Clips → onglet En stock est vide.'
-                  : 'Publie ce clip tel quel, sans génération (0 crédit). Une fois publié, le créneau redevient automatique — un clip ne part qu’une fois.'}
+                  : 'Publie ce clip tel quel, sans génération (0 crédit). Sans choix, le pilote prend le plus récent — jamais un clip 🔒 protégé (eux ne partent que choisis ici). Une fois publié, le créneau redevient automatique.'}
               </div>
             </>
           )}

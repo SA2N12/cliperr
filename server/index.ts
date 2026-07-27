@@ -702,14 +702,18 @@ function availableStockClips(): import('../src/shared/types').ClipDTO[] {
     .sort((a, b) => b.createdAt - a.createdAt)
 }
 /** Clip qu'un créneau « stock » publiera : celui choisi (subject) s'il est encore
- *  disponible, sinon le plus récent en stock. `null` = plus aucun clip en stock. */
+ *  disponible, sinon le plus récent en stock. `null` = plus aucun clip en stock.
+ *  Le choix EXPLICITE peut viser un clip « protégé » (non publiable) : le choisir
+ *  à la main vaut consentement. Le tirage AUTOMATIQUE, lui, reste limité aux
+ *  clips publiables — un clip protégé ne part jamais tout seul. */
 function pickStockClip(subjectId: number | undefined): import('../src/shared/types').ClipDTO | null {
-  const all = availableStockClips()
   if (subjectId != null && Number.isFinite(subjectId)) {
-    const chosen = all.find((c) => c.id === subjectId)
+    const chosen = repo
+      .listClips()
+      .find((c) => c.id === subjectId && c.filePath && c.publishStatus !== 'published' && c.reviewStatus !== 'rejected')
     if (chosen) return chosen
   }
-  return all[0] ?? null
+  return availableStockClips()[0] ?? null
 }
 /** Série CONFIGURÉE (titre + univers remplis), même si le toggle est désactivé — pour forcer un épisode sur un créneau. */
 function seriesConfiguredFor(user: string): SeriesState | null {
