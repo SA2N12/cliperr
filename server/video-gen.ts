@@ -853,8 +853,11 @@ export async function generateVideoFromIdea(
         log?.(`Scène ${i + 1}/${scenes.length} — animation vidéo (fal.ai)…`)
         try {
           animClip = join(work, `v${i}.mp4`)
+          // Pas de lip-sync ici : on n'insiste PAS sur la bouche (sinon un
+          // mouvement de lèvres non synchronisé se remarque). On mise sur
+          // l'expression et les gestes ; les sous-titres portent la réplique.
           const talking = sc.speaker
-            ? ` The character "${sc.speaker}" is TALKING: clear mouth movement, expressive face and hand gestures while speaking.`
+            ? ` The character "${sc.speaker}" is speaking, with a lively expressive face, subtle natural head motion and hand gestures.`
             : ''
           await genVideoFal(
             opts.falKey,

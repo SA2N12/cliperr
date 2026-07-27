@@ -460,11 +460,13 @@ async function runVideoGen(
       // Reproduction : voix PAR PERSONNAGE si la source est un dialogue (détecté à
       // l'inspiration), sinon voix off unique. Les séries forcent déjà dialogue=true.
       dialogue: opts.dialogue || (!!idea.reproduce && !!idea.dialogue),
-      // Reproduction d'un DIALOGUE : moteur « lipsync » — voix TTS FIXE par
-      // personnage (constante de bout en bout) + synchro labiale fal.ai calée
-      // dessus. Sinon, moteur de série habituel (Veo / Seedance).
-      videoEngine: reproDialogue && !!getEncrypted('fal_key')
-        ? 'lipsync'
+      // Reproduction d'un DIALOGUE : voix ElevenLabs distinctes par personnage
+      // (naturelles + constantes) + animation + sous-titres, SANS lip-sync
+      // artificiel (les modèles de synchro labiale décalent sur du dessin, ce qui
+      // saute aux yeux — le format faceless repose sur voix + sous-titres, pas sur
+      // les lèvres). On force donc l'animation simple (ni Veo, ni lipsync).
+      videoEngine: dialogueEleven
+        ? 'seedance'
         : repo.getSetting('series_video_engine') || 'seedance',
       onProgress: (m) => emitIdeaVideo({ ideaId, status: 'running', message: m })
     })
