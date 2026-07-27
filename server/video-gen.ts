@@ -610,7 +610,11 @@ async function genLipsyncFal(
 
 // ── Veo (Gemini) : scène PARLÉE — le personnage prononce sa réplique avec
 // voix native + lipsync + bruitages, à partir de l'image de la scène. ──
-const VEO_MODELS = ['veo-3.1-fast-generate-001', 'veo-3.1-fast-generate-preview', 'veo-3.0-fast-generate-001']
+// Modèles Veo réellement exposés par l'API Gemini (les noms « -001 » n'existent
+// pas pour tous les comptes → 404 ; les versions « fast/full » peuvent être à
+// court de quota → 429). On liste les 3 variantes 3.1 dispo, de la meilleure à la
+// plus légère : `lite` a le quota le plus large et sert de filet garanti.
+const VEO_MODELS = ['veo-3.1-fast-generate-preview', 'veo-3.1-generate-preview', 'veo-3.1-lite-generate-preview']
 let veoModelCache: string | null = null
 
 export async function genVideoVeoTalking(
@@ -642,7 +646,9 @@ export async function genVideoVeoTalking(
         break
       }
       lastErr = `${m} → ${r.status} ${(await r.text()).slice(0, 140)}`
-      if (r.status === 404) break // modèle inconnu, inutile de retenter sans durée
+      // 404 = modèle inconnu, 429 = quota épuisé sur CE modèle : inutile de
+      // réessayer sans durée, on passe directement au modèle suivant (→ lite).
+      if (r.status === 404 || r.status === 429) break
     }
     if (opName) break
   }
