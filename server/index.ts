@@ -454,6 +454,9 @@ async function runVideoGen(
       falKey: getEncrypted('fal_key'),
       falVideoModel: repo.getSetting('fal_video_model') || undefined,
       falLipsyncModel: repo.getSetting('fal_lipsync_model') || undefined,
+      // Veo sans plafond : quand le quota gratuit Google est épuisé, les scènes
+      // parlées continuent via DeepInfra (payé à la seconde) au lieu du repli TTS.
+      deepinfraKey: getEncrypted('deepinfra_key'),
       // Reproduction fidèle : la source est une VIDÉO, pas un diaporama. On anime
       // donc les scènes (fal.ai) si la clé est là, au lieu d'un simple Ken Burns
       // sur des images fixes.
@@ -1843,6 +1846,14 @@ app.post('/api/settings/fal', wrap((req, res) => {
   res.json({ ok: true })
 }))
 
+// DeepInfra : Veo sans quota journalier (repli payant à la seconde quand le
+// quota gratuit Google est épuisé) + hub de modèles centralisés.
+app.get('/api/settings/deepinfra', wrap((_req, res) => res.json({ has: !!getEncrypted('deepinfra_key') })))
+app.post('/api/settings/deepinfra', wrap((req, res) => {
+  setEncrypted('deepinfra_key', String(req.body?.key ?? ''))
+  res.json({ ok: true })
+}))
+
 // Musiques de fond (libres de droits) pour les vidéos IA
 const musicUpload = multer({
   storage: multer.diskStorage({
@@ -1978,7 +1989,8 @@ app.post('/api/settings/groq', wrap((req, res) => {
 
 // Vue d'ensemble des fournisseurs externes : état (configuré ou non) en un appel.
 // Quota Veo du jour (répartition sur fast/full/lite) → « N vidéos restantes ».
-app.get('/api/veo/quota', wrap((_req, res) => res.json(veoQuota())))
+// `deepinfra` : un repli payant sans quota est branché → jamais bloqué à zéro.
+app.get('/api/veo/quota', wrap((_req, res) => res.json({ ...veoQuota(), deepinfra: !!getEncrypted('deepinfra_key') })))
 
 app.get('/api/providers', wrap((_req, res) => {
   res.json({
@@ -1990,6 +2002,7 @@ app.get('/api/providers', wrap((_req, res) => {
       elevenlabs: !!getEncrypted('elevenlabs_key'),
       gemini: !!getEncrypted('gemini_key'),
       fal: !!getEncrypted('fal_key'),
+      deepinfra: !!getEncrypted('deepinfra_key'),
       groq: !!getEncrypted('groq_key'),
       rapidapi: !!getEncrypted('rapidapi_key'),
       uploadpost: !!getEncrypted('uploadpost_key'),
@@ -2108,10 +2121,35 @@ app.post('/api/providers/check', wrap(async (_req, res) => {
       to.done()
     }
   }
-  const [claude, openai, gemini, elevenlabs, groq] = await Promise.all([
-    checkClaude(), checkOpenai(), checkGemini(), checkEleven(), checkGroq()
+  const checkDeepinfra = async (): Promise<ProviderState> => {
+    const key = getEncrypted('deepinfra_key')
+    if (!key) return { state: 'unconfigured' }
+    const to = withTimeout(15000)
+    try {
+      // Micro-embedding (~10⁻⁸ $) : seul appel qui révèle un solde à zéro —
+      // DeepInfra n'expose pas d'endpoint de solde, et lister les modèles
+      // répond 200 même sans crédit.
+      const r = await fetch('https://api.deepinfra.com/v1/openai/embeddings', {
+        method: 'POST',
+        signal: to.signal,
+        headers: { Authorization: `Bearer ${key}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ model: 'BAAI/bge-m3', input: 'ok' })
+      })
+      if (r.ok) return { state: 'ok' }
+      const t = await r.text()
+      if (/positive balance|top.?up|add balance/i.test(t)) return { state: 'credits', detail: 'Solde à zéro — recharge sur deepinfra.com (Billing)' }
+      if (r.status === 401 || r.status === 403) return { state: 'invalid', detail: 'Clé invalide' }
+      return { state: 'error', detail: `HTTP ${r.status}` }
+    } catch (e) {
+      return { state: 'error', detail: e instanceof Error ? e.message.slice(0, 80) : 'échec' }
+    } finally {
+      to.done()
+    }
+  }
+  const [claude, openai, gemini, elevenlabs, groq, deepinfra] = await Promise.all([
+    checkClaude(), checkOpenai(), checkGemini(), checkEleven(), checkGroq(), checkDeepinfra()
   ])
-  res.json({ providers: { claude, openai, gemini, elevenlabs, groq } })
+  res.json({ providers: { claude, openai, gemini, elevenlabs, groq, deepinfra } })
 }))
 
 // Analyse IA de la croissance : rassemble les VRAIES stats (comptes + titres) et

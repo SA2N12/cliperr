@@ -1043,8 +1043,9 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
   // via un flag JSON → on les retrouve depuis n'importe quel appareil).
   const [saved, setSaved] = useState<{ url: string; addedAt: number }[]>([])
   // Quota Veo du jour (vidéos parlées restantes, réparties sur fast/full/lite).
-  const [quota, setQuota] = useState<{ remainingVideos: number; remainingRequests: number } | null>(null)
-  const loadQuota = (): void => { api.veoQuota().then((q) => setQuota({ remainingVideos: q.remainingVideos, remainingRequests: q.remainingRequests })).catch(() => undefined) }
+  // `deepinfra` : un repli payant sans plafond prend le relais à quota épuisé.
+  const [quota, setQuota] = useState<{ remainingVideos: number; remainingRequests: number; deepinfra: boolean } | null>(null)
+  const loadQuota = (): void => { api.veoQuota().then((q) => setQuota({ remainingVideos: q.remainingVideos, remainingRequests: q.remainingRequests, deepinfra: q.deepinfra })).catch(() => undefined) }
   useEffect(loadQuota, [])
 
   useEffect(() => {
@@ -1150,14 +1151,18 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
         </div>
         <div className="genai-platforms" style={{ justifyContent: 'space-between' }}>
           <span><MIcon name="check_circle" size={13} /> Fonctionne avec <b>TikTok</b> · <b>Instagram Reels</b> · <b>YouTube Shorts</b> (10 min max)</span>
-          {quota && (
+          {quota && (quota.remainingVideos > 0 || !quota.deepinfra ? (
             <span
               className={`veo-quota${quota.remainingVideos <= 0 ? ' empty' : ''}`}
-              title="Vidéos parlées (Veo) que tu peux encore générer aujourd'hui, réparties sur les 3 modèles Veo. Estimation basée sur le quota journalier Google (~8 scènes/vidéo) — se réinitialise vers 9 h."
+              title={`Vidéos parlées (Veo) sur le quota GRATUIT Google du jour (~8 scènes/vidéo, reset vers 9 h).${quota.deepinfra ? ' Ensuite, Veo continue automatiquement via DeepInfra (payé à la seconde).' : ''}`}
             >
-              <MIcon name="movie" size={13} /> ≈ {quota.remainingVideos} vidéo{quota.remainingVideos > 1 ? 's' : ''} Veo restante{quota.remainingVideos > 1 ? 's' : ''} aujourd’hui
+              <MIcon name="movie" size={13} /> ≈ {quota.remainingVideos} vidéo{quota.remainingVideos > 1 ? 's' : ''} Veo gratuite{quota.remainingVideos > 1 ? 's' : ''} aujourd’hui
             </span>
-          )}
+          ) : (
+            <span className="veo-quota" title="Quota gratuit Google épuisé pour aujourd'hui : les scènes parlées continuent via DeepInfra, facturées à la seconde (~1,20 $/scène).">
+              <MIcon name="hub" size={13} /> Quota gratuit épuisé — Veo via DeepInfra (payant)
+            </span>
+          ))}
         </div>
       </div>
 
@@ -3253,6 +3258,7 @@ const PROVIDER_META: { id: string; name: string; role: string; cost: string; ess
   { id: 'elevenlabs', name: 'ElevenLabs', role: 'Voix off humaines (option, remplace OpenAI)', cost: '≈ 5 – 22 $/mois selon le volume', essential: false },
   { id: 'gemini', name: 'Gemini (Nano Banana + Veo)', role: 'Images de série cohérentes + scènes parlées Veo', cost: '≈ 1,40 $ / épisode animé', essential: false },
   { id: 'fal', name: 'fal.ai', role: 'Animation des scènes de série (image → vidéo)', cost: '≈ 0,18 $ / scène', essential: false },
+  { id: 'deepinfra', name: 'DeepInfra', role: 'Veo sans plafond (repli des scènes parlées)', cost: '≈ 1,20 $ / scène Veo (0,15 $/s) — à l’usage', essential: false },
   { id: 'groq', name: 'Groq (Whisper)', role: 'Transcription des clips YouTube', cost: 'Gratuit / quasi nul', essential: false },
   { id: 'rapidapi', name: 'RapidAPI', role: 'Recherche de vidéos à cliper + tendances TikTok', cost: 'Abonnement selon le plan', essential: false },
   { id: 'cookies', name: 'Cookies YouTube', role: 'Débloque le téléchargement des clips', cost: 'Gratuit (à réexporter régulièrement)', essential: false },
@@ -3292,7 +3298,7 @@ function Providers({ go }: { go: (p: Page) => void }): JSX.Element {
   // Icône Material par fournisseur.
   const ICON: Record<string, string> = {
     claude: 'auto_awesome', openai: 'image', uploadpost: 'ios_share', elevenlabs: 'record_voice_over',
-    gemini: 'auto_awesome_motion', fal: 'animation', groq: 'subtitles', rapidapi: 'trending_up',
+    gemini: 'auto_awesome_motion', fal: 'animation', deepinfra: 'hub', groq: 'subtitles', rapidapi: 'trending_up',
     cookies: 'cookie', proxy: 'vpn_lock'
   }
   // État unifié : la vérification EN DIRECT prime sur l'état « configuré ».
@@ -3392,6 +3398,8 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
   const [geminiHas, setGeminiHas] = useState(false)
   const [falKey, setFalKey] = useState('')
   const [falHas, setFalHas] = useState(false)
+  const [diKey, setDiKey] = useState('')
+  const [diHas, setDiHas] = useState(false)
   const [elevenKey, setElevenKey] = useState('')
   const [elevenHas, setElevenHas] = useState(false)
   const [music, setMusic] = useState<string[]>([])
@@ -3416,6 +3424,7 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
     api.openaiStatus().then((r) => setOpenaiHas(r.has)).catch(() => undefined)
     api.geminiStatus().then((r) => setGeminiHas(r.has)).catch(() => undefined)
     api.falStatus().then((r) => setFalHas(r.has)).catch(() => undefined)
+    api.deepinfraStatus().then((r) => setDiHas(r.has)).catch(() => undefined)
     api.elevenlabsStatus().then((r) => setElevenHas(r.has)).catch(() => undefined)
     api.musicList().then((r) => setMusic(r.tracks)).catch(() => undefined)
     api.golinks().then((r) => setLinks(Object.entries(r.links).map(([slug, url]) => ({ slug, url })))).catch(() => undefined)
@@ -3578,6 +3587,13 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
             <button className="btn primary" onClick={async () => { await api.setFalKey(falKey); setFalKey(''); setFalHas((await api.falStatus()).has); toast('Clé fal.ai enregistrée') }} disabled={!falKey.trim()}>Enregistrer</button>
           </div>
           <div className="muted small" style={{ marginTop: 6 }}>Anime chaque scène des épisodes de série (image → clip vidéo, ~0,18 $/scène). Sans clé, les scènes restent des images animées (zoom).</div>
+        </Field>
+        <Field label={diHas ? 'Clé DeepInfra configurée ✓' : 'Clé DeepInfra (Veo sans plafond journalier)'}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input className="input-full" style={{ flex: 1 }} type="password" placeholder="clé DeepInfra…  (deepinfra.com → Dashboard → API Keys)" value={diKey} onChange={(e) => setDiKey(e.target.value)} />
+            <button className="btn primary" onClick={async () => { await api.setDeepinfraKey(diKey); setDiKey(''); setDiHas((await api.deepinfraStatus()).has); toast('Clé DeepInfra enregistrée') }} disabled={!diKey.trim()}>Enregistrer</button>
+          </div>
+          <div className="muted small" style={{ marginTop: 6 }}>Quand le quota Veo gratuit de Google est épuisé, les scènes parlées continuent via DeepInfra (même modèle Veo, ~1,20 $/scène facturée à la seconde) au lieu de perdre voix et synchro labiale.</div>
         </Field>
         <Field label="Voix off des vidéos (narration)">
           <select className="input-full" style={{ maxWidth: 320 }} value={flags['voice_provider'] || 'openai'} onChange={(e) => void setFlag('voice_provider', e.target.value)}>

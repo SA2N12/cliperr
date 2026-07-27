@@ -57,6 +57,9 @@ export interface VideoGenOptions {
   falVideoModel?: string
   /** Modèle fal.ai de synchronisation labiale (cale la bouche sur la voix TTS). */
   falLipsyncModel?: string
+  /** Clé DeepInfra : Veo payé à la seconde, SANS quota journalier — repli des
+   *  scènes parlées quand le quota gratuit Google est épuisé. */
+  deepinfraKey?: string | null
   /** Active l'animation vidéo des scènes (mode série). */
   animateScenes?: boolean
   /** Mode dialogue : les personnages parlent (voix + intonation par personnage), pas de narrateur. */
@@ -691,6 +694,42 @@ export async function genVideoVeoTalking(
   }
 }
 
+// ── Veo via DeepInfra : même modèle (veo-3.1-fast), payé à la seconde, SANS
+// quota journalier. Appel SYNCHRONE (la réponse arrive quand la vidéo est prête,
+// 1 à 4 min) ; l'image de départ passe en Data URL base64 (schéma officiel). ──
+const DEEPINFRA = 'https://api.deepinfra.com'
+export async function genVideoVeoDeepinfra(
+  key: string,
+  prompt: string,
+  dest: string,
+  refImagePath: string
+): Promise<void> {
+  const imageB64 = (await readFile(refImagePath)).toString('base64')
+  const r = await fetch(`${DEEPINFRA}/v1/inference/google/veo-3.1-fast`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      prompt,
+      image: `data:image/png;base64,${imageB64}`,
+      generate_audio: true, // défaut FALSE côté DeepInfra → sans lui, scène muette
+      aspect_ratio: '9:16',
+      resolution: '720p'
+    })
+  })
+  if (!r.ok) throw new Error(`DeepInfra Veo ${r.status} : ${(await r.text()).slice(0, 160)}`)
+  const j = (await r.json()) as { videos?: string | string[]; video?: string }
+  const v = Array.isArray(j.videos) ? j.videos[0] : j.videos ?? j.video
+  if (!v) throw new Error('DeepInfra Veo : réponse sans vidéo')
+  if (v.startsWith('data:')) {
+    await writeFile(dest, Buffer.from(v.slice(v.indexOf(',') + 1), 'base64'))
+    return
+  }
+  const url = v.startsWith('http') ? v : `${DEEPINFRA}${v}`
+  const dl = await fetch(url, { headers: { Authorization: `Bearer ${key}` } })
+  if (!dl.ok) throw new Error(`DeepInfra Veo téléchargement ${dl.status}`)
+  await writeFile(dest, Buffer.from(await dl.arrayBuffer()))
+}
+
 /** Durée d'un média en secondes (ffprobe). */
 async function mediaDuration(ffprobe: string, file: string): Promise<number> {
   const out = await runCapture(ffprobe, [
@@ -807,8 +846,9 @@ export async function generateVideoFromIdea(
 
       // 2a) Moteur VEO : scène PARLÉE — le personnage prononce sa réplique
       // (voix native jouée + vraie synchro labiale + bruitages d'ambiance).
+      // Google (quota gratuit) d'abord, puis DeepInfra (payé/s, sans plafond).
       let sceneDone = false
-      if (opts.animateScenes && opts.videoEngine === 'veo' && opts.geminiKey) {
+      if (opts.animateScenes && opts.videoEngine === 'veo' && (opts.geminiKey || opts.deepinfraKey)) {
         const clip = join(work, `v${i}.mp4`)
         const words = sc.narration.trim().split(/\s+/).length
         const veoDur: 4 | 6 | 8 = words <= 6 ? 4 : words <= 12 ? 6 : 8
@@ -819,35 +859,51 @@ export async function generateVideoFromIdea(
         const veoPrompt = `${sc.imagePrompt}. The character "${who}" says in French, EXACTLY: « ${sc.narration} ». VOICE — use this EXACT SAME voice for "${who}" in every single scene, never change it between scenes: ${voiceDesc}. Lip-sync must be perfectly accurate: the mouth shapes match each spoken syllable and start/stop exactly with the speech. Expressive face and natural hand gestures while speaking; the other characters stay silent and only listen. Keep the characters, their outfits and the art style strictly identical to the first frame. Vivid colors.
 AUDIO — CRITICAL: the ONLY audio is that spoken line, dry and clean. Absolutely NO background music, NO soundtrack, NO score, NO singing, NO musical instrument of any kind, no sound effects; at most an almost inaudible room tone. Silence apart from the voice.
 NO TEXT — CRITICAL: nothing written anywhere in the frame. No subtitles, no captions, no burned-in text, no titles, no signs, no labels, no watermark, no logo, no letters or numbers of any kind.`
-        // Jusqu'à 2 tentatives : évite qu'une scène bascule en TTS (voix différente
-        // + pas de lipsync) au milieu de la vidéo sur une erreur Veo passagère.
-        for (let attempt = 1; attempt <= 2 && !sceneDone; attempt++) {
-          log?.(`Scène ${i + 1}/${scenes.length} — scène parlée (Veo)${attempt > 1 ? ' — nouvelle tentative' : ''}…`)
-          try {
-            await genVideoVeoTalking(opts.geminiKey, veoPrompt, clip, png, veoDur)
-            const clipDur = await mediaDuration(ctx.bin.ffprobe, clip)
-            await writeFile(ass, sceneAss(subText, clipDur))
-            await run(ctx.bin.ffmpeg, [
-              '-y', '-loglevel', 'error',
-              '-i', clip,
-              // Veo incruste parfois SES propres sous-titres (du charabia : « ofiur
-              // o tièsoor ») vers 86–88 % de la hauteur, souvent suivis d'une bande
-              // noire. On coupe donc les 15 % du bas AVANT le cadrage : le charabia
-              // disparaît (le prompt seul ne suffit pas), on ne perd que du décor.
-              '-filter_complex',
-              `[0:v]crop=iw:ih*0.85:0:0,scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,setsar=1${subFilter}[v]`,
-              '-map', '[v]', '-map', '0:a?',
-              '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
-              '-c:a', 'aac', '-ar', '44100', '-ac', '2', '-b:a', '128k',
-              scene
-            ])
-            sceneFiles.push(scene)
-            sceneDone = true
-          } catch (e) {
-            const msg = e instanceof Error ? e.message : String(e)
-            if (attempt >= 2) log?.(`Scène ${i + 1}/${scenes.length} — Veo indisponible (${msg}) → voix TTS + animation`)
-            else await new Promise((r) => setTimeout(r, 8000))
+        // 1) Google (quota gratuit) — 2 tentatives : évite qu'une scène bascule
+        // sur une erreur passagère au milieu de la vidéo.
+        let gotClip = false
+        if (opts.geminiKey) {
+          for (let attempt = 1; attempt <= 2 && !gotClip; attempt++) {
+            log?.(`Scène ${i + 1}/${scenes.length} — scène parlée (Veo)${attempt > 1 ? ' — nouvelle tentative' : ''}…`)
+            try {
+              await genVideoVeoTalking(opts.geminiKey, veoPrompt, clip, png, veoDur)
+              gotClip = true
+            } catch (e) {
+              const msg = e instanceof Error ? e.message : String(e)
+              if (attempt >= 2) log?.(`Scène ${i + 1}/${scenes.length} — Veo Google indisponible (${msg})${opts.deepinfraKey ? ' → essai via DeepInfra' : ' → voix TTS + animation'}`)
+              else await new Promise((r) => setTimeout(r, 8000))
+            }
           }
+        }
+        // 2) DeepInfra : même Veo, payé à la seconde, sans plafond journalier.
+        if (!gotClip && opts.deepinfraKey) {
+          log?.(`Scène ${i + 1}/${scenes.length} — scène parlée (Veo via DeepInfra)…`)
+          try {
+            await genVideoVeoDeepinfra(opts.deepinfraKey, veoPrompt, clip, png)
+            gotClip = true
+          } catch (e) {
+            log?.(`Scène ${i + 1}/${scenes.length} — DeepInfra Veo indisponible (${e instanceof Error ? e.message : String(e)}) → voix TTS + animation`)
+          }
+        }
+        if (gotClip) {
+          const clipDur = await mediaDuration(ctx.bin.ffprobe, clip)
+          await writeFile(ass, sceneAss(subText, clipDur))
+          await run(ctx.bin.ffmpeg, [
+            '-y', '-loglevel', 'error',
+            '-i', clip,
+            // Veo incruste parfois SES propres sous-titres (du charabia : « ofiur
+            // o tièsoor ») vers 86–88 % de la hauteur, souvent suivis d'une bande
+            // noire. On coupe donc les 15 % du bas AVANT le cadrage : le charabia
+            // disparaît (le prompt seul ne suffit pas), on ne perd que du décor.
+            '-filter_complex',
+            `[0:v]crop=iw:ih*0.85:0:0,scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,setsar=1${subFilter}[v]`,
+            '-map', '[v]', '-map', '0:a?',
+            '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+            '-c:a', 'aac', '-ar', '44100', '-ac', '2', '-b:a', '128k',
+            scene
+          ])
+          sceneFiles.push(scene)
+          sceneDone = true
         }
       }
       if (sceneDone) continue
