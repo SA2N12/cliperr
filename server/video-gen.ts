@@ -830,8 +830,12 @@ NO TEXT — CRITICAL: nothing written anywhere in the frame. No subtitles, no ca
             await run(ctx.bin.ffmpeg, [
               '-y', '-loglevel', 'error',
               '-i', clip,
+              // Veo incruste parfois SES propres sous-titres (du charabia : « ofiur
+              // o tièsoor ») vers 86–88 % de la hauteur, souvent suivis d'une bande
+              // noire. On coupe donc les 15 % du bas AVANT le cadrage : le charabia
+              // disparaît (le prompt seul ne suffit pas), on ne perd que du décor.
               '-filter_complex',
-              `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,setsar=1${subFilter}[v]`,
+              `[0:v]crop=iw:ih*0.85:0:0,scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,setsar=1${subFilter}[v]`,
               '-map', '[v]', '-map', '0:a?',
               '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
               '-c:a', 'aac', '-ar', '44100', '-ac', '2', '-b:a', '128k',
