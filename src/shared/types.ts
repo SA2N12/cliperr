@@ -67,6 +67,9 @@ export interface ViralIdea {
   /** Reproduction : la source fait parler PLUSIEURS personnages (vrai dialogue) → voix par
    *  personnage. Faux/absent = une seule voix off (narration). */
   dialogue?: boolean
+  /** Reproduction : la source est MUETTE (aucune parole détectée à la transcription).
+   *  On reproduit alors sans aucune voix — visuels + sous-titres seulement. */
+  mute?: boolean
 }
 
 export interface SavedIdea extends ViralIdea {

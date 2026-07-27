@@ -396,10 +396,12 @@ async function runVideoGen(
       // Choix manuel d'une piste précise pour ce bloc (prioritaire sur l'IA).
       musicTrack = join(musicDir, opts.music)
       emitIdeaVideo({ ideaId, status: 'running', message: `Musique : ${cleanName(opts.music)}` })
-    } else if (idea.reproduce) {
+    } else if (idea.reproduce && !idea.mute) {
       // Reproduction fidèle : la bande-son fait partie de ce qu'on reproduit.
       // Plaquer une piste de la playlist par-dessus dénature la source — on ne
       // met donc AUCUNE musique, sauf demande explicite d'une piste précise.
+      // (Exception : source MUETTE — il n'y a aucune bande-son à préserver, et une
+      //  vidéo 100 % silencieuse ne tient pas sur TikTok → on remet la playlist.)
       emitIdeaVideo({ ideaId, status: 'running', message: 'Reproduction fidèle : pas de musique ajoutée.' })
     } else if (tracks.length && !opts.noMusic) {
       // Playlist du compte : on prend la piste suivante (rotation) → les vidéos
@@ -467,6 +469,8 @@ async function runVideoGen(
       dialogue: opts.dialogue || (!!idea.reproduce && !!idea.dialogue),
       // Nos sous-titres sont incrustés (défaut) — désactivables via `repro_subtitles=0`.
       burnSubtitles: repo.getSetting('repro_subtitles') !== '0',
+      // Source muette : on reproduit SANS voix (ni Veo parlé, ni TTS).
+      mute: !!idea.mute,
       // Reproduction d'un DIALOGUE : moteur de série (Veo si activé) — voix natives
       // JOUÉES + vraie synchro labiale, générées ensemble donc jamais décalées. Si
       // une scène bascule (erreur/quota Veo), le repli prend les voix ElevenLabs
@@ -1561,6 +1565,14 @@ app.post('/api/ideas/inspire', wrap(async (req, res) => {
     })
     if (usage) addSpend(model, usage)
     if (!idea) return res.status(502).json({ error: 'L’IA n’a pas réussi à produire une idée — réessaie.' })
+    // Source MUETTE (aucune parole transcrite) : on la reproduit SANS voix — sinon
+    // l'IA invente un dialogue/une narration que la source n'avait pas, et Veo se
+    // met à parler par-dessus des images qui devaient rester silencieuses.
+    if (transcript.replace(/\s+/g, '').length < 15) {
+      idea.mute = true
+      idea.dialogue = false
+      emitLog('Inspiration : source muette (aucune parole) → reproduction sans voix.')
+    }
     const label = niche || `${mode === 'reproduce' ? 'Reproduction' : 'Inspiration'} : ${meta.author || 'TikTok'}`
     const saved = repo.createIdea(label, idea)
     emitLog(`Inspiration : idée créée — « ${idea.title} »`)

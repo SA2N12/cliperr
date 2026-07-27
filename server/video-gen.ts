@@ -67,6 +67,8 @@ export interface VideoGenOptions {
   /** Incruster les sous-titres (défaut : oui). Off pour une repro dialoguée : les
    *  personnages parlent déjà, un sous-titre « Nom : réplique » fait scénario. */
   burnSubtitles?: boolean
+  /** Source MUETTE : aucune voix (ni Veo parlé, ni TTS) — visuels + sous-titres. */
+  mute?: boolean
   /** Moteur d'animation des séries : 'veo' = scènes parlées Veo (voix native + lipsync), sinon fal.ai + TTS. */
   videoEngine?: string
   onProgress?: (msg: string) => void
@@ -932,8 +934,10 @@ export async function generateVideoFromIdea(
       // 2a) Moteur VEO : scène PARLÉE — le personnage prononce sa réplique
       // (voix native jouée + vraie synchro labiale + bruitages d'ambiance).
       // Google (quota gratuit) d'abord, puis DeepInfra (payé/s, sans plafond).
+      // Source muette → on saute complètement Veo : il PARLERAIT (voix native) alors
+      // que la source est silencieuse, et c'est lui qui incruste le charabia.
       let sceneDone = false
-      if (opts.animateScenes && opts.videoEngine === 'veo' && (opts.geminiKey || opts.deepinfraKey)) {
+      if (!opts.mute && opts.animateScenes && opts.videoEngine === 'veo' && (opts.geminiKey || opts.deepinfraKey)) {
         const clip = join(work, `v${i}.mp4`)
         const words = sc.narration.trim().split(/\s+/).length
         const veoDur: 4 | 6 | 8 = words <= 6 ? 4 : words <= 12 ? 6 : 8
@@ -976,12 +980,12 @@ NO TEXT — CRITICAL: nothing written anywhere in the frame. No subtitles, no ca
           await run(ctx.bin.ffmpeg, [
             '-y', '-loglevel', 'error',
             '-i', clip,
-            // Veo incruste parfois SES propres sous-titres (du charabia : « ofiur
-            // o tièsoor ») vers 86–88 % de la hauteur, souvent suivis d'une bande
-            // noire. On coupe donc les 15 % du bas AVANT le cadrage : le charabia
-            // disparaît (le prompt seul ne suffit pas), on ne perd que du décor.
+            // Veo incruste parfois SES propres sous-titres (du charabia : « ofiur o
+            // tièsoor »), à une hauteur VARIABLE dans le bas de l'image — 15 % ne
+            // suffisaient pas (réapparu à ~82 %). On coupe 22 % du bas AVANT le
+            // cadrage ; le prompt seul n'y suffit pas, on ne perd que du décor.
             '-filter_complex',
-            `[0:v]crop=iw:ih*0.85:0:0,scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,setsar=1${subFilter}[v]`,
+            `[0:v]crop=iw:ih*0.78:0:0,scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,setsar=1${subFilter}[v]`,
             '-map', '[v]', '-map', '0:a?',
             '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
             '-c:a', 'aac', '-ar', '44100', '-ac', '2', '-b:a', '128k',
@@ -994,22 +998,38 @@ NO TEXT — CRITICAL: nothing written anywhere in the frame. No subtitles, no ca
       if (sceneDone) continue
 
       // 2b) Chemin classique : voix TTS (jouée par personnage) puis animation fal.ai / Ken Burns.
-      const eleven = elevenMode
-      // ElevenLabs : une voix HUMAINE distincte par personnage (répartie plus haut) ;
-      // sinon casting OpenAI (timbre par personnage).
-      const sceneVoice = eleven
-        ? (sc.speaker && elevenCast.get(sc.speaker.trim().toLowerCase())) || elevenFallbackVoice || voice
-        : member && OPENAI_VOICES.includes(member.voice) ? member.voice : voice
-      log?.(`Scène ${i + 1}/${scenes.length} — voix${member ? ` de ${member.name}` : ' off'}…`)
+      // Source MUETTE : aucune voix générée — la durée de la scène est déduite du
+      // texte (temps de lecture du sous-titre), et la piste audio reste vide.
       const mp3 = join(work, `a${i}.mp3`)
-      await tts(
-        sceneVoice,
-        sc.narration,
-        mp3,
-        { openaiKey: opts.openaiKey, provider: opts.voiceProvider, elevenKey: opts.elevenKey, onNote: log },
-        eleven ? undefined : member ? `${member.name} — ${member.style}` : undefined
-      )
-      const dur = (await mediaDuration(ctx.bin.ffprobe, mp3)) + 0.4
+      let dur: number
+      if (opts.mute) {
+        log?.(`Scène ${i + 1}/${scenes.length} — source muette : aucune voix`)
+        // ~13 caractères/seconde de lecture confortable, borné à 2,5–8 s.
+        dur = Math.max(2.5, Math.min(8, sc.narration.length / 13 + 1))
+        // Piste SILENCIEUSE de la même durée : tout le montage en aval (et le
+        // concat final) attend une piste audio — inutile de le dupliquer.
+        await run(ctx.bin.ffmpeg, [
+          '-y', '-loglevel', 'error',
+          '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=stereo',
+          '-t', dur.toFixed(2), '-c:a', 'libmp3lame', mp3
+        ])
+      } else {
+        const eleven = elevenMode
+        // ElevenLabs : une voix HUMAINE distincte par personnage (répartie plus haut) ;
+        // sinon casting OpenAI (timbre par personnage).
+        const sceneVoice = eleven
+          ? (sc.speaker && elevenCast.get(sc.speaker.trim().toLowerCase())) || elevenFallbackVoice || voice
+          : member && OPENAI_VOICES.includes(member.voice) ? member.voice : voice
+        log?.(`Scène ${i + 1}/${scenes.length} — voix${member ? ` de ${member.name}` : ' off'}…`)
+        await tts(
+          sceneVoice,
+          sc.narration,
+          mp3,
+          { openaiKey: opts.openaiKey, provider: opts.voiceProvider, elevenKey: opts.elevenKey, onNote: log },
+          eleven ? undefined : member ? `${member.name} — ${member.style}` : undefined
+        )
+        dur = (await mediaDuration(ctx.bin.ffprobe, mp3)) + 0.4
+      }
 
       let animClip: string | null = null
       let lipSynced = false
@@ -1051,7 +1071,7 @@ NO TEXT — CRITICAL: nothing written anywhere in the frame. No subtitles, no ca
         }
         // Moteur « lipsync » : cale la BOUCHE du clip animé sur la voix TTS (fixe
         // par personnage) → voix constante + lèvres synchro sur toutes les scènes.
-        if (animClip && opts.falKey && opts.videoEngine === 'lipsync') {
+        if (animClip && opts.falKey && !opts.mute && opts.videoEngine === 'lipsync') {
           log?.(`Scène ${i + 1}/${scenes.length} — synchronisation labiale (fal.ai)…`)
           try {
             const synced = join(work, `ls${i}.mp4`)
