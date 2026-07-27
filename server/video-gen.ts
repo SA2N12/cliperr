@@ -478,17 +478,28 @@ export async function genImage(openaiKey: string, prompt: string, dest: string, 
   throw new Error('OpenAI image : réponse vide')
 }
 
-// ── DeepInfra : images (Seedream 4.5). Accepte une image de RÉFÉRENCE → tient le
-// rôle de Nano Banana pour la cohérence des personnages, et d'OpenAI sinon. ──
+// ── DeepInfra : images. DEUX modèles selon le besoin (validés en réel) :
+//  • avec planche de référence → `Qwen-Image-Edit` (0,028 $) : reprend fidèlement
+//    le personnage et le style — tient le rôle de Nano Banana ;
+//  • sans référence → `FLUX-2-klein-9b` (0,013 $) : qualité 3D/Pixar excellente.
+// (Seedream 4/4.5 renvoient « request_info init exception » chez DeepInfra, et
+//  FLUX IGNORE l'image de référence → ne jamais l'utiliser pour la cohérence.) ──
+export const DI_IMAGE_REF_MODEL = 'Qwen/Qwen-Image-Edit'
+export const DI_IMAGE_MODEL = 'black-forest-labs/FLUX-2-klein-9b'
 export async function genImageDeepinfra(
   key: string,
   prompt: string,
   dest: string,
   refPath?: string,
-  model = 'ByteDance/Seedream-4.5'
+  model?: string
 ): Promise<void> {
-  const body: Record<string, unknown> = { prompt, size: '2K' }
+  const body: Record<string, unknown> = { prompt }
   if (refPath) body.image = `data:image/png;base64,${(await readFile(refPath)).toString('base64')}`
+  else {
+    body.width = 720
+    body.height = 1280
+  }
+  model = model || (refPath ? DI_IMAGE_REF_MODEL : DI_IMAGE_MODEL)
   const r = await fetch(`${DEEPINFRA}/v1/inference/${model}`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
@@ -728,6 +739,23 @@ export async function genVideoVeoTalking(
 // quota journalier. Appel SYNCHRONE (la réponse arrive quand la vidéo est prête,
 // 1 à 4 min) ; l'image de départ passe en Data URL base64 (schéma officiel). ──
 const DEEPINFRA = 'https://api.deepinfra.com'
+/** Récupère le MP4 d'une réponse DeepInfra. Le champ varie selon le modèle
+ *  (`videos` pour Veo, `video_url` pour Pixverse) et peut être une data-URL, une
+ *  URL absolue (Google Storage, CDN Pixverse) ou un chemin relatif à l'API.
+ *  ⚠️ Ne JAMAIS envoyer la clé DeepInfra à un hôte externe. */
+async function saveDeepinfraVideo(key: string, j: Record<string, unknown>, dest: string): Promise<void> {
+  const raw = (j.videos ?? j.video_url ?? j.video) as string | string[] | undefined
+  const v = Array.isArray(raw) ? raw[0] : raw
+  if (!v) throw new Error(`DeepInfra : réponse sans vidéo (${JSON.stringify(j).slice(0, 160)})`)
+  if (v.startsWith('data:')) {
+    await writeFile(dest, Buffer.from(v.slice(v.indexOf(',') + 1), 'base64'))
+    return
+  }
+  const abs = v.startsWith('http')
+  const dl = await fetch(abs ? v : `${DEEPINFRA}${v}`, abs ? undefined : { headers: { Authorization: `Bearer ${key}` } })
+  if (!dl.ok) throw new Error(`DeepInfra téléchargement ${dl.status}`)
+  await writeFile(dest, Buffer.from(await dl.arrayBuffer()))
+}
 export async function genVideoVeoDeepinfra(
   key: string,
   prompt: string,
@@ -747,17 +775,7 @@ export async function genVideoVeoDeepinfra(
     })
   })
   if (!r.ok) throw new Error(`DeepInfra Veo ${r.status} : ${(await r.text()).slice(0, 160)}`)
-  const j = (await r.json()) as { videos?: string | string[]; video?: string }
-  const v = Array.isArray(j.videos) ? j.videos[0] : j.videos ?? j.video
-  if (!v) throw new Error('DeepInfra Veo : réponse sans vidéo')
-  if (v.startsWith('data:')) {
-    await writeFile(dest, Buffer.from(v.slice(v.indexOf(',') + 1), 'base64'))
-    return
-  }
-  const url = v.startsWith('http') ? v : `${DEEPINFRA}${v}`
-  const dl = await fetch(url, { headers: { Authorization: `Bearer ${key}` } })
-  if (!dl.ok) throw new Error(`DeepInfra Veo téléchargement ${dl.status}`)
-  await writeFile(dest, Buffer.from(await dl.arrayBuffer()))
+  await saveDeepinfraVideo(key, (await r.json()) as Record<string, unknown>, dest)
 }
 
 // ── DeepInfra : animation d'une scène (image → clip vidéo), équivalent fal.ai.
@@ -781,16 +799,7 @@ export async function genVideoDeepinfra(
     })
   })
   if (!r.ok) throw new Error(`DeepInfra vidéo ${r.status} : ${(await r.text()).slice(0, 160)}`)
-  const j = (await r.json()) as { videos?: string | string[]; video?: string }
-  const v = Array.isArray(j.videos) ? j.videos[0] : j.videos ?? j.video
-  if (!v) throw new Error('DeepInfra vidéo : réponse sans vidéo')
-  if (v.startsWith('data:')) {
-    await writeFile(dest, Buffer.from(v.slice(v.indexOf(',') + 1), 'base64'))
-    return
-  }
-  const dl = await fetch(v.startsWith('http') ? v : `${DEEPINFRA}${v}`, { headers: { Authorization: `Bearer ${key}` } })
-  if (!dl.ok) throw new Error(`DeepInfra vidéo téléchargement ${dl.status}`)
-  await writeFile(dest, Buffer.from(await dl.arrayBuffer()))
+  await saveDeepinfraVideo(key, (await r.json()) as Record<string, unknown>, dest)
 }
 
 /** Durée d'un média en secondes (ffprobe). */
