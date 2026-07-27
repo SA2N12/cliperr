@@ -461,6 +461,10 @@ async function runVideoGen(
       // Reproduction : voix PAR PERSONNAGE si la source est un dialogue (détecté à
       // l'inspiration), sinon voix off unique. Les séries forcent déjà dialogue=true.
       dialogue: opts.dialogue || (!!idea.reproduce && !!idea.dialogue),
+      // Repro d'un dialogue : PAS de sous-titres incrustés — les personnages
+      // parlent (voix + lip-sync), un bandeau de texte fait doublon et ne
+      // ressemble pas à la source. Réactivable via le flag `repro_subtitles=1`.
+      burnSubtitles: reproDialogue ? repo.getSetting('repro_subtitles') === '1' : true,
       // Reproduction d'un DIALOGUE : moteur de série (Veo si activé) — voix natives
       // JOUÉES + vraie synchro labiale, générées ensemble donc jamais décalées. Si
       // une scène bascule (erreur/quota Veo), le repli prend les voix ElevenLabs

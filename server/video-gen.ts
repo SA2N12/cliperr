@@ -61,6 +61,9 @@ export interface VideoGenOptions {
   animateScenes?: boolean
   /** Mode dialogue : les personnages parlent (voix + intonation par personnage), pas de narrateur. */
   dialogue?: boolean
+  /** Incruster les sous-titres (défaut : oui). Off pour une repro dialoguée : les
+   *  personnages parlent déjà, un sous-titre « Nom : réplique » fait scénario. */
+  burnSubtitles?: boolean
   /** Moteur d'animation des séries : 'veo' = scènes parlées Veo (voix native + lipsync), sinon fal.ai + TTS. */
   videoEngine?: string
   onProgress?: (msg: string) => void
@@ -775,9 +778,13 @@ export async function generateVideoFromIdea(
     for (let i = 0; i < scenes.length; i++) {
       const sc = scenes[i]
       const member = sc.speaker ? castMap.get(sc.speaker.trim().toLowerCase()) : undefined
-      const subText = opts.dialogue && sc.speaker ? `${sc.speaker} : ${sc.narration}` : sc.narration
+      // Sous-titre : jamais préfixé du nom du personnage (« Cerise : … » fait
+      // script de théâtre) — la réplique seule, et seulement si on les incruste.
+      const subText = sc.narration
       const scene = join(work, `scene${i}.mp4`)
       const ass = join(work, `s${i}.ass`)
+      const burnSubs = opts.burnSubtitles !== false
+      const subFilter = burnSubs ? `,subtitles=${ass}` : ''
 
       // 1) Image de la scène (Nano Banana + planche de référence si dispo).
       log?.(`Scène ${i + 1}/${scenes.length} — image IA…`)
@@ -809,7 +816,9 @@ export async function generateVideoFromIdea(
         // Voix RÉUTILISÉE À L'IDENTIQUE à chaque scène pour ce personnage → Veo
         // garde la même voix au lieu d'en réinventer une par clip.
         const voiceDesc = member?.voiceSignature?.trim() || (member?.style ? `expressive cartoon voice, ${member.style}` : 'an expressive, distinctive cartoon voice')
-        const veoPrompt = `${sc.imagePrompt}. The character "${who}" says in French, EXACTLY: « ${sc.narration} ». VOICE — use this EXACT SAME voice for "${who}" in every single scene, never change it between scenes: ${voiceDesc}. Lip-sync must be perfectly accurate: the mouth shapes match each spoken syllable and start/stop exactly with the speech. Expressive face and natural hand gestures while speaking; the other characters stay silent and only listen. Keep the characters, their outfits and the art style strictly identical to the first frame. Vivid colors, no on-screen text, no captions.`
+        const veoPrompt = `${sc.imagePrompt}. The character "${who}" says in French, EXACTLY: « ${sc.narration} ». VOICE — use this EXACT SAME voice for "${who}" in every single scene, never change it between scenes: ${voiceDesc}. Lip-sync must be perfectly accurate: the mouth shapes match each spoken syllable and start/stop exactly with the speech. Expressive face and natural hand gestures while speaking; the other characters stay silent and only listen. Keep the characters, their outfits and the art style strictly identical to the first frame. Vivid colors.
+AUDIO — CRITICAL: the ONLY audio is that spoken line, dry and clean. Absolutely NO background music, NO soundtrack, NO score, NO singing, NO musical instrument of any kind, no sound effects; at most an almost inaudible room tone. Silence apart from the voice.
+NO TEXT — CRITICAL: nothing written anywhere in the frame. No subtitles, no captions, no burned-in text, no titles, no signs, no labels, no watermark, no logo, no letters or numbers of any kind.`
         // Jusqu'à 2 tentatives : évite qu'une scène bascule en TTS (voix différente
         // + pas de lipsync) au milieu de la vidéo sur une erreur Veo passagère.
         for (let attempt = 1; attempt <= 2 && !sceneDone; attempt++) {
@@ -822,7 +831,7 @@ export async function generateVideoFromIdea(
               '-y', '-loglevel', 'error',
               '-i', clip,
               '-filter_complex',
-              `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,setsar=1,subtitles=${ass}[v]`,
+              `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,setsar=1${subFilter}[v]`,
               '-map', '[v]', '-map', '0:a?',
               '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
               '-c:a', 'aac', '-ar', '44100', '-ac', '2', '-b:a', '128k',
@@ -910,7 +919,7 @@ export async function generateVideoFromIdea(
           '-i', animClip,
           '-i', mp3,
           '-filter_complex',
-          `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,setsar=1,subtitles=${ass}[v]`,
+          `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,setsar=1${subFilter}[v]`,
           '-map', '[v]', '-map', '1:a',
           '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
           '-c:a', 'aac', '-ar', '44100', '-ac', '2', '-b:a', '128k',
@@ -927,7 +936,7 @@ export async function generateVideoFromIdea(
           '-i', animClip,
           '-i', mp3,
           '-filter_complex',
-          `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setpts=${ratio.toFixed(4)}*PTS,fps=30,setsar=1,subtitles=${ass}[v]`,
+          `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setpts=${ratio.toFixed(4)}*PTS,fps=30,setsar=1${subFilter}[v]`,
           '-map', '[v]', '-map', '1:a',
           '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
           '-c:a', 'aac', '-ar', '44100', '-ac', '2', '-b:a', '128k',
@@ -942,7 +951,7 @@ export async function generateVideoFromIdea(
           '-i', png,
           '-i', mp3,
           '-filter_complex',
-          `[0:v]scale=1188:2112:force_original_aspect_ratio=increase,crop=1188:2112,zoompan=z='min(zoom+0.0004,1.10)':d=${frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30,setsar=1,subtitles=${ass}[v]`,
+          `[0:v]scale=1188:2112:force_original_aspect_ratio=increase,crop=1188:2112,zoompan=z='min(zoom+0.0004,1.10)':d=${frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30,setsar=1${subFilter}[v]`,
           '-map', '[v]', '-map', '1:a',
           '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
           '-c:a', 'aac', '-ar', '44100', '-ac', '2', '-b:a', '128k',
