@@ -2521,6 +2521,34 @@ textarea:focus {
 .genai-platforms .msym {
   color: var(--ap-green-strong);
 }
+/* Pastille « vidéos Veo restantes aujourd'hui » (quota Google du jour). */
+.veo-quota {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-soft-2);
+  padding: 3px 10px;
+  white-space: nowrap;
+}
+.veo-quota.empty {
+  color: var(--bad);
+  background: #fdf6f6;
+  border-color: #f0c9c9;
+}
+.veo-quota .msym {
+  color: inherit;
+}
+@media (max-width: 620px) {
+  .genai-platforms {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+}
 /* Bouton « enregistrer pour plus tard » dans la barre : bouton secondaire net
    (bordé, libellé) — bien visible à côté du primaire « Reproduire ». */
 .btn.genai-save {

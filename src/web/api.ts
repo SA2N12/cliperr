@@ -180,6 +180,7 @@ export const api = {
   savedIdeas: () => req<{ ideas: SavedIdea[] }>('/api/ideas/saved'),
   deleteIdea: (id: number) => req(`/api/ideas/${id}`, { method: 'DELETE' }),
   generateIdeaVideo: (id: number) => post(`/api/ideas/${id}/video`),
+  veoQuota: () => req<{ limit: number; remainingRequests: number; remainingVideos: number; scenesPerVideo: number; perModel: { model: string; used: number; left: number }[] }>('/api/veo/quota'),
   openaiStatus: () => req<{ has: boolean }>('/api/settings/openai'),
   setOpenaiKey: (key: string) => post('/api/settings/openai', { key }),
   geminiStatus: () => req<{ has: boolean }>('/api/settings/gemini'),

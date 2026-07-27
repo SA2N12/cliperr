@@ -5,6 +5,7 @@ import { join } from 'path'
 import { run, runCapture, type PipelineContext } from '../src/main/pipeline/context'
 import type { Usage } from '../src/main/pipeline/highlights'
 import type { ViralIdea } from '../src/shared/types'
+import { veoAvailableModels, noteVeoUse, markVeoExhausted } from './veo-quota'
 
 // Génération d'une vidéo « faceless » 9:16 à partir d'une idée :
 // storyboard (Claude) → voix off (OpenAI TTS) + image IA par scène (DALL·E) →
@@ -610,12 +611,8 @@ async function genLipsyncFal(
 
 // ── Veo (Gemini) : scène PARLÉE — le personnage prononce sa réplique avec
 // voix native + lipsync + bruitages, à partir de l'image de la scène. ──
-// Modèles Veo réellement exposés par l'API Gemini (les noms « -001 » n'existent
-// pas pour tous les comptes → 404 ; les versions « fast/full » peuvent être à
-// court de quota → 429). On liste les 3 variantes 3.1 dispo, de la meilleure à la
-// plus légère : `lite` a le quota le plus large et sert de filet garanti.
-const VEO_MODELS = ['veo-3.1-fast-generate-preview', 'veo-3.1-generate-preview', 'veo-3.1-lite-generate-preview']
-let veoModelCache: string | null = null
+// Les 3 modèles Veo (fast → full → lite) sont tentés dans l'ordre en sautant ceux
+// déjà épuisés aujourd'hui → on cumule leurs quotas journaliers (cf. veo-quota).
 
 export async function genVideoVeoTalking(
   key: string,
@@ -629,8 +626,10 @@ export async function genVideoVeoTalking(
     prompt,
     image: { bytesBase64Encoded: (await readFile(refImagePath)).toString('base64'), mimeType: 'image/png' }
   }
-  const models = veoModelCache ? [veoModelCache] : VEO_MODELS
+  const models = veoAvailableModels()
+  if (!models.length) throw new Error('Veo : quota journalier épuisé (fast + full + lite)')
   let opName: string | null = null
+  let usedModel = ''
   let lastErr = ''
   for (const m of models) {
     // Certains déploiements refusent durationSeconds → on retente sans.
@@ -641,17 +640,22 @@ export async function genVideoVeoTalking(
         body: JSON.stringify({ instances: [instance], parameters: params })
       })
       if (r.ok) {
-        veoModelCache = m
+        usedModel = m
         opName = ((await r.json()) as { name?: string }).name ?? null
         break
       }
       lastErr = `${m} → ${r.status} ${(await r.text()).slice(0, 140)}`
-      // 404 = modèle inconnu, 429 = quota épuisé sur CE modèle : inutile de
-      // réessayer sans durée, on passe directement au modèle suivant (→ lite).
-      if (r.status === 404 || r.status === 429) break
+      // 429 = quota du jour épuisé sur CE modèle → on le marque et on passe au
+      // suivant (fast → full → lite). 404 = modèle inconnu → suivant aussi.
+      if (r.status === 429) {
+        markVeoExhausted(m)
+        break
+      }
+      if (r.status === 404) break
     }
     if (opName) break
   }
+  if (opName && usedModel) noteVeoUse(usedModel)
   if (!opName) throw new Error(`Veo indisponible (${lastErr})`)
 
   const t0 = Date.now()

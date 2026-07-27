@@ -1042,6 +1042,10 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
   // Liens mis de côté pour être reproduits plus tard (persistés côté serveur
   // via un flag JSON → on les retrouve depuis n'importe quel appareil).
   const [saved, setSaved] = useState<{ url: string; addedAt: number }[]>([])
+  // Quota Veo du jour (vidéos parlées restantes, réparties sur fast/full/lite).
+  const [quota, setQuota] = useState<{ remainingVideos: number; remainingRequests: number } | null>(null)
+  const loadQuota = (): void => { api.veoQuota().then((q) => setQuota({ remainingVideos: q.remainingVideos, remainingRequests: q.remainingRequests })).catch(() => undefined) }
+  useEffect(loadQuota, [])
 
   useEffect(() => {
     api.getFlag('genai_watchlist').then((r) => {
@@ -1115,6 +1119,7 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
     try {
       await api.generateIdeaVideo(idea.id)
       setLaunched(true)
+      setTimeout(loadQuota, 8000) // le quota Veo se décompte au fil des scènes
       toast('Vidéo lancée — suis la progression en bas à droite ; elle arrivera dans « Clips »')
     } catch (e) {
       toast('Erreur : ' + (e as Error).message)
@@ -1143,8 +1148,16 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
             {busy ? <><MIcon name="progress_activity" size={16} spin /> Analyse…</> : <><MIcon name="movie" size={16} /> Reproduire</>}
           </button>
         </div>
-        <div className="genai-platforms">
-          <MIcon name="check_circle" size={13} /> Fonctionne avec <b>TikTok</b> · <b>Instagram Reels</b> · <b>YouTube Shorts</b> (10 min max)
+        <div className="genai-platforms" style={{ justifyContent: 'space-between' }}>
+          <span><MIcon name="check_circle" size={13} /> Fonctionne avec <b>TikTok</b> · <b>Instagram Reels</b> · <b>YouTube Shorts</b> (10 min max)</span>
+          {quota && (
+            <span
+              className={`veo-quota${quota.remainingVideos <= 0 ? ' empty' : ''}`}
+              title="Vidéos parlées (Veo) que tu peux encore générer aujourd'hui, réparties sur les 3 modèles Veo. Estimation basée sur le quota journalier Google (~8 scènes/vidéo) — se réinitialise vers 9 h."
+            >
+              <MIcon name="movie" size={13} /> ≈ {quota.remainingVideos} vidéo{quota.remainingVideos > 1 ? 's' : ''} Veo restante{quota.remainingVideos > 1 ? 's' : ''} aujourd’hui
+            </span>
+          )}
         </div>
       </div>
 

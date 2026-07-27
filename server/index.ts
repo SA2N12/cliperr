@@ -10,6 +10,7 @@ import { appPaths, config, assertConfig, type AppPaths } from './config'
 import { handleLogin, handleLogout, isAuthed, requireAuth } from './auth'
 import { sseHandler, emitProgress, emitLog, emitIdeaVideo } from './sse'
 import { generateVideoFromIdea, chooseMusicTrack, genImageGemini, ttsPreview, listElevenVoices, OPENAI_VOICES } from './video-gen'
+import { veoQuota } from './veo-quota'
 import { generateCarousel } from './carousel-gen'
 import { uploadPostTikTokPhotos } from '../src/main/publish/uploadpost'
 import {
@@ -1970,6 +1971,9 @@ app.post('/api/settings/groq', wrap((req, res) => {
 }))
 
 // Vue d'ensemble des fournisseurs externes : état (configuré ou non) en un appel.
+// Quota Veo du jour (répartition sur fast/full/lite) → « N vidéos restantes ».
+app.get('/api/veo/quota', wrap((_req, res) => res.json(veoQuota())))
+
 app.get('/api/providers', wrap((_req, res) => {
   res.json({
     voiceProvider: repo.getSetting('voice_provider') || 'openai',
