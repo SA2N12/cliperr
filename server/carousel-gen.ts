@@ -4,7 +4,7 @@ import { writeFile, mkdir, rm } from 'fs/promises'
 import { join } from 'path'
 import { run, type PipelineContext } from '../src/main/pipeline/context'
 import type { Usage } from '../src/main/pipeline/highlights'
-import { genImage } from './video-gen'
+import { genImage, genImageDeepinfra } from './video-gen'
 
 // Génération d'un CARROUSEL PHOTO TikTok (« post images ») adapté à la niche du
 // compte : Claude écrit les diapos → une image IA par diapo → le texte est
@@ -166,6 +166,8 @@ export interface CarouselGenOptions {
   anthropicKey: string
   anthropicModel?: string
   openaiKey: string
+  /** Clé DeepInfra : images générées chez le fournisseur centralisé, OpenAI en repli. */
+  deepinfraKey?: string | null
   niche: string
   cta?: string
   /** Déroulé d'une vidéo source à transposer en diapos (mode Inspiration). */
@@ -202,7 +204,17 @@ export async function generateCarousel(
       const s = carousel.slides[i]
       log?.(`Diapo ${i + 1}/${carousel.slides.length} — image IA…`)
       const png = join(work, `s${i}.png`)
-      await genImage(opts.openaiKey, s.imagePrompt, png, log)
+      // DeepInfra (centralisé) d'abord, OpenAI en repli si indisponible/sans solde.
+      let done = false
+      if (opts.deepinfraKey) {
+        try {
+          await genImageDeepinfra(opts.deepinfraKey, `${s.imagePrompt}. Vertical 9:16 composition, no text, no watermark.`, png)
+          done = true
+        } catch (e) {
+          log?.(`Diapo ${i + 1} — image DeepInfra indisponible (${e instanceof Error ? e.message : String(e)}) → OpenAI`)
+        }
+      }
+      if (!done) await genImage(opts.openaiKey, s.imagePrompt, png, log)
 
       const ass = join(work, `s${i}.ass`)
       await writeFile(ass, slideAss(s.text, i === 0))

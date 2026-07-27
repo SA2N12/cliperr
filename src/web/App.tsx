@@ -3258,7 +3258,7 @@ const PROVIDER_META: { id: string; name: string; role: string; cost: string; ess
   { id: 'elevenlabs', name: 'ElevenLabs', role: 'Voix off humaines (option, remplace OpenAI)', cost: '≈ 5 – 22 $/mois selon le volume', essential: false },
   { id: 'gemini', name: 'Gemini (Nano Banana + Veo)', role: 'Images de série cohérentes + scènes parlées Veo', cost: '≈ 1,40 $ / épisode animé', essential: false },
   { id: 'fal', name: 'fal.ai', role: 'Animation des scènes de série (image → vidéo)', cost: '≈ 0,18 $ / scène', essential: false },
-  { id: 'deepinfra', name: 'DeepInfra', role: 'Veo sans plafond (repli des scènes parlées)', cost: '≈ 1,20 $ / scène Veo (0,15 $/s) — à l’usage', essential: false },
+  { id: 'deepinfra', name: 'DeepInfra', role: 'Hub média : Veo sans plafond, images, animation, transcription', cost: 'À l’usage — Veo ≈ 1,20 $/scène, image 0,04 $, animation 0,045 $/s', essential: false },
   { id: 'groq', name: 'Groq (Whisper)', role: 'Transcription des clips YouTube', cost: 'Gratuit / quasi nul', essential: false },
   { id: 'rapidapi', name: 'RapidAPI', role: 'Recherche de vidéos à cliper + tendances TikTok', cost: 'Abonnement selon le plan', essential: false },
   { id: 'cookies', name: 'Cookies YouTube', role: 'Débloque le téléchargement des clips', cost: 'Gratuit (à réexporter régulièrement)', essential: false },
@@ -3588,12 +3588,12 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
           </div>
           <div className="muted small" style={{ marginTop: 6 }}>Anime chaque scène des épisodes de série (image → clip vidéo, ~0,18 $/scène). Sans clé, les scènes restent des images animées (zoom).</div>
         </Field>
-        <Field label={diHas ? 'Clé DeepInfra configurée ✓' : 'Clé DeepInfra (Veo sans plafond journalier)'}>
+        <Field label={diHas ? 'Clé DeepInfra configurée ✓' : 'Clé DeepInfra (hub média : Veo, images, animation, transcription)'}>
           <div style={{ display: 'flex', gap: 8 }}>
             <input className="input-full" style={{ flex: 1 }} type="password" placeholder="clé DeepInfra…  (deepinfra.com → Dashboard → API Keys)" value={diKey} onChange={(e) => setDiKey(e.target.value)} />
             <button className="btn primary" onClick={async () => { await api.setDeepinfraKey(diKey); setDiKey(''); setDiHas((await api.deepinfraStatus()).has); toast('Clé DeepInfra enregistrée') }} disabled={!diKey.trim()}>Enregistrer</button>
           </div>
-          <div className="muted small" style={{ marginTop: 6 }}>Quand le quota Veo gratuit de Google est épuisé, les scènes parlées continuent via DeepInfra (même modèle Veo, ~1,20 $/scène facturée à la seconde) au lieu de perdre voix et synchro labiale.</div>
+          <div className="muted small" style={{ marginTop: 6 }}>Fournisseur principal pour les images (Seedream), l’animation des scènes (Pixverse) et la transcription (Whisper) — les anciens (OpenAI, Gemini, fal.ai, Groq) servent de repli automatique. Les scènes parlées passent d’abord par le quota Veo GRATUIT de Google, puis par DeepInfra (même modèle, ~1,20 $/scène) au lieu de perdre voix et synchro labiale.</div>
         </Field>
         <Field label="Voix off des vidéos (narration)">
           <select className="input-full" style={{ maxWidth: 320 }} value={flags['voice_provider'] || 'openai'} onChange={(e) => void setFlag('voice_provider', e.target.value)}>

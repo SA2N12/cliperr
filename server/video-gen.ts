@@ -478,6 +478,36 @@ export async function genImage(openaiKey: string, prompt: string, dest: string, 
   throw new Error('OpenAI image : réponse vide')
 }
 
+// ── DeepInfra : images (Seedream 4.5). Accepte une image de RÉFÉRENCE → tient le
+// rôle de Nano Banana pour la cohérence des personnages, et d'OpenAI sinon. ──
+export async function genImageDeepinfra(
+  key: string,
+  prompt: string,
+  dest: string,
+  refPath?: string,
+  model = 'ByteDance/Seedream-4.5'
+): Promise<void> {
+  const body: Record<string, unknown> = { prompt, size: '2K' }
+  if (refPath) body.image = `data:image/png;base64,${(await readFile(refPath)).toString('base64')}`
+  const r = await fetch(`${DEEPINFRA}/v1/inference/${model}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  })
+  if (!r.ok) throw new Error(`DeepInfra image ${r.status} : ${(await r.text()).slice(0, 160)}`)
+  const j = (await r.json()) as { images?: string[]; image?: string }
+  const img = j.images?.[0] ?? j.image
+  if (!img) throw new Error('DeepInfra image : réponse vide')
+  if (img.startsWith('data:') || !img.startsWith('http')) {
+    const b64 = img.includes(',') ? img.slice(img.indexOf(',') + 1) : img
+    await writeFile(dest, Buffer.from(b64, 'base64'))
+    return
+  }
+  const dl = await fetch(img)
+  if (!dl.ok) throw new Error(`DeepInfra image téléchargement ${dl.status}`)
+  await writeFile(dest, Buffer.from(await dl.arrayBuffer()))
+}
+
 // ── Nano Banana (Gemini) : génération d'images avec personnages cohérents ──
 const GEMINI = 'https://generativelanguage.googleapis.com/v1beta'
 
@@ -730,6 +760,39 @@ export async function genVideoVeoDeepinfra(
   await writeFile(dest, Buffer.from(await dl.arrayBuffer()))
 }
 
+// ── DeepInfra : animation d'une scène (image → clip vidéo), équivalent fal.ai.
+// Muet (`generate_audio_switch` off) : la voix TTS est mixée au montage. ──
+export async function genVideoDeepinfra(
+  key: string,
+  prompt: string,
+  dest: string,
+  refImagePath: string,
+  durationSec: number,
+  model = 'Pixverse/Pixverse-6-I2V'
+): Promise<void> {
+  const r = await fetch(`${DEEPINFRA}/v1/inference/${model}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      prompt,
+      image: `data:image/png;base64,${(await readFile(refImagePath)).toString('base64')}`,
+      quality: '720p',
+      duration: Math.max(1, Math.min(15, Math.round(durationSec)))
+    })
+  })
+  if (!r.ok) throw new Error(`DeepInfra vidéo ${r.status} : ${(await r.text()).slice(0, 160)}`)
+  const j = (await r.json()) as { videos?: string | string[]; video?: string }
+  const v = Array.isArray(j.videos) ? j.videos[0] : j.videos ?? j.video
+  if (!v) throw new Error('DeepInfra vidéo : réponse sans vidéo')
+  if (v.startsWith('data:')) {
+    await writeFile(dest, Buffer.from(v.slice(v.indexOf(',') + 1), 'base64'))
+    return
+  }
+  const dl = await fetch(v.startsWith('http') ? v : `${DEEPINFRA}${v}`, { headers: { Authorization: `Bearer ${key}` } })
+  if (!dl.ok) throw new Error(`DeepInfra vidéo téléchargement ${dl.status}`)
+  await writeFile(dest, Buffer.from(await dl.arrayBuffer()))
+}
+
 /** Durée d'un média en secondes (ffprobe). */
 async function mediaDuration(ffprobe: string, file: string): Promise<number> {
   const out = await runCapture(ffprobe, [
@@ -833,16 +896,29 @@ export async function generateVideoFromIdea(
             ? `Recurring characters and consistent art style across the whole series (keep them IDENTICAL in every image): ${opts.imageStyle}`
             : `Consistent visual style across the whole video — match this style EXACTLY in every image: ${opts.imageStyle}`}`
         : sc.imagePrompt
-      if (opts.geminiKey && opts.characterRefPath) {
-        const gPrompt = `Using EXACTLY the characters and art style from the reference image (same faces, colors, outfits, designs), create this new scene: ${sc.imagePrompt}. Vertical 9:16 composition, vivid saturated colors, expressive, dynamic, no text, no watermark.`
+      // Chaîne d'images : DeepInfra (Seedream, fournisseur centralisé) → Gemini
+      // (Nano Banana) → OpenAI. Chacun sait exploiter la planche de référence pour
+      // garder les personnages identiques ; on ne descend d'un cran qu'en cas d'échec.
+      const refPrompt = `Using EXACTLY the characters and art style from the reference image (same faces, colors, outfits, designs), create this new scene: ${sc.imagePrompt}. Vertical 9:16 composition, vivid saturated colors, expressive, dynamic, no text, no watermark.`
+      const hasRef = !!opts.characterRefPath
+      let imgDone = false
+      if (opts.deepinfraKey) {
         try {
-          await genImageGemini(opts.geminiKey, gPrompt, png, opts.characterRefPath)
-        } catch {
-          await genImage(opts.openaiKey, imgPrompt, png, log, !!opts.imageStyle) // repli si Gemini indisponible
+          await genImageDeepinfra(opts.deepinfraKey, hasRef ? refPrompt : `${imgPrompt}. Vertical 9:16 composition, no text, no watermark.`, png, opts.characterRefPath)
+          imgDone = true
+        } catch (e) {
+          log?.(`Scène ${i + 1}/${scenes.length} — image DeepInfra indisponible (${e instanceof Error ? e.message : String(e)}) → repli`)
         }
-      } else {
-        await genImage(opts.openaiKey, imgPrompt, png, log, !!opts.imageStyle)
       }
+      if (!imgDone && opts.geminiKey && hasRef) {
+        try {
+          await genImageGemini(opts.geminiKey, refPrompt, png, opts.characterRefPath)
+          imgDone = true
+        } catch {
+          /* repli OpenAI ci-dessous */
+        }
+      }
+      if (!imgDone) await genImage(opts.openaiKey, imgPrompt, png, log, !!opts.imageStyle)
 
       // 2a) Moteur VEO : scène PARLÉE — le personnage prononce sa réplique
       // (voix native jouée + vraie synchro labiale + bruitages d'ambiance).
@@ -928,31 +1004,45 @@ NO TEXT — CRITICAL: nothing written anywhere in the frame. No subtitles, no ca
 
       let animClip: string | null = null
       let lipSynced = false
-      if (opts.animateScenes && opts.falKey) {
-        log?.(`Scène ${i + 1}/${scenes.length} — animation vidéo (fal.ai)…`)
-        try {
-          animClip = join(work, `v${i}.mp4`)
-          // Pas de lip-sync ici : on n'insiste PAS sur la bouche (sinon un
-          // mouvement de lèvres non synchronisé se remarque). On mise sur
-          // l'expression et les gestes ; les sous-titres portent la réplique.
-          const talking = sc.speaker
-            ? ` The character "${sc.speaker}" is speaking, with a lively expressive face, subtle natural head motion and hand gestures.`
-            : ''
-          await genVideoFal(
-            opts.falKey,
-            `Animate this exact scene keeping the characters and art style strictly identical: ${sc.imagePrompt}.${talking} Natural lively character motion, smooth cinematic camera movement, vivid colors, no text.`,
-            animClip,
-            png,
-            opts.falVideoModel || FAL_DEFAULT_MODEL,
-            dur > 6.5 ? '10' : '5' // réplique longue → clip plus long (évite l'étirement excessif)
-          )
-        } catch (e) {
-          animClip = null
-          log?.(`Scène ${i + 1}/${scenes.length} — fal.ai indisponible (${e instanceof Error ? e.message : String(e)}) → image animée`)
+      if (opts.animateScenes && (opts.deepinfraKey || opts.falKey)) {
+        // Pas de lip-sync ici : on n'insiste PAS sur la bouche (sinon un
+        // mouvement de lèvres non synchronisé se remarque). On mise sur
+        // l'expression et les gestes ; les sous-titres portent la réplique.
+        const talking = sc.speaker
+          ? ` The character "${sc.speaker}" is speaking, with a lively expressive face, subtle natural head motion and hand gestures.`
+          : ''
+        const animPrompt = `Animate this exact scene keeping the characters and art style strictly identical: ${sc.imagePrompt}.${talking} Natural lively character motion, smooth cinematic camera movement, vivid colors, no text.`
+        const target = join(work, `v${i}.mp4`)
+        // DeepInfra (fournisseur centralisé) d'abord, fal.ai en repli.
+        if (opts.deepinfraKey) {
+          log?.(`Scène ${i + 1}/${scenes.length} — animation vidéo (DeepInfra)…`)
+          try {
+            await genVideoDeepinfra(opts.deepinfraKey, animPrompt, target, png, dur > 6.5 ? 10 : 5)
+            animClip = target
+          } catch (e) {
+            log?.(`Scène ${i + 1}/${scenes.length} — DeepInfra indisponible (${e instanceof Error ? e.message : String(e)})${opts.falKey ? ' → fal.ai' : ' → image animée'}`)
+          }
+        }
+        if (!animClip && opts.falKey) {
+          log?.(`Scène ${i + 1}/${scenes.length} — animation vidéo (fal.ai)…`)
+          try {
+            await genVideoFal(
+              opts.falKey,
+              animPrompt,
+              target,
+              png,
+              opts.falVideoModel || FAL_DEFAULT_MODEL,
+              dur > 6.5 ? '10' : '5' // réplique longue → clip plus long (évite l'étirement excessif)
+            )
+            animClip = target
+          } catch (e) {
+            animClip = null
+            log?.(`Scène ${i + 1}/${scenes.length} — fal.ai indisponible (${e instanceof Error ? e.message : String(e)}) → image animée`)
+          }
         }
         // Moteur « lipsync » : cale la BOUCHE du clip animé sur la voix TTS (fixe
         // par personnage) → voix constante + lèvres synchro sur toutes les scènes.
-        if (animClip && opts.videoEngine === 'lipsync') {
+        if (animClip && opts.falKey && opts.videoEngine === 'lipsync') {
           log?.(`Scène ${i + 1}/${scenes.length} — synchronisation labiale (fal.ai)…`)
           try {
             const synced = join(work, `ls${i}.mp4`)

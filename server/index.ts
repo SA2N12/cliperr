@@ -261,7 +261,8 @@ async function runForSource(sourceId: number, clipCount: number, profileOverride
       !transcribeEnabled
         ? null
         : (sourceFile, sid) => {
-            if (backend === 'groq' && groqKey) return transcribeWithGroq(ctx, groqKey, sourceFile, sid)
+            const diKey = getEncrypted('deepinfra_key')
+            if (backend === 'groq' && (diKey || groqKey)) return transcribeWithGroq(ctx, groqKey ?? '', sourceFile, sid, diKey, log)
             return ensureWhisper(paths.bin, paths.models, log).then((w) =>
               transcribeSource(ctx, w, sourceFile, sid)
             )
@@ -460,7 +461,7 @@ async function runVideoGen(
       // Reproduction fidèle : la source est une VIDÉO, pas un diaporama. On anime
       // donc les scènes (fal.ai) si la clé est là, au lieu d'un simple Ken Burns
       // sur des images fixes.
-      animateScenes: opts.animateScenes ?? (idea.reproduce && !!getEncrypted('fal_key')),
+      animateScenes: opts.animateScenes ?? (idea.reproduce && !!(getEncrypted('fal_key') || getEncrypted('deepinfra_key'))),
       // Reproduction : voix PAR PERSONNAGE si la source est un dialogue (détecté à
       // l'inspiration), sinon voix off unique. Les séries forcent déjà dialogue=true.
       dialogue: opts.dialogue || (!!idea.reproduce && !!idea.dialogue),
@@ -1115,6 +1116,7 @@ async function runAutopilotTick(force = false): Promise<void> {
         anthropicKey,
         anthropicModel: model,
         openaiKey,
+        deepinfraKey: getEncrypted('deepinfra_key'),
         niche: topic,
         cta: ctaMapForProfile(user).niche ?? '',
         onProgress: (m: string) => emitLog(`Pilote auto (carrousel) : ${m}`)
@@ -1514,8 +1516,9 @@ app.post('/api/ideas/inspire', wrap(async (req, res) => {
     let transcript = ''
     try {
       const groqKey = getEncrypted('groq_key')
-      const words = groqKey
-        ? await transcribeWithGroq(ctx, groqKey, filePath, tmpId)
+      const diKey = getEncrypted('deepinfra_key')
+      const words = diKey || groqKey
+        ? await transcribeWithGroq(ctx, groqKey ?? '', filePath, tmpId, diKey, (m) => emitLog(`Inspiration : ${m}`))
         : await ensureWhisper(paths.bin, paths.models, (m) => emitLog(`Inspiration : ${m}`)).then((w) =>
             transcribeSource(ctx, w, filePath as string, tmpId)
           )

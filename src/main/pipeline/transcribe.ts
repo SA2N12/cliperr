@@ -93,7 +93,10 @@ export async function transcribeWithGroq(
   ctx: PipelineContext,
   apiKey: string,
   source: string,
-  sourceId: number
+  sourceId: number,
+  /** Clé DeepInfra : utilisée EN PRIORITÉ (même API OpenAI-compatible), Groq en repli. */
+  deepinfraKey?: string | null,
+  onNote?: (m: string) => void
 ): Promise<Word[]> {
   // 32 kbps mono : ~14 Mo pour 1h (sous la limite Groq de 25 Mo) ; suffisant pour la parole.
   const mp3 = join(ctx.dirs.downloads, `${sourceId}.mp3`)
@@ -112,22 +115,36 @@ export async function transcribeWithGroq(
   ])
 
   const buf = await readFile(mp3)
-  const form = new FormData()
-  form.append('model', 'whisper-large-v3-turbo')
-  form.append('response_format', 'verbose_json')
-  form.append('timestamp_granularities[]', 'word')
-  form.append('file', new Blob([buf], { type: 'audio/mpeg' }), 'audio.mp3')
-
-  const res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}` },
-    body: form
-  })
-  if (!res.ok) throw new Error(`Groq ${res.status} : ${(await res.text()).slice(0, 300)}`)
-
-  const j = (await res.json()) as {
-    words?: Array<{ word: string; start: number; end: number }>
+  // Même API (OpenAI-compatible) chez DeepInfra et Groq → un seul corps de requête,
+  // deux destinations. DeepInfra d'abord (fournisseur centralisé), Groq en repli :
+  // un souci de solde/quota ne doit jamais faire échouer toute la génération.
+  const build = (model: string): FormData => {
+    const form = new FormData()
+    form.append('model', model)
+    form.append('response_format', 'verbose_json')
+    form.append('timestamp_granularities[]', 'word')
+    form.append('file', new Blob([buf], { type: 'audio/mpeg' }), 'audio.mp3')
+    return form
   }
+  const targets: { name: string; url: string; key: string; model: string }[] = []
+  if (deepinfraKey) targets.push({ name: 'DeepInfra', url: 'https://api.deepinfra.com/v1/openai/audio/transcriptions', key: deepinfraKey, model: 'openai/whisper-large-v3-turbo' })
+  if (apiKey) targets.push({ name: 'Groq', url: 'https://api.groq.com/openai/v1/audio/transcriptions', key: apiKey, model: 'whisper-large-v3-turbo' })
+  if (!targets.length) throw new Error('Transcription : aucune clé (DeepInfra ou Groq) configurée')
+
+  let j: { words?: Array<{ word: string; start: number; end: number }> } | null = null
+  let lastErr = ''
+  for (const t of targets) {
+    try {
+      const res = await fetch(t.url, { method: 'POST', headers: { Authorization: `Bearer ${t.key}` }, body: build(t.model) })
+      if (!res.ok) throw new Error(`${t.name} ${res.status} : ${(await res.text()).slice(0, 200)}`)
+      j = (await res.json()) as { words?: Array<{ word: string; start: number; end: number }> }
+      break
+    } catch (e) {
+      lastErr = e instanceof Error ? e.message : String(e)
+      onNote?.(`Transcription ${t.name} indisponible (${lastErr})${targets.indexOf(t) < targets.length - 1 ? ' → repli' : ''}`)
+    }
+  }
+  if (!j) throw new Error(`Transcription : ${lastErr}`)
   const words: Word[] = (j.words ?? [])
     .map((w) => ({ text: w.word.trim(), start: w.start, end: w.end }))
     .filter((w) => w.text.length > 0)
