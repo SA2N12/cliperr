@@ -179,7 +179,8 @@ export const api = {
   inspireIdea: (url: string, niche: string, mode: 'reproduce' | 'inspire') => post<{ idea: SavedIdea }>('/api/ideas/inspire', { url, niche, mode }),
   savedIdeas: () => req<{ ideas: SavedIdea[] }>('/api/ideas/saved'),
   deleteIdea: (id: number) => req(`/api/ideas/${id}`, { method: 'DELETE' }),
-  generateIdeaVideo: (id: number, lang?: 'fr' | 'en') => post(`/api/ideas/${id}/video`, lang ? { lang } : {}),
+  generateIdeaVideo: (id: number, lang?: 'fr' | 'en', veoPaid?: boolean) =>
+    post(`/api/ideas/${id}/video`, { ...(lang ? { lang } : {}), ...(veoPaid ? { veoPaid: true } : {}) }),
   veoQuota: () => req<{ limit: number; remainingRequests: number; remainingVideos: number; scenesPerVideo: number; deepinfra: boolean; perModel: { model: string; used: number; left: number }[] }>('/api/veo/quota'),
   openaiStatus: () => req<{ has: boolean }>('/api/settings/openai'),
   setOpenaiKey: (key: string) => post('/api/settings/openai', { key }),

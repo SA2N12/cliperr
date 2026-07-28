@@ -1047,6 +1047,10 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
   const [lang, setLang] = useState<'fr' | 'en'>('fr')
   useEffect(() => { api.getFlag('repro_lang').then((r) => setLang(r.value === 'en' ? 'en' : 'fr')).catch(() => undefined) }, [])
   const changeLang = (v: 'fr' | 'en'): void => { setLang(v); void api.setFlag('repro_lang', v).catch(() => undefined) }
+  // Qualité des scènes parlées une fois le quota Veo GRATUIT épuisé : moteurs
+  // économiques (défaut) ou Veo payant. Jamais mémorisé : un choix qui coûte de
+  // l'argent doit être refait sciemment à chaque vidéo.
+  const [veoPaid, setVeoPaid] = useState(false)
   // Quota Veo du jour (vidéos parlées restantes, réparties sur fast/full/lite).
   // `deepinfra` : un repli payant sans plafond prend le relais à quota épuisé.
   const [quota, setQuota] = useState<{ remainingVideos: number; remainingRequests: number; deepinfra: boolean } | null>(null)
@@ -1123,7 +1127,7 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
   const genVideo = async (): Promise<void> => {
     if (!idea) return
     try {
-      await api.generateIdeaVideo(idea.id, lang)
+      await api.generateIdeaVideo(idea.id, lang, veoPaid)
       setLaunched(true)
       setTimeout(loadQuota, 8000) // le quota Veo se décompte au fil des scènes
       toast('Vidéo lancée — suis la progression en bas à droite ; elle arrivera dans « Clips »')
@@ -1254,9 +1258,15 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
                 français. La traduction a lieu à la génération (storyboard) : on le
                 dit ici, sinon on croit que le mode anglais n'a pas été pris. */}
             <span className="muted small" style={{ marginRight: 'auto' }}>
-              {lang === 'en'
-                ? 'Le déroulé ci-dessus reste en français : les répliques seront traduites en anglais à la génération (voix + sous-titres en anglais).'
-                : 'Vidéo montée : voix + images + sous-titres.'}
+              {veoPaid && quota && quota.remainingVideos <= 0
+                ? <><b style={{ color: 'var(--bad)' }}>Quota gratuit épuisé : cette vidéo sera facturée</b> — ~1,20 $ par scène (Veo payant).</>
+                : veoPaid
+                  ? <>Veo tant qu’il reste du quota gratuit, puis <b>Veo payant (~1,20 $/scène)</b>.</>
+                  : quota && quota.remainingVideos <= 0
+                    ? 'Quota Veo gratuit épuisé : moteur économique (qualité moindre). Passe en 💎 pour rester en Veo.'
+                    : lang === 'en'
+                    ? 'Le déroulé ci-dessus reste en français : les répliques seront traduites en anglais à la génération (voix + sous-titres en anglais).'
+                    : 'Vidéo montée : voix + images + sous-titres.'}
             </span>
             {/* Langue des dialogues, choisie AU MOMENT de générer. EN : répliques
                 traduites, voix natives des moteurs (excellentes en anglais). */}
@@ -1269,6 +1279,18 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
             >
               <option value="fr">🇫🇷 Voix françaises</option>
               <option value="en">🇬🇧 Voix anglaises</option>
+            </select>
+            {/* Qualité HORS quota gratuit. Le prix est affiché : c'est le seul
+                réglage de l'app qui engage de l'argent à chaque clic. */}
+            <select
+              className="genai-lang"
+              value={veoPaid ? 'veo' : 'eco'}
+              onChange={(e) => setVeoPaid(e.target.value === 'veo')}
+              disabled={launched}
+              title="Moteur des scènes parlées UNE FOIS le quota Veo gratuit épuisé. Tant qu'il reste du quota, Veo est utilisé dans les deux cas."
+            >
+              <option value="eco">⚡ Économique</option>
+              <option value="veo">💎 Veo payant</option>
             </select>
             <button className="btn" onClick={() => { setIdea(null); setUrl('') }}>Nouvelle inspiration</button>
             <button className="btn primary" onClick={() => void genVideo()} disabled={launched}>

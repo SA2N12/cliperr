@@ -376,7 +376,7 @@ function reloadScheduler(): void {
 let videoChain: Promise<void> = Promise.resolve()
 async function runVideoGen(
   ideaId: number,
-  opts: { profile?: string; autoPublish?: boolean; imageStyle?: string; characterRefPath?: string; animateScenes?: boolean; dialogue?: boolean; noMusic?: boolean; videoType?: string; music?: string; lang?: 'fr' | 'en' } = {}
+  opts: { profile?: string; autoPublish?: boolean; imageStyle?: string; characterRefPath?: string; animateScenes?: boolean; dialogue?: boolean; noMusic?: boolean; videoType?: string; music?: string; lang?: 'fr' | 'en'; veoPaid?: boolean } = {}
 ): Promise<number | null> {
   const idea = repo.getIdea(ideaId)
   if (!idea) return null
@@ -482,10 +482,11 @@ async function runVideoGen(
       burnSubtitles: repo.getSetting('repro_subtitles') !== '0',
       // Source muette : on reproduit SANS voix (ni Veo parlé, ni TTS).
       mute: !!idea.mute,
-      // Économie : au-delà du quota Veo GRATUIT, on ne paie pas 1,20 $/scène —
-      // on repasse sur animation + voix ElevenLabs (~0,30 $). `veo_paid=1` pour
-      // forcer la qualité max quoi qu'il en coûte.
-      veoPaid: repo.getSetting('veo_paid') === '1',
+      // Au-delà du quota Veo GRATUIT, Veo payant (1,20 $/scène) n'est utilisé que
+      // sur demande EXPLICITE de cette génération (sélecteur « Qualité » de la
+      // carte d'idée) ; sinon on descend sur les moteurs économiques. Le réglage
+      // `veo_paid=1` reste un interrupteur global pour tout autoriser.
+      veoPaid: opts.veoPaid === true || repo.getSetting('veo_paid') === '1',
       // Synchro labiale p-video sur nos voix (~0,16 $/scène) — activable une fois
       // le rendu validé sur les personnages illustrés.
       prunaLipsync: repo.getSetting('pruna_lipsync') === '1',
@@ -1940,10 +1941,13 @@ app.post('/api/ideas/:id/video', wrap((req, res) => {
   const id = Number(req.params.id)
   if (!repo.getIdea(id)) return res.status(404).json({ error: 'Idée introuvable' })
   if (!getEncrypted('openai_key')) return res.status(400).json({ error: 'Configure ta clé OpenAI dans les Réglages.' })
-  // Langue choisie AU MOMENT de générer (sélecteur de la carte d'idée) —
-  // prioritaire sur le réglage mémorisé `repro_lang`.
+  // Langue ET qualité choisies AU MOMENT de générer (sélecteurs de la carte
+  // d'idée) — prioritaires sur les réglages mémorisés.
   const lang = req.body?.lang === 'en' ? 'en' as const : req.body?.lang === 'fr' ? 'fr' as const : undefined
-  videoChain = videoChain.then(() => runVideoGen(id, { lang })).then(() => undefined, () => undefined)
+  // `veoPaid` : autorise Veo payant (~1,20 $/scène) POUR CETTE VIDÉO seulement,
+  // une fois le quota gratuit épuisé. Jamais implicite : c'est de l'argent.
+  const veoPaid = req.body?.veoPaid === true ? true : undefined
+  videoChain = videoChain.then(() => runVideoGen(id, { lang, veoPaid })).then(() => undefined, () => undefined)
   res.json({ ok: true })
 }))
 
