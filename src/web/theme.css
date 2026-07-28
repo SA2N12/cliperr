@@ -2521,6 +2521,17 @@ textarea:focus {
 .genai-platforms .msym {
   color: var(--ap-green-strong);
 }
+/* Sélecteur de langue des dialogues (repro) : compact, dans la ligne d'infos. */
+select.genai-lang {
+  width: auto;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  margin-left: 6px;
+}
+
 /* Pastille « vidéos Veo restantes aujourd'hui » (quota Google du jour). */
 .veo-quota {
   display: inline-flex;

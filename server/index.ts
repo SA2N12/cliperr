@@ -490,6 +490,10 @@ async function runVideoGen(
         const v = parseInt(repo.getSetting('repro_max_scenes') || '', 10)
         return Number.isFinite(v) && v > 0 ? v : undefined
       })(),
+      // Langue des dialogues d'une repro (réglage `repro_lang`, sélecteur sur la
+      // page Génération IA) : 'en' → répliques traduites en anglais, voix natives
+      // Seedance/Veo + voix ElevenLabs anglaises. Les vidéos de niche restent FR.
+      lang: idea.reproduce && repo.getSetting('repro_lang') === 'en' ? 'en' : 'fr',
       // Reproduction d'un DIALOGUE : moteur de série (Veo si activé) — voix natives
       // JOUÉES + vraie synchro labiale, générées ensemble donc jamais décalées. Si
       // une scène bascule (erreur/quota Veo), le repli prend les voix ElevenLabs

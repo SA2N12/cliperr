@@ -70,6 +70,10 @@ export interface VideoGenOptions {
   publishPublic?: (localPath: string) => Promise<{ url: string; cleanup: () => Promise<void> } | null>
   /** Plafond de scènes d'une reproduction (défaut 8, borné 4-24). */
   reproMaxScenes?: number
+  /** Langue des dialogues/voix : 'fr' (défaut) ou 'en'. En anglais, les voix
+   *  natives des modèles (Veo, Seedance) sonnent parfaitement — et Seedance
+   *  (moins cher que Veo) devient utilisable comme moteur de scènes parlées. */
+  lang?: 'fr' | 'en'
   /** Active l'animation vidéo des scènes (mode série). */
   animateScenes?: boolean
   /** Mode dialogue : les personnages parlent (voix + intonation par personnage), pas de narrateur. */
@@ -91,8 +95,15 @@ async function buildStoryboard(
   idea: ViralIdea,
   styleHint?: string,
   dialogue?: boolean,
-  reproMax = 8
+  reproMax = 8,
+  lang: 'fr' | 'en' = 'fr'
 ): Promise<{ scenes: Scene[]; cast: CastMember[]; usage: Usage | null }> {
+  // Mode anglais (reproductions) : les répliques/voix off sont écrites en anglais
+  // natif — la source (souvent française) est TRADUITE fidèlement.
+  const enBlock =
+    lang === 'en'
+      ? '\n⚠️ LANGUE : écris TOUTES les répliques / phrases de voix off en ANGLAIS naturel et natif (traduis fidèlement la source si elle est dans une autre langue — même sens, même ton, même chute). Tout le reste des consignes s\'applique tel quel.\n'
+      : ''
   const client = new Anthropic({ apiKey: key, maxRetries: 5 })
   const sceneProps: Record<string, unknown> = {
     narration: {
@@ -163,7 +174,7 @@ Règles :
 ${styleHint ? `- STYLE VISUEL IMPOSÉ (celui de la source, à respecter À L'IDENTIQUE d'une scène à l'autre) : ${styleHint}` : "- Garde un style visuel cohérent et proche de la source d'une scène à l'autre."}
 - RÈGLES IMAGE (le générateur refuse sinon) : aucun ENFANT/mineur, aucune personne réelle identifiable, pas de gore ni de contenu sexuel → illustre autrement (objet seul, décor, main d'adulte, document, symbole).
 
-Pour chaque scène : la phrase de VOIX OFF (français) + un IMAGE PROMPT en anglais respectant ${styleHint ? 'STRICTEMENT le style imposé ci-dessus' : 'le style de la source'}, très détaillé, sans aucun texte. Chaque IMAGE PROMPT décrit SON PROPRE DÉCOR (lieu, arrière-plan, cadrage) : le style est commun à toutes les scènes, PAS le décor — fais-le évoluer au fil de l'histoire au lieu de répéter le même fond. Réponds uniquement via l'outil storyboard.`
+${enBlock}Pour chaque scène : la phrase de VOIX OFF (${lang === 'en' ? 'ANGLAIS' : 'français'}) + un IMAGE PROMPT en anglais respectant ${styleHint ? 'STRICTEMENT le style imposé ci-dessus' : 'le style de la source'}, très détaillé, sans aucun texte. Chaque IMAGE PROMPT décrit SON PROPRE DÉCOR (lieu, arrière-plan, cadrage) : le style est commun à toutes les scènes, PAS le décor — fais-le évoluer au fil de l'histoire au lieu de répéter le même fond. Réponds uniquement via l'outil storyboard.`
 
   // Reproduction d'une saynète : une RÉPLIQUE par scène + un casting vocal (voix
   // par personnage), au lieu d'une voix off unique.
@@ -180,7 +191,7 @@ Règles :
 ${styleHint ? `- STYLE VISUEL IMPOSÉ (celui de la source, à l'identique d'une scène à l'autre) : ${styleHint}` : "- Style visuel cohérent et proche de la source d'une scène à l'autre."}
 - RÈGLES IMAGE (le générateur refuse sinon) : le personnage qui parle au premier plan, expressif, mais AUCUN enfant/mineur ni personne réelle identifiable de façon photoréaliste → rends-le en style illustré/stylisé (celui de la source) ou de façon générique. Pas de gore ni de contenu sexuel.
 
-Pour chaque scène : la RÉPLIQUE (speaker + narration en français) + un IMAGE PROMPT en anglais respectant ${styleHint ? 'STRICTEMENT le style imposé ci-dessus' : 'le style de la source'}, très détaillé, sans aucun texte. Chaque IMAGE PROMPT décrit SON PROPRE DÉCOR (lieu, arrière-plan, cadrage) : le style est commun à toutes les scènes, PAS le décor — fais-le évoluer au fil de l'histoire au lieu de répéter le même fond. Réponds uniquement via l'outil storyboard.`
+${enBlock}Pour chaque scène : la RÉPLIQUE (speaker + narration en ${lang === 'en' ? 'ANGLAIS' : 'français'}) + un IMAGE PROMPT en anglais respectant ${styleHint ? 'STRICTEMENT le style imposé ci-dessus' : 'le style de la source'}, très détaillé, sans aucun texte. Chaque IMAGE PROMPT décrit SON PROPRE DÉCOR (lieu, arrière-plan, cadrage) : le style est commun à toutes les scènes, PAS le décor — fais-le évoluer au fil de l'histoire au lieu de répéter le même fond. Réponds uniquement via l'outil storyboard.`
 
   const prompt = reproduce
     ? (dialogue ? reproduceDialoguePrompt : reproducePrompt)
@@ -357,7 +368,7 @@ async function elevenVoicePool(key: string): Promise<{ id: string; name: string;
  *  FRANÇAISES (label language=fr) : la bibliothèque par défaut ne contient que des
  *  voix anglaises, qui lisent le français avec un fort accent — c'est ça qui rend
  *  le rendu « bizarre », pas ElevenLabs. Genre respecté quand c'est possible. */
-function assignElevenVoices(pool: { id: string; name: string; gender: string; lang: string }[], cast: CastMember[]): Map<string, string> {
+function assignElevenVoices(pool: { id: string; name: string; gender: string; lang: string }[], cast: CastMember[], prefLang = 'fr'): Map<string, string> {
   const map = new Map<string, string>()
   if (!pool.length) return map
   const used = new Set<string>()
@@ -372,8 +383,8 @@ function assignElevenVoices(pool: { id: string; name: string; gender: string; la
   for (const m of cast) {
     const want = wanted(m)
     const pick =
-      (want ? free((v) => v.lang === 'fr' && v.gender === want) : undefined) ??
-      free((v) => v.lang === 'fr') ??
+      (want ? free((v) => v.lang === prefLang && v.gender === want) : undefined) ??
+      free((v) => v.lang === prefLang) ??
       (want ? free((v) => v.gender === want) : undefined) ??
       free(() => true) ??
       pool[0]
@@ -812,6 +823,32 @@ export async function genVideoPruna(
   await saveDeepinfraVideo(key, (await r.json()) as Record<string, unknown>, dest)
 }
 
+// ── Seedance 1.5 Pro (ByteDance, via DeepInfra) : scènes PARLÉES avec voix
+// natives + lip-sync, nettement moins cher que Veo. ⚠️ ANGLAIS uniquement :
+// testé 2× en français → répliques massacrées (« Papa Pop eline mi regard pas »).
+// Réservé au mode `lang: 'en'`. ──
+export async function genVideoSeedanceTalking(
+  key: string,
+  prompt: string,
+  dest: string,
+  refImagePath: string,
+  durationSec: number
+): Promise<void> {
+  const r = await fetch(`${DEEPINFRA}/v1/inference/ByteDance/Seedance-1.5-Pro`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      prompt,
+      image: `data:image/png;base64,${(await readFile(refImagePath)).toString('base64')}`,
+      duration: Math.max(4, Math.min(12, Math.round(durationSec))),
+      aspect_ratio: '9:16',
+      generate_audio: true
+    })
+  })
+  if (!r.ok) throw new Error(`Seedance ${r.status} : ${(await r.text()).slice(0, 160)}`)
+  await saveDeepinfraVideo(key, (await r.json()) as Record<string, unknown>, dest)
+}
+
 export async function genVideoVeoDeepinfra(
   key: string,
   prompt: string,
@@ -957,8 +994,9 @@ export async function generateVideoFromIdea(
     try {
       const pool = await elevenVoicePool(opts.elevenKey)
       if (pool.length) {
-        if (!elevenFallbackVoice) elevenFallbackVoice = (pool.find((v) => v.lang === 'fr') ?? pool[0]).id
-        elevenCast = assignElevenVoices(pool, cast)
+        const prefLang = opts.lang === 'en' ? 'en' : 'fr'
+        if (!elevenFallbackVoice) elevenFallbackVoice = (pool.find((v) => v.lang === prefLang) ?? pool[0]).id
+        elevenCast = assignElevenVoices(pool, cast, prefLang)
         log?.(`Voix ElevenLabs par personnage : ${cast.map((c) => c.name).join(', ')}`)
       }
     } catch (e) {
@@ -1036,7 +1074,7 @@ export async function generateVideoFromIdea(
         // Voix RÉUTILISÉE À L'IDENTIQUE à chaque scène pour ce personnage → Veo
         // garde la même voix au lieu d'en réinventer une par clip.
         const voiceDesc = member?.voiceSignature?.trim() || (member?.style ? `expressive cartoon voice, ${member.style}` : 'an expressive, distinctive cartoon voice')
-        const veoPrompt = `${sc.imagePrompt}. The character "${who}" says in French, EXACTLY: « ${sc.narration} ». VOICE — use this EXACT SAME voice for "${who}" in every single scene, never change it between scenes: ${voiceDesc}. Lip-sync must be perfectly accurate: the mouth shapes match each spoken syllable and start/stop exactly with the speech. Expressive face and natural hand gestures while speaking; the other characters stay silent and only listen. Keep the characters, their outfits and the art style strictly identical to the first frame. Vivid colors.
+        const veoPrompt = `${sc.imagePrompt}. The character "${who}" says in ${opts.lang === 'en' ? 'English' : 'French'}, EXACTLY: « ${sc.narration} ». VOICE — use this EXACT SAME voice for "${who}" in every single scene, never change it between scenes: ${voiceDesc}. Lip-sync must be perfectly accurate: the mouth shapes match each spoken syllable and start/stop exactly with the speech. Expressive face and natural hand gestures while speaking; the other characters stay silent and only listen. Keep the characters, their outfits and the art style strictly identical to the first frame. Vivid colors.
 AUDIO — CRITICAL: the ONLY audio is that spoken line, dry and clean. Absolutely NO background music, NO soundtrack, NO score, NO singing, NO musical instrument of any kind, no sound effects; at most an almost inaudible room tone. Silence apart from the voice.
 NO TEXT — CRITICAL: nothing written anywhere in the frame. No subtitles, no captions, no burned-in text, no titles, no signs, no labels, no watermark, no logo, no letters or numbers of any kind.`
         // 1) Google (quota gratuit) — 2 tentatives : évite qu'une scène bascule
@@ -1055,7 +1093,18 @@ NO TEXT — CRITICAL: nothing written anywhere in the frame. No subtitles, no ca
             }
           }
         }
-        // 2) DeepInfra : même Veo, payé à la seconde, sans plafond journalier.
+        // 2) Mode ANGLAIS : Seedance 1.5 Pro — voix natives + lip-sync comme Veo,
+        // pour bien moins cher. (Disqualifié en français : répliques massacrées.)
+        if (!gotClip && opts.lang === 'en' && opts.deepinfraKey) {
+          log?.(`Scène ${i + 1}/${scenes.length} — scène parlée (Seedance, EN)…`)
+          try {
+            await genVideoSeedanceTalking(opts.deepinfraKey, veoPrompt, clip, png, veoDur)
+            gotClip = true
+          } catch (e) {
+            log?.(`Scène ${i + 1}/${scenes.length} — Seedance indisponible (${e instanceof Error ? e.message : String(e)})`)
+          }
+        }
+        // 3) DeepInfra : même Veo, payé à la seconde, sans plafond journalier.
         // Réservé au mode « qualité max » : sinon on descend sur le chemin
         // animation + voix ElevenLabs (~4× moins cher) juste en dessous.
         if (!gotClip && opts.deepinfraKey && opts.veoPaid) {

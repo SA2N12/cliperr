@@ -1042,6 +1042,11 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
   // Liens mis de côté pour être reproduits plus tard (persistés côté serveur
   // via un flag JSON → on les retrouve depuis n'importe quel appareil).
   const [saved, setSaved] = useState<{ url: string; addedAt: number }[]>([])
+  // Langue des dialogues de la repro : FR (défaut) ou EN (voix natives des
+  // moteurs vidéo, bien meilleures en anglais ; répliques traduites).
+  const [lang, setLang] = useState<'fr' | 'en'>('fr')
+  useEffect(() => { api.getFlag('repro_lang').then((r) => setLang(r.value === 'en' ? 'en' : 'fr')).catch(() => undefined) }, [])
+  const changeLang = (v: 'fr' | 'en'): void => { setLang(v); void api.setFlag('repro_lang', v).catch(() => undefined) }
   // Quota Veo du jour (vidéos parlées restantes, réparties sur fast/full/lite).
   // `deepinfra` : un repli payant sans plafond prend le relais à quota épuisé.
   const [quota, setQuota] = useState<{ remainingVideos: number; remainingRequests: number; deepinfra: boolean } | null>(null)
@@ -1150,7 +1155,18 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
           </button>
         </div>
         <div className="genai-platforms" style={{ justifyContent: 'space-between' }}>
-          <span><MIcon name="check_circle" size={13} /> Fonctionne avec <b>TikTok</b> · <b>Instagram Reels</b> · <b>YouTube Shorts</b> (10 min max)</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <MIcon name="check_circle" size={13} /> Fonctionne avec <b>TikTok</b> · <b>Instagram Reels</b> · <b>YouTube Shorts</b> (10 min max)
+            <select
+              className="genai-lang"
+              value={lang}
+              onChange={(e) => changeLang(e.target.value as 'fr' | 'en')}
+              title="Langue des dialogues de la reproduction. EN : répliques traduites en anglais, voix natives des moteurs vidéo (bien meilleures en anglais) + moteur Seedance moins cher."
+            >
+              <option value="fr">🇫🇷 Dialogues FR</option>
+              <option value="en">🇬🇧 Dialogues EN</option>
+            </select>
+          </span>
           {quota && (quota.remainingVideos > 0 || !quota.deepinfra ? (
             <span
               className={`veo-quota${quota.remainingVideos <= 0 ? ' empty' : ''}`}
