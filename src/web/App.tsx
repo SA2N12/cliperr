@@ -1164,8 +1164,8 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
               <MIcon name="movie" size={13} /> ≈ {quota.remainingVideos} vidéo{quota.remainingVideos > 1 ? 's' : ''} Veo gratuite{quota.remainingVideos > 1 ? 's' : ''} aujourd’hui
             </span>
           ) : (
-            <span className="veo-quota" title="Quota gratuit Google épuisé pour aujourd'hui : les scènes parlées continuent via DeepInfra, facturées à la seconde (~1,20 $/scène).">
-              <MIcon name="hub" size={13} /> Quota gratuit épuisé — Veo via DeepInfra (payant)
+            <span className="veo-quota empty" title="Quota Veo gratuit épuisé pour aujourd'hui (remise à zéro vers 9 h). Les scènes parlées passent sur un moteur de repli — moins bon que Veo. Pour rester en Veo : générer demain, ou activer le Veo payant (~1,20 $/scène).">
+              <MIcon name="hub" size={13} /> Quota Veo épuisé — moteur de repli (qualité moindre)
             </span>
           ))}
         </div>
