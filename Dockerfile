@@ -13,18 +13,20 @@ FROM node:20-bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 make g++ ca-certificates fontconfig fonts-liberation fonts-inter \
     fonts-comfortaa fonts-quicksand fonts-comic-neue curl ffmpeg \
-  # Polices CARTOON des sous-titres : les paquets Debian arrondis n'existent qu'en
-  # Light/Regular (trop fins sans contour). Luckiest Guy est gras et dessiné pour
-  # les capitales — exactement le style des sous-titres TikTok. Fredoka = variante
-  # plus douce, gardée sous la main. Téléchargement non bloquant : un incident
-  # réseau ne doit pas casser un déploiement (fontconfig substituerait alors).
+  # Polices des sous-titres. Archivo Black (grotesque très grasse) est celle des
+  # gros comptes TikTok et sert par défaut ; les paquets Debian arrondis n'existent
+  # qu'en Light/Regular, donc trop fins. Les autres sont gardées comme variantes
+  # (Anton = condensée, Luckiest Guy / Fredoka = cartoon). Téléchargement non
+  # bloquant : un incident réseau ne doit pas casser un déploiement.
   && mkdir -p /usr/share/fonts/truetype/cartoon \
-  && (curl -fsSL --retry 3 -o /usr/share/fonts/truetype/cartoon/LuckiestGuy.ttf \
-        https://github.com/google/fonts/raw/main/apache/luckiestguy/LuckiestGuy-Regular.ttf \
-      || echo 'ATTENTION : Luckiest Guy non téléchargée') \
-  && (curl -fsSL --retry 3 -o /usr/share/fonts/truetype/cartoon/Fredoka.ttf \
-        'https://github.com/google/fonts/raw/main/ofl/fredoka/Fredoka%5Bwdth,wght%5D.ttf' \
-      || echo 'ATTENTION : Fredoka non téléchargée') \
+  && for f in \
+       'ArchivoBlack.ttf|https://github.com/google/fonts/raw/main/ofl/archivoblack/ArchivoBlack-Regular.ttf' \
+       'Anton.ttf|https://github.com/google/fonts/raw/main/ofl/anton/Anton-Regular.ttf' \
+       'LuckiestGuy.ttf|https://github.com/google/fonts/raw/main/apache/luckiestguy/LuckiestGuy-Regular.ttf' \
+       'Fredoka.ttf|https://github.com/google/fonts/raw/main/ofl/fredoka/Fredoka%5Bwdth,wght%5D.ttf' ; do \
+       n="${f%%|*}"; u="${f##*|}"; \
+       curl -fsSL --retry 3 -o "/usr/share/fonts/truetype/cartoon/$n" "$u" || echo "ATTENTION : $n non téléchargée" ; \
+     done \
   && fc-cache -f \
   && rm -rf /var/lib/apt/lists/*
 

@@ -1041,17 +1041,21 @@ async function speechWordTimings(
   return null
 }
 
-// ── Sous-titres style TikTok : groupes de 3 MOTS, TOUT EN MAJUSCULES, le mot en
-// cours de prononciation surligné en JAUNE, police arrondie/cartoon, et OMBRE
-// PORTÉE au lieu d'un contour (style ASS : Outline=0, Shadow=7). ──
+// ── Sous-titres style TikTok : groupes de 3 MOTS, TOUT EN MAJUSCULES, police
+// grasse à contour noir, et le mot en cours de prononciation dans une BOÎTE
+// ROUGE (rendu en deux couches superposées, cf. groupLine). ──
 const SUB_GROUP = 3
-/** Police des sous-titres — cartoon et GRASSE, dessinée pour les capitales. Les
- *  arrondies de Debian (Comfortaa/Quicksand/Comic Neue) n'existent qu'en Light :
- *  trop fines sans contour. Alternative plus douce déjà installée : 'Fredoka'. */
-const SUB_FONT = 'Luckiest Guy'
-/** Jaune ASS = &HBBGGRR& → bleu 00, vert FF, rouge FF. */
-const SUB_HILITE = '{\\c&H00FFFF&}'
-const SUB_NORMAL = '{\\c&HFFFFFF&}'
+/** Police des sous-titres : grotesque très grasse, comme les gros comptes TikTok.
+ *  Autres polices installées si besoin : 'Anton' (condensée), 'Luckiest Guy' et
+ *  'Fredoka' (cartoon), 'Inter'. */
+const SUB_FONT = 'Archivo Black'
+// Surlignement du mot prononcé : une BOÎTE ROUGE derrière le mot (et non du texte
+// coloré). En ASS, `BorderStyle: 3` transforme le contour en boîte pleine, dont la
+// couleur/opacité se pilotent mot par mot via \3c et \3a.
+/** Boîte invisible (mots non prononcés). */
+const SUB_BOX_OFF = '{\\3a&HFF&}'
+/** Boîte rouge opaque (mot en cours). &HBBGGRR& → rouge = 0000FF. */
+const SUB_BOX_ON = '{\\3a&H00&\\3c&H0000FF&}'
 
 function sceneAss(text: string, durationSec: number, timed?: { text: string; start: number; end: number }[] | null): string {
   const header = `[Script Info]
@@ -1062,16 +1066,24 @@ WrapStyle: 0
 ScaledBorderAndShadow: yes
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BackColour, Bold, Italic, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV
-Style: Def,${SUB_FONT},112,&H00FFFFFF,&H00000000,&H00000000,1,0,1,0,7,2,80,80,430
+Style: Out,${SUB_FONT},104,&H00FFFFFF,&H00000000,&H00000000,1,0,1,7,0,2,80,80,430
+Style: Box,${SUB_FONT},104,&H00FFFFFF,&HFF0000FF,&H00000000,1,0,3,10,0,2,80,80,430
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
 
-  /** Une ligne = le groupe entier, seul le mot `active` passe en jaune. */
+  /** Un groupe = DEUX passes superposées, parfaitement alignées (même police,
+   *  même taille, mêmes marges) : la couche 0 dessine le contour noir (lisibilité
+   *  sur n'importe quel fond), la couche 1 pose les boîtes — invisibles, sauf le
+   *  mot en cours qui reçoit sa boîte rouge. Un seul style ne peut pas faire les
+   *  deux : en ASS, une boîte (BorderStyle 3) remplace le contour. */
   const groupLine = (group: string[], active: number, start: number, end: number): string => {
-    const txt = group
-      .map((w, k) => (k === active ? `${SUB_HILITE}${w}${SUB_NORMAL}` : w))
+    const t0 = assTime(start)
+    const t1 = assTime(end)
+    const plain = group.join(' ')
+    const boxed = group
+      .map((w, k) => (k === active ? `${SUB_BOX_ON}${w}${SUB_BOX_OFF}` : w))
       .join(' ')
-    return `Dialogue: 0,${assTime(start)},${assTime(end)},Def,,0,0,0,,${txt}`
+    return `Dialogue: 0,${t0},${t1},Out,,0,0,0,,${plain}\nDialogue: 1,${t0},${t1},Box,,0,0,0,,${SUB_BOX_OFF}${boxed}`
   }
 
   // Timings RÉELS (Whisper sur l'audio de la scène) : chaque mot se colore
