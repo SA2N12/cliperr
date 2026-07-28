@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { z } from 'zod'
-import { writeFile, readFile, mkdir, rm } from 'fs/promises'
+import { writeFile, readFile, mkdir, rm, copyFile } from 'fs/promises'
 import { join } from 'path'
 import { run, runCapture, type PipelineContext } from '../src/main/pipeline/context'
 import type { Usage } from '../src/main/pipeline/highlights'
@@ -349,6 +349,8 @@ const ELEVEN = 'https://api.elevenlabs.io/v1'
 const SPEECH_SPEED_MIN = 0.7
 const SPEECH_SPEED_MAX = 1.2
 export const SPEECH_SPEED_DEFAULT = 1.15
+/** Borne la valeur ENVOYÉE À L'API (0.7–1.2). Une cible supérieure est atteinte
+ *  ensuite par accélération audio (cf. speedUpBeyondApiLimit). */
 const clampSpeed = (s?: number): number =>
   Math.max(SPEECH_SPEED_MIN, Math.min(SPEECH_SPEED_MAX, Number.isFinite(s) ? (s as number) : SPEECH_SPEED_DEFAULT))
 
@@ -440,8 +442,10 @@ export interface VoiceOpts {
   openaiKey: string
   provider?: string
   elevenKey?: string | null
-  /** Débit de parole (0.7–1.2). Défaut 1.15 : le débit naturel fait trop posé sur TikTok. */
+  /** Débit de parole VISÉ. Au-delà de 1.2 (plafond des API), l'audio est accéléré. */
   speed?: number
+  /** Exécute ffmpeg (fourni par le pipeline) — requis pour dépasser 1.2. */
+  ffmpeg?: (args: string[]) => Promise<unknown>
   onNote?: (m: string) => void
 }
 
@@ -460,12 +464,31 @@ async function tts(voice: string, text: string, dest: string, o: VoiceOpts, char
   if (o.provider === 'elevenlabs' && o.elevenKey && voice) {
     try {
       await writeFile(dest, await elevenSpeech(o.elevenKey, voice, text, o.speed))
+      await speedUpBeyondApiLimit(dest, o)
       return
     } catch (e) {
       o.onNote?.(`ElevenLabs indisponible (${e instanceof Error ? e.message.split('\n')[0] : e}) → repli voix OpenAI`)
     }
   }
   await writeFile(dest, await openaiSpeech(o.openaiKey, voice, text, voiceInstructions(characterStyle, o.speed), o.speed))
+  await speedUpBeyondApiLimit(dest, o)
+}
+
+/** Les API de voix plafonnent à 1.2 ; au-delà, on accélère l'audio (atempo, qui
+ *  CONSERVE la hauteur de voix — pas d'effet « chipmunk »). Le lip-sync p-video
+ *  se cale ensuite sur ce fichier accéléré, donc tout reste synchrone. */
+async function speedUpBeyondApiLimit(dest: string, o: VoiceOpts): Promise<void> {
+  const target = Number.isFinite(o.speed) ? (o.speed as number) : SPEECH_SPEED_DEFAULT
+  const extra = target / SPEECH_SPEED_MAX
+  if (!o.ffmpeg || extra <= 1.01) return
+  const tmp = `${dest}.fast.mp3`
+  try {
+    await o.ffmpeg(['-y', '-loglevel', 'error', '-i', dest, '-filter:a', `atempo=${Math.min(2, extra).toFixed(3)}`, tmp])
+    await copyFile(tmp, dest)
+    await rm(tmp, { force: true })
+  } catch (e) {
+    o.onNote?.(`accélération audio impossible (${e instanceof Error ? e.message.split('\n')[0] : e}) — débit natif conservé`)
+  }
 }
 
 /** Rejet du filtre de sécurité OpenAI (le plus souvent : un mineur dans la scène). */
@@ -1019,9 +1042,12 @@ async function speechWordTimings(
 }
 
 // ── Sous-titres style TikTok : groupes de 3 MOTS, TOUT EN MAJUSCULES, le mot en
-// cours de prononciation surligné en JAUNE, police Inter (moderne, celle du
-// dashboard ; paquet fonts-inter installé dans l'image). ──
+// cours de prononciation surligné en JAUNE, police arrondie/cartoon, et OMBRE
+// PORTÉE au lieu d'un contour (style ASS : Outline=0, Shadow=7). ──
 const SUB_GROUP = 3
+/** Police des sous-titres — arrondie/cartoon, assortie aux personnages illustrés.
+ *  (Paquets fonts-comfortaa/quicksand/comic-neue installés dans l'image.) */
+const SUB_FONT = 'Comfortaa'
 /** Jaune ASS = &HBBGGRR& → bleu 00, vert FF, rouge FF. */
 const SUB_HILITE = '{\\c&H00FFFF&}'
 const SUB_NORMAL = '{\\c&HFFFFFF&}'
@@ -1035,7 +1061,7 @@ WrapStyle: 0
 ScaledBorderAndShadow: yes
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BackColour, Bold, Italic, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV
-Style: Def,Inter,112,&H00FFFFFF,&H00000000,&H00000000,1,0,1,9,0,2,80,80,430
+Style: Def,${SUB_FONT},112,&H00FFFFFF,&H00000000,&H00000000,1,0,1,0,7,2,80,80,430
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
 
@@ -1303,7 +1329,7 @@ NO TEXT — CRITICAL: nothing written anywhere in the frame. No subtitles, no ca
           sceneVoice,
           sc.narration,
           mp3,
-          { openaiKey: opts.openaiKey, provider: opts.voiceProvider, elevenKey: opts.elevenKey, speed: opts.speechSpeed, onNote: log },
+          { openaiKey: opts.openaiKey, provider: opts.voiceProvider, elevenKey: opts.elevenKey, speed: opts.speechSpeed, ffmpeg: (a) => run(ctx.bin.ffmpeg, a), onNote: log },
           eleven ? undefined : member ? `${member.name} — ${member.style}` : undefined
         )
         dur = (await mediaDuration(ctx.bin.ffprobe, mp3)) + 0.4
