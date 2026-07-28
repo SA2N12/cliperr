@@ -496,6 +496,8 @@ async function runVideoGen(
       // Synchro labiale p-video sur nos voix (~0,16 $/scène) — activable une fois
       // le rendu validé sur les personnages illustrés.
       prunaLipsync: repo.getSetting('pruna_lipsync') === '1',
+      // Seedance parlé : désactivé (il ignore l'image → personnages incohérents).
+      seedanceTalking: repo.getSetting('seedance_talking') === '1',
       publishPublic: publishPublicFile,
       // Plafond de scènes d'une repro (réglage `repro_max_scenes`, défaut 8) :
       // une source de 30 répliques regroupée en 8 scènes perd beaucoup — montable

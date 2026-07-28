@@ -70,6 +70,9 @@ export interface VideoGenOptions {
   /** Synchro labiale p-video (0,02 $/s) calée sur nos voix, à la place de
    *  l'animation muette. Nécessite `publishPublic` (le modèle exige des URL). */
   prunaLipsync?: boolean
+  /** Autoriser Seedance pour les scènes parlées EN. OFF : il ignore l'image de la
+   *  scène et réinvente les personnages (réglage `seedance_talking`). */
+  seedanceTalking?: boolean
   /** Publie un fichier local sur une URL publique éphémère (+ nettoyage). */
   publishPublic?: (localPath: string) => Promise<{ url: string; cleanup: () => Promise<void> } | null>
   /** Plafond de scènes d'une reproduction (défaut 8, borné 4-24). */
@@ -881,7 +884,10 @@ export async function genVideoSeedanceTalking(
   prompt: string,
   dest: string,
   refImagePath: string,
-  durationSec: number
+  durationSec: number,
+  /** `false` : clip MUET (on posera notre propre voix) — permet d'utiliser sa
+   *  qualité d'image même en français, langue qu'il ne sait pas prononcer. */
+  withAudio = true
 ): Promise<void> {
   const r = await fetch(`${DEEPINFRA}/v1/inference/ByteDance/Seedance-1.5-Pro`, {
     method: 'POST',
@@ -891,7 +897,7 @@ export async function genVideoSeedanceTalking(
       image: `data:image/png;base64,${(await readFile(refImagePath)).toString('base64')}`,
       duration: Math.max(4, Math.min(12, Math.round(durationSec))),
       aspect_ratio: '9:16',
-      generate_audio: true
+      generate_audio: withAudio
     })
   })
   if (!r.ok) throw new Error(`Seedance ${r.status} : ${(await r.text()).slice(0, 160)}`)
@@ -1255,7 +1261,11 @@ NO TEXT — CRITICAL: nothing written anywhere in the frame. No subtitles, no ca
         }
         // 2) Mode ANGLAIS : Seedance 1.5 Pro — voix natives + lip-sync comme Veo,
         // pour bien moins cher. (Disqualifié en français : répliques massacrées.)
-        if (!gotClip && opts.lang === 'en' && opts.deepinfraKey) {
+        // ⚠️ DÉSACTIVÉ : vérifié en réel, Seedance IGNORE l'image de la scène et
+        // invente des personnages sans rapport (une bouteille devient une écolière).
+        // C'est ce qui faisait « les personnages ne sont pas respectés ». Réactiver
+        // seulement si DeepInfra corrige le conditionnement par image.
+        if (!gotClip && opts.lang === 'en' && opts.deepinfraKey && opts.seedanceTalking) {
           log?.(`Scène ${i + 1}/${scenes.length} — scène parlée (Seedance, EN)…`)
           try {
             await genVideoSeedanceTalking(opts.deepinfraKey, veoPrompt, clip, png, veoDur)
@@ -1382,14 +1392,16 @@ NO TEXT — CRITICAL: nothing written anywhere in the frame. No subtitles, no ca
           : ''
         const animPrompt = `Animate this exact scene keeping the characters and art style strictly identical: ${sc.imagePrompt}.${talking} Natural lively character motion, smooth cinematic camera movement, vivid colors, no text.${ambient}`
         const target = join(work, `v${i}.mp4`)
-        // DeepInfra (fournisseur centralisé) d'abord, fal.ai en repli.
-        if (opts.deepinfraKey) {
-          log?.(`Scène ${i + 1}/${scenes.length} — animation vidéo (DeepInfra)${opts.mute ? ' + ambiance sonore' : ''}…`)
+        // ⚠️ NE PAS mettre Seedance ici : testé, il IGNORE l'image de départ et
+        // invente une scène sans rapport (cf. genVideoSeedanceTalking). Pixverse,
+        // lui, la respecte fidèlement — c'est ce qui garde les personnages.
+        if (!animClip && opts.deepinfraKey) {
+          log?.(`Scène ${i + 1}/${scenes.length} — animation vidéo (Pixverse)${opts.mute ? ' + ambiance sonore' : ''}…`)
           try {
             await genVideoDeepinfra(opts.deepinfraKey, animPrompt, target, png, dur > 6.5 ? 10 : 5, undefined, !!opts.mute)
             animClip = target
           } catch (e) {
-            log?.(`Scène ${i + 1}/${scenes.length} — DeepInfra indisponible (${e instanceof Error ? e.message : String(e)})${opts.falKey ? ' → fal.ai' : ' → image animée'}`)
+            log?.(`Scène ${i + 1}/${scenes.length} — Pixverse indisponible (${e instanceof Error ? e.message : String(e)})${opts.falKey ? ' → fal.ai' : ' → image animée'}`)
           }
         }
         if (!animClip && opts.falKey) {
