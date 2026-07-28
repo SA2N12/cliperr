@@ -1045,9 +1045,10 @@ async function speechWordTimings(
 // cours de prononciation surligné en JAUNE, police arrondie/cartoon, et OMBRE
 // PORTÉE au lieu d'un contour (style ASS : Outline=0, Shadow=7). ──
 const SUB_GROUP = 3
-/** Police des sous-titres — arrondie/cartoon, assortie aux personnages illustrés.
- *  (Paquets fonts-comfortaa/quicksand/comic-neue installés dans l'image.) */
-const SUB_FONT = 'Comfortaa'
+/** Police des sous-titres — cartoon et GRASSE, dessinée pour les capitales. Les
+ *  arrondies de Debian (Comfortaa/Quicksand/Comic Neue) n'existent qu'en Light :
+ *  trop fines sans contour. Alternative plus douce déjà installée : 'Fredoka'. */
+const SUB_FONT = 'Luckiest Guy'
 /** Jaune ASS = &HBBGGRR& → bleu 00, vert FF, rouge FF. */
 const SUB_HILITE = '{\\c&H00FFFF&}'
 const SUB_NORMAL = '{\\c&HFFFFFF&}'

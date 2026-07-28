@@ -12,7 +12,20 @@ FROM node:20-bookworm-slim
 # VOD ; ffmpeg-static reste pour le montage local (recadrage, sous-titres).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 make g++ ca-certificates fontconfig fonts-liberation fonts-inter \
-    fonts-comfortaa fonts-quicksand fonts-comic-neue ffmpeg \
+    fonts-comfortaa fonts-quicksand fonts-comic-neue curl ffmpeg \
+  # Polices CARTOON des sous-titres : les paquets Debian arrondis n'existent qu'en
+  # Light/Regular (trop fins sans contour). Luckiest Guy est gras et dessiné pour
+  # les capitales — exactement le style des sous-titres TikTok. Fredoka = variante
+  # plus douce, gardée sous la main. Téléchargement non bloquant : un incident
+  # réseau ne doit pas casser un déploiement (fontconfig substituerait alors).
+  && mkdir -p /usr/share/fonts/truetype/cartoon \
+  && (curl -fsSL --retry 3 -o /usr/share/fonts/truetype/cartoon/LuckiestGuy.ttf \
+        https://github.com/google/fonts/raw/main/apache/luckiestguy/LuckiestGuy-Regular.ttf \
+      || echo 'ATTENTION : Luckiest Guy non téléchargée') \
+  && (curl -fsSL --retry 3 -o /usr/share/fonts/truetype/cartoon/Fredoka.ttf \
+        'https://github.com/google/fonts/raw/main/ofl/fredoka/Fredoka%5Bwdth,wght%5D.ttf' \
+      || echo 'ATTENTION : Fredoka non téléchargée') \
+  && fc-cache -f \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
