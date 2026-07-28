@@ -68,6 +68,8 @@ export interface VideoGenOptions {
   prunaLipsync?: boolean
   /** Publie un fichier local sur une URL publique éphémère (+ nettoyage). */
   publishPublic?: (localPath: string) => Promise<{ url: string; cleanup: () => Promise<void> } | null>
+  /** Plafond de scènes d'une reproduction (défaut 8, borné 4-24). */
+  reproMaxScenes?: number
   /** Active l'animation vidéo des scènes (mode série). */
   animateScenes?: boolean
   /** Mode dialogue : les personnages parlent (voix + intonation par personnage), pas de narrateur. */
@@ -88,7 +90,8 @@ async function buildStoryboard(
   model: string,
   idea: ViralIdea,
   styleHint?: string,
-  dialogue?: boolean
+  dialogue?: boolean,
+  reproMax = 8
 ): Promise<{ scenes: Scene[]; cast: CastMember[]; usage: Usage | null }> {
   const client = new Anthropic({ apiKey: key, maxRetries: 5 })
   const sceneProps: Record<string, unknown> = {
@@ -140,10 +143,12 @@ async function buildStoryboard(
   // template « niche » (hook choc / boucle / CTA) qui la dénaturerait. Peut être en
   // narration (une voix off) OU en dialogue (voix par personnage) selon la source.
   const reproduce = !!idea.reproduce
-  // Plafond de scènes pour une reproduction : un Reel très bavard peut donner 13+
+  // Plafond de scènes pour une reproduction : un Reel très bavard peut donner 30+
   // étapes → prompt trop long à générer (tool-call tronqué par max_tokens → storyboard
-  // vide) ET vidéo interminable/coûteuse (une image IA par scène). On regroupe alors.
-  const REPRO_MAX = 8
+  // vide) ET vidéo interminable/coûteuse (une image IA + un clip par scène). On
+  // regroupe alors. Configurable (réglage `repro_max_scenes`) : 8 par défaut,
+  // montable à 16-24 depuis que p-video rend la scène bien moins chère.
+  const REPRO_MAX = Math.max(4, Math.min(24, reproMax))
   const steps = (idea.script ?? []).slice(0, REPRO_MAX)
   const grouped = (idea.script ?? []).length > REPRO_MAX
   const reproducePrompt = `Tu es monteur TikTok. On REPRODUIT FIDÈLEMENT une vidéo existante : garde son déroulé, son ordre, sa chute et son style. Ne la transforme PAS en vidéo « à la TikTok » (pas de hook choc réinventé, pas de boucle forcée, aucun CTA commentaire/partage si la source n'en a pas).
@@ -209,7 +214,9 @@ Pour chaque scène : ${dialogue ? 'la RÉPLIQUE (speaker + narration)' : 'la phr
     // 6000 (au lieu de 3000) : un storyboard de 8 scènes avec des image-prompts
     // « très détaillés » dépassait parfois 3000 tokens → tool-call tronqué → JSON
     // invalide → « Storyboard vide ». On laisse de la marge.
-    max_tokens: 6000,
+    // Assez de marge pour REPRO_MAX scènes détaillées (narration + imagePrompt +
+    // casting) sans troncature du tool-call (= storyboard vide).
+    max_tokens: Math.max(6000, 2000 + REPRO_MAX * 450),
     tools: [tool],
     tool_choice: { type: 'tool', name: 'storyboard' },
     messages: [{ role: 'user', content: prompt }]
@@ -334,16 +341,23 @@ export async function listElevenVoices(key: string): Promise<{ id: string; name:
   return (j.voices ?? []).map((v) => ({ id: v.voice_id, name: v.name }))
 }
 
-/** Voix du compte avec leur genre (label ElevenLabs) → casting par personnage. */
-async function elevenVoicePool(key: string): Promise<{ id: string; name: string; gender: string }[]> {
+/** Voix du compte avec genre + LANGUE (labels ElevenLabs) → casting par personnage. */
+async function elevenVoicePool(key: string): Promise<{ id: string; name: string; gender: string; lang: string }[]> {
   const res = await fetch(`${ELEVEN}/voices`, { headers: { 'xi-api-key': key } })
   if (!res.ok) throw new Error(`ElevenLabs voices ${res.status}`)
   const j = (await res.json()) as { voices?: { voice_id: string; name: string; labels?: Record<string, string> }[] }
-  return (j.voices ?? []).map((v) => ({ id: v.voice_id, name: v.name, gender: (v.labels?.gender ?? '').toLowerCase() }))
+  return (j.voices ?? []).map((v) => ({
+    id: v.voice_id,
+    name: v.name,
+    gender: (v.labels?.gender ?? '').toLowerCase(),
+    lang: (v.labels?.language ?? '').toLowerCase()
+  }))
 }
-/** Attribue à CHAQUE personnage une voix ElevenLabs DISTINCTE (genre respecté si
- *  possible) → voix naturelles ET différenciables, constantes toute la vidéo. */
-function assignElevenVoices(pool: { id: string; name: string; gender: string }[], cast: CastMember[]): Map<string, string> {
+/** Attribue à CHAQUE personnage une voix ElevenLabs DISTINCTE. Priorité aux voix
+ *  FRANÇAISES (label language=fr) : la bibliothèque par défaut ne contient que des
+ *  voix anglaises, qui lisent le français avec un fort accent — c'est ça qui rend
+ *  le rendu « bizarre », pas ElevenLabs. Genre respecté quand c'est possible. */
+function assignElevenVoices(pool: { id: string; name: string; gender: string; lang: string }[], cast: CastMember[]): Map<string, string> {
   const map = new Map<string, string>()
   if (!pool.length) return map
   const used = new Set<string>()
@@ -353,11 +367,15 @@ function assignElevenVoices(pool: { id: string; name: string; gender: string }[]
     if (/\b(male|man|boy|father|p[eè]re|papa|homme|gar[çc]on|masculine|deep|gravelly|baritone|bass)\b/.test(s)) return 'male'
     return ''
   }
+  const free = (p: (v: { id: string; gender: string; lang: string }) => boolean): { id: string } | undefined =>
+    pool.find((v) => !used.has(v.id) && p(v))
   for (const m of cast) {
     const want = wanted(m)
     const pick =
-      (want ? pool.find((v) => !used.has(v.id) && v.gender === want) : undefined) ??
-      pool.find((v) => !used.has(v.id)) ??
+      (want ? free((v) => v.lang === 'fr' && v.gender === want) : undefined) ??
+      free((v) => v.lang === 'fr') ??
+      (want ? free((v) => v.gender === want) : undefined) ??
+      free(() => true) ??
       pool[0]
     used.add(pick.id)
     map.set(m.name.trim().toLowerCase(), pick.id)
@@ -924,7 +942,8 @@ export async function generateVideoFromIdea(
     opts.anthropicModel || 'claude-haiku-4-5',
     opts.idea,
     opts.imageStyle,
-    opts.dialogue
+    opts.dialogue,
+    opts.reproMaxScenes
   )
   if (!scenes.length) throw new Error('Storyboard vide — réessaie')
   const castMap = new Map(cast.map((c) => [c.name.trim().toLowerCase(), c]))
@@ -938,7 +957,7 @@ export async function generateVideoFromIdea(
     try {
       const pool = await elevenVoicePool(opts.elevenKey)
       if (pool.length) {
-        if (!elevenFallbackVoice) elevenFallbackVoice = pool[0].id
+        if (!elevenFallbackVoice) elevenFallbackVoice = (pool.find((v) => v.lang === 'fr') ?? pool[0]).id
         elevenCast = assignElevenVoices(pool, cast)
         log?.(`Voix ElevenLabs par personnage : ${cast.map((c) => c.name).join(', ')}`)
       }

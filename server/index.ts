@@ -483,6 +483,13 @@ async function runVideoGen(
       // le rendu validé sur les personnages illustrés.
       prunaLipsync: repo.getSetting('pruna_lipsync') === '1',
       publishPublic: publishPublicFile,
+      // Plafond de scènes d'une repro (réglage `repro_max_scenes`, défaut 8) :
+      // une source de 30 répliques regroupée en 8 scènes perd beaucoup — montable
+      // maintenant que p-video rend chaque scène ~8× moins chère que Veo.
+      reproMaxScenes: (() => {
+        const v = parseInt(repo.getSetting('repro_max_scenes') || '', 10)
+        return Number.isFinite(v) && v > 0 ? v : undefined
+      })(),
       // Reproduction d'un DIALOGUE : moteur de série (Veo si activé) — voix natives
       // JOUÉES + vraie synchro labiale, générées ensemble donc jamais décalées. Si
       // une scène bascule (erreur/quota Veo), le repli prend les voix ElevenLabs
