@@ -1637,7 +1637,8 @@ app.post('/api/ideas/inspire', wrap(async (req, res) => {
       niche: niche || undefined,
       source: { title: meta.title, author: meta.author, durationSec: meta.durationSec, transcript },
       frames,
-      mode
+      mode,
+      onNote: (m) => emitLog(`Inspiration : ${m}`)
     })
     if (usage) addSpend(model, usage)
     if (!idea) return res.status(502).json({ error: 'L’IA n’a pas réussi à produire une idée — réessaie.' })

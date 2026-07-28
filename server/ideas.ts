@@ -180,6 +180,9 @@ export interface InspireOptions {
   frames?: string[]
   /** 'reproduce' = clone fidèle (même sujet/structure/déroulé/style) ; 'inspire' = original. */
   mode?: 'reproduce' | 'inspire'
+  /** Journalise la RAISON d'un échec (réponse tronquée, refus, schéma invalide) —
+   *  sans ça, « L'IA n'a pas réussi à produire une idée » est indébogable. */
+  onNote?: (m: string) => void
 }
 
 /**
@@ -282,10 +285,15 @@ Réponds en français (imageStyle en anglais), uniquement via l'outil propose_id
   let usageIn = 0
   let usageOut = 0
   let hasUsage = false
+  // Une reproduction restitue le déroulé COMPLET de la source : une vidéo bavarde
+  // (30+ répliques) dépasse largement 3000 tokens → tool_use tronqué, schéma
+  // invalide, et 3 tentatives qui échouent en silence. On dimensionne donc la
+  // réponse sur la longueur de la transcription.
+  const maxTokens = Math.min(16000, Math.max(4000, 1500 + Math.round((opts.source.transcript?.length ?? 0) / 2)))
   for (let attempt = 0; attempt < 3 && !idea; attempt++) {
     const msg = await client.messages.create({
       model,
-      max_tokens: 3000,
+      max_tokens: maxTokens,
       tools: [tool],
       tool_choice: { type: 'tool', name: 'propose_idea' },
       messages: [{ role: 'user', content }]
@@ -295,10 +303,21 @@ Réponds en français (imageStyle en anglais), uniquement via l'outil propose_id
       usageOut += msg.usage.output_tokens
       hasUsage = true
     }
+    if (msg.stop_reason === 'max_tokens') {
+      opts.onNote?.(`réponse tronquée (limite ${maxTokens} tokens atteinte) — tentative ${attempt + 1}/3`)
+      continue
+    }
     const block = msg.content.find((b) => b.type === 'tool_use')
-    if (!block || block.type !== 'tool_use') continue
+    if (!block || block.type !== 'tool_use') {
+      opts.onNote?.(`l'IA n'a pas renvoyé d'idée (stop_reason: ${msg.stop_reason ?? '?'}) — tentative ${attempt + 1}/3`)
+      continue
+    }
     const parsed = IdeaSchema.safeParse(block.input)
-    if (!parsed.success) continue
+    if (!parsed.success) {
+      const bad = parsed.error.issues.slice(0, 2).map((i) => `${i.path.join('.') || 'racine'}: ${i.message}`).join(' ; ')
+      opts.onNote?.(`idée incomplète (${bad}) — tentative ${attempt + 1}/3`)
+      continue
+    }
     idea = { ...parsed.data, hashtags: parsed.data.hashtags.map(normTag).filter(Boolean), reproduce }
   }
   return { idea, usage: hasUsage ? { input_tokens: usageIn, output_tokens: usageOut } : null }
