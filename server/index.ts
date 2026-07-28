@@ -1166,10 +1166,11 @@ async function runAutopilotTick(force = false): Promise<void> {
         filePaths: files,
         caption,
         title: carousel.title,
-        // `carousel_privacy` : confidentialité PROPRE aux carrousels (le réglage
-        // global vaut pour les vidéos). Permet de publier un carrousel en
-        // « Moi uniquement » pour le relire avant de le rendre public à la main.
-        privacyLevel: repo.getSetting('carousel_privacy') || repo.getSetting('tiktok_privacy') || 'PUBLIC_TO_EVERYONE',
+        // Les carrousels suivent la MÊME confidentialité que les vidéos. (Il a
+        // existé un réglage `carousel_privacy` distinct, sans aucun contrôle dans
+        // l'interface : resté à SELF_ONLY, il a publié 10 carrousels en « Moi
+        // uniquement » sans que rien ne le signale. Supprimé pour de bon.)
+        privacyLevel: repo.getSetting('tiktok_privacy') || 'PUBLIC_TO_EVERYONE',
         onNote: emitLog
       })
       // Trace en base : la couverture sert de vignette dans « Clips → Publiés ».
