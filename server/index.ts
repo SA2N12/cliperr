@@ -442,6 +442,16 @@ async function runVideoGen(
       ? (dialogueEleven ? elevenDefault : (acctVoice && OPENAI_VOICES.includes(acctVoice) ? acctVoice : 'ash')) // repli si un perso n'a pas de voix attribuée
       : acctVoice || (globalEleven ? repo.getSetting('elevenlabs_default_voice') || '' : repo.getSetting('tts_voice') || 'ash')
     const useEleven = dialogueEleven || (!reproDialogue && !!elevenKey && (globalEleven || providerForVoice(narrationVoice) === 'elevenlabs'))
+    // Langue de la vidéo : choix explicite du lancement, sinon dernier choix mémorisé.
+    const genLang: 'fr' | 'en' = opts.lang ?? (idea.reproduce && repo.getSetting('repro_lang') === 'en' ? 'en' : 'fr')
+    // Débit PAR LANGUE. Le réglage n'agit que sur les voix TTS — donc surtout sur
+    // le français : en anglais la voix vient de Veo/Seedance, générée avec l'image
+    // et insensible à ce paramètre. Un même chiffre donnait donc un français trop
+    // pressé pour un anglais inchangé → deux valeurs distinctes.
+    const speedFor = (l: 'fr' | 'en'): number => {
+      const v = parseFloat(repo.getSetting(l === 'en' ? 'speech_speed_en' : 'speech_speed') || '')
+      return Number.isFinite(v) && v > 0 ? v : l === 'en' ? 1.4 : 1.2
+    }
     const { filePath, durationSec, usage } = await generateVideoFromIdea(ctx, {
       anthropicKey,
       anthropicModel: model,
@@ -465,12 +475,8 @@ async function runVideoGen(
       // parlées continuent via DeepInfra (payé à la seconde) au lieu du repli TTS.
       deepinfraKey: getEncrypted('deepinfra_key'),
       groqKey: getEncrypted('groq_key'),
-      // Débit de parole (réglage `speech_speed`, 0.7–1.2) : le débit naturel fait
-      // trop posé pour TikTok → 1.15 par défaut.
-      speechSpeed: (() => {
-        const v = parseFloat(repo.getSetting('speech_speed') || '')
-        return Number.isFinite(v) && v > 0 ? v : undefined
-      })(),
+      // Débit de parole des voix TTS, propre à la langue (cf. speedFor).
+      speechSpeed: speedFor(genLang),
       // Reproduction fidèle : la source est une VIDÉO, pas un diaporama. On anime
       // donc les scènes (fal.ai) si la clé est là, au lieu d'un simple Ken Burns
       // sur des images fixes.
@@ -502,7 +508,7 @@ async function runVideoGen(
       // carte d'idée), sinon le dernier choix mémorisé (`repro_lang`). 'en' →
       // répliques traduites en anglais, voix natives Seedance/Veo + voix
       // ElevenLabs anglaises. Les vidéos de niche/séries restent FR.
-      lang: opts.lang ?? (idea.reproduce && repo.getSetting('repro_lang') === 'en' ? 'en' : 'fr'),
+      lang: genLang,
       // Reproduction d'un DIALOGUE : moteur de série (Veo si activé) — voix natives
       // JOUÉES + vraie synchro labiale, générées ensemble donc jamais décalées. Si
       // une scène bascule (erreur/quota Veo), le repli prend les voix ElevenLabs
