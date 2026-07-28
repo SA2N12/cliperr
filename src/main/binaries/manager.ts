@@ -1,4 +1,4 @@
-import { createWriteStream } from 'fs'
+import { createWriteStream, existsSync } from 'fs'
 import { chmod, mkdir, access, readdir, rm } from 'fs/promises'
 import { Readable } from 'node:stream'
 import { join } from 'path'
@@ -22,6 +22,11 @@ function unpacked(p: string): string {
 }
 
 export function bundledFfmpeg(): string {
+  // ffmpeg-static plante sur certaines entrées (segfault sur les flux HLS Twitch,
+  // code 234 sur l'extraction audio de certains MP4 TikTok). Le ffmpeg SYSTÈME
+  // (paquet Debian installé dans l'image) est nettement plus robuste → prioritaire
+  // quand il existe ; ffmpeg-static reste le repli (dev Windows/macOS).
+  if (existsSync('/usr/bin/ffmpeg')) return '/usr/bin/ffmpeg'
   if (!ffmpegStatic) throw new Error('ffmpeg-static introuvable')
   return unpacked(ffmpegStatic)
 }

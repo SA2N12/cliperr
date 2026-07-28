@@ -1568,6 +1568,9 @@ app.post('/api/ideas/inspire', wrap(async (req, res) => {
     // Transcription de la voix : Groq (rapide) si configuré, sinon whisper local.
     emitLog('Inspiration : transcription de la voix…')
     let transcript = ''
+    // Une transcription EN ÉCHEC ne prouve rien : on ne sait pas si la source
+    // parle. Seule une transcription RÉUSSIE et vide prouve qu'elle est muette.
+    let transcriptOk = false
     try {
       const groqKey = getEncrypted('groq_key')
       const diKey = getEncrypted('deepinfra_key')
@@ -1577,6 +1580,7 @@ app.post('/api/ideas/inspire', wrap(async (req, res) => {
             transcribeSource(ctx, w, filePath as string, tmpId)
           )
       transcript = words.map((w) => w.text).join(' ').replace(/\s+/g, ' ').trim()
+      transcriptOk = true
     } catch (e) {
       // Pas bloquant : vidéo musicale/sans parole, ou transcription indisponible →
       // l'IA s'appuiera sur le titre/la légende.
@@ -1618,10 +1622,14 @@ app.post('/api/ideas/inspire', wrap(async (req, res) => {
     // Source MUETTE (aucune parole transcrite) : on la reproduit SANS voix — sinon
     // l'IA invente un dialogue/une narration que la source n'avait pas, et Veo se
     // met à parler par-dessus des images qui devaient rester silencieuses.
-    if (transcript.replace(/\s+/g, '').length < 15) {
+    if (transcriptOk && transcript.replace(/\s+/g, '').length < 15) {
       idea.mute = true
       idea.dialogue = false
       emitLog('Inspiration : source muette (aucune parole) → reproduction sans voix.')
+    } else if (!transcriptOk) {
+      // Transcription plantée : dans le doute on GARDE les voix (une vidéo muette
+      // par erreur est bien pire qu'une voix en trop) et on le dit clairement.
+      emitLog('⚠️ Transcription indisponible : impossible de savoir si la source parle → voix conservées. Les répliques sont déduites des images, donc moins fidèles.')
     }
     const label = niche || `${mode === 'reproduce' ? 'Reproduction' : 'Inspiration'} : ${meta.author || 'TikTok'}`
     const saved = repo.createIdea(label, idea)
