@@ -150,7 +150,7 @@ Règles :
 ${styleHint ? `- STYLE VISUEL IMPOSÉ (celui de la source, à respecter À L'IDENTIQUE d'une scène à l'autre) : ${styleHint}` : "- Garde un style visuel cohérent et proche de la source d'une scène à l'autre."}
 - RÈGLES IMAGE (le générateur refuse sinon) : aucun ENFANT/mineur, aucune personne réelle identifiable, pas de gore ni de contenu sexuel → illustre autrement (objet seul, décor, main d'adulte, document, symbole).
 
-Pour chaque scène : la phrase de VOIX OFF (français) + un IMAGE PROMPT en anglais respectant ${styleHint ? 'STRICTEMENT le style imposé ci-dessus' : 'le style de la source'}, très détaillé, sans aucun texte. Réponds uniquement via l'outil storyboard.`
+Pour chaque scène : la phrase de VOIX OFF (français) + un IMAGE PROMPT en anglais respectant ${styleHint ? 'STRICTEMENT le style imposé ci-dessus' : 'le style de la source'}, très détaillé, sans aucun texte. Chaque IMAGE PROMPT décrit SON PROPRE DÉCOR (lieu, arrière-plan, cadrage) : le style est commun à toutes les scènes, PAS le décor — fais-le évoluer au fil de l'histoire au lieu de répéter le même fond. Réponds uniquement via l'outil storyboard.`
 
   // Reproduction d'une saynète : une RÉPLIQUE par scène + un casting vocal (voix
   // par personnage), au lieu d'une voix off unique.
@@ -167,7 +167,7 @@ Règles :
 ${styleHint ? `- STYLE VISUEL IMPOSÉ (celui de la source, à l'identique d'une scène à l'autre) : ${styleHint}` : "- Style visuel cohérent et proche de la source d'une scène à l'autre."}
 - RÈGLES IMAGE (le générateur refuse sinon) : le personnage qui parle au premier plan, expressif, mais AUCUN enfant/mineur ni personne réelle identifiable de façon photoréaliste → rends-le en style illustré/stylisé (celui de la source) ou de façon générique. Pas de gore ni de contenu sexuel.
 
-Pour chaque scène : la RÉPLIQUE (speaker + narration en français) + un IMAGE PROMPT en anglais respectant ${styleHint ? 'STRICTEMENT le style imposé ci-dessus' : 'le style de la source'}, très détaillé, sans aucun texte. Réponds uniquement via l'outil storyboard.`
+Pour chaque scène : la RÉPLIQUE (speaker + narration en français) + un IMAGE PROMPT en anglais respectant ${styleHint ? 'STRICTEMENT le style imposé ci-dessus' : 'le style de la source'}, très détaillé, sans aucun texte. Chaque IMAGE PROMPT décrit SON PROPRE DÉCOR (lieu, arrière-plan, cadrage) : le style est commun à toutes les scènes, PAS le décor — fais-le évoluer au fil de l'histoire au lieu de répéter le même fond. Réponds uniquement via l'outil storyboard.`
 
   const prompt = reproduce
     ? (dialogue ? reproduceDialoguePrompt : reproducePrompt)
@@ -843,7 +843,10 @@ function assEscape(s: string): string {
 }
 /** Sous-titre plein écran (bas) pour une scène, brûlé via le filtre subtitles. */
 function sceneAss(text: string, durationSec: number): string {
-  return `[Script Info]
+  // Sous-titres MOT À MOT (style TikTok) : un seul mot affiché à la fois, en très
+  // gros. Chaque mot occupe une part de la scène proportionnelle à sa longueur —
+  // approximation du débit de parole, sans avoir à re-transcrire la voix générée.
+  const header = `[Script Info]
 ScriptType: v4.00+
 PlayResX: 1080
 PlayResY: 1920
@@ -851,10 +854,22 @@ WrapStyle: 0
 ScaledBorderAndShadow: yes
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BackColour, Bold, Italic, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV
-Style: Def,Liberation Sans,76,&H00FFFFFF,&H00000000,&H96000000,1,0,1,6,3,2,90,90,430
+Style: Def,Liberation Sans,116,&H00FFFFFF,&H00000000,&H96000000,1,0,1,7,4,2,90,90,430
 [Events]
-Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-Dialogue: 0,0:00:00.00,${assTime(durationSec)},Def,,0,0,0,,${assEscape(text)}`
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
+  const words = assEscape(text).split(/\s+/).filter(Boolean)
+  if (!words.length) return header
+  // Poids ≥ 2 : un mot très court reste lisible au lieu de clignoter.
+  const weights = words.map((w) => Math.max(2, w.length))
+  const total = weights.reduce((a, b) => a + b, 0)
+  let t = 0
+  const lines = words.map((w, i) => {
+    const end = i === words.length - 1 ? durationSec : t + (durationSec * weights[i]) / total
+    const line = `Dialogue: 0,${assTime(t)},${assTime(end)},Def,,0,0,0,,${w}`
+    t = end
+    return line
+  })
+  return `${header}\n${lines.join('\n')}`
 }
 
 /**
@@ -915,10 +930,15 @@ export async function generateVideoFromIdea(
       // 1) Image de la scène (Nano Banana + planche de référence si dispo).
       log?.(`Scène ${i + 1}/${scenes.length} — image IA…`)
       const png = join(work, `i${i}.png`)
+      // Le style est une consigne de RENDU (technique, palette, lumière, design des
+      // persos) — surtout PAS de décor : il est réinjecté à chaque scène, donc un
+      // lieu qui s'y serait glissé collerait le même fond à toute la vidéo. On le
+      // dit explicitement au modèle (les idées déjà en base peuvent en contenir).
+      const styleRule = 'This is a RENDERING STYLE ONLY — ignore any location or setting mentioned in it; the setting of THIS scene is the one described above and must be clearly different from the other scenes.'
       const imgPrompt = opts.imageStyle
         ? `${sc.imagePrompt}. ${opts.dialogue
             ? `Recurring characters and consistent art style across the whole series (keep them IDENTICAL in every image): ${opts.imageStyle}`
-            : `Consistent visual style across the whole video — match this style EXACTLY in every image: ${opts.imageStyle}`}`
+            : `Consistent visual style across the whole video — match this style EXACTLY in every image: ${opts.imageStyle}`} ${styleRule}`
         : sc.imagePrompt
       // Chaîne d'images : DeepInfra (Seedream, fournisseur centralisé) → Gemini
       // (Nano Banana) → OpenAI. Chacun sait exploiter la planche de référence pour

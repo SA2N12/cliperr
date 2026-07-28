@@ -213,7 +213,7 @@ export async function generateInspiredIdea(opts: InspireOptions): Promise<{ idea
         imageStyle: {
           type: 'string',
           description:
-            "Style visuel de la vidéo source, décrit en ANGLAIS (2-3 phrases) comme consigne de génération d'images : type de visuel (photo réaliste, image IA stylisée, dessin, 3D, archive…), palette de couleurs, éclairage, ambiance, composition. Décris uniquement l'ESTHÉTIQUE transposable à des images fixes générées — pas le format vidéo (pas de « personne face caméra », pas de « montage rapide »)."
+            "Style visuel de la vidéo source, décrit en ANGLAIS (2-3 phrases) comme consigne de génération d'images : technique de rendu (photo réaliste, image IA stylisée, dessin, 3D type Pixar, archive…), palette de couleurs, qualité d'éclairage, design des personnages. Décris uniquement l'ESTHÉTIQUE transposable à des images fixes générées — pas le format vidéo (pas de « personne face caméra », pas de « montage rapide »). ⚠️ N'inclus AUCUN DÉCOR ni lieu précis (pas de « dans un salon avec lustres », « sur une plage »…) : ce texte est réinjecté dans CHAQUE scène, donc y mettre un décor obligerait toutes les scènes à se dérouler au même endroit. Le lieu de chaque scène est décrit par son propre imagePrompt."
         },
         ...(reproduce
           ? {
