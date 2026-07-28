@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { z } from 'zod'
 import { writeFile, readFile, mkdir, rm, copyFile } from 'fs/promises'
+import { existsSync } from 'fs'
 import { join } from 'path'
 import { run, runCapture, type PipelineContext } from '../src/main/pipeline/context'
 import type { Usage } from '../src/main/pipeline/highlights'
@@ -945,6 +946,8 @@ export async function genVideoDeepinfra(
       prompt,
       image: `data:image/png;base64,${(await readFile(refImagePath)).toString('base64')}`,
       quality: '720p',
+      // Le modèle incruste sinon des sous-titres/filigranes/horodatages inventés.
+      negative_prompt: 'text, subtitles, captions, watermark, logo, timestamp, letters, numbers, on-screen writing',
       duration: Math.max(1, Math.min(15, Math.round(durationSec))),
       ...(withAmbientAudio ? { generate_audio_switch: true } : {})
     })
@@ -1150,6 +1153,9 @@ export async function generateVideoFromIdea(
   )
   if (!scenes.length) throw new Error('Storyboard vide — réessaie')
   const castMap = new Map(cast.map((c) => [c.name.trim().toLowerCase(), c]))
+  // Portrait de référence appris par personnage : sa 1re image réussie sert de
+  // modèle à toutes ses scènes suivantes (cf. plus bas), pour qu'il reste le même.
+  const speakerRefs = new Map<string, string>()
 
   // Reproduction dialoguée en ElevenLabs : on répartit des voix HUMAINES distinctes
   // par personnage (naturelles + constantes) au lieu du TTS OpenAI (robotique).
@@ -1202,15 +1208,25 @@ export async function generateVideoFromIdea(
       // Chaîne d'images : DeepInfra (Seedream, fournisseur centralisé) → Gemini
       // (Nano Banana) → OpenAI. Chacun sait exploiter la planche de référence pour
       // garder les personnages identiques ; on ne descend d'un cran qu'en cas d'échec.
+      // Cohérence des personnages : la planche de la source ne montre pas toujours
+      // TOUS les personnages, et chaque scène « réinvente » alors celui qui manque
+      // (la même femme est sortie en pêche, puis en fraise, puis en humaine). Dès
+      // qu'un personnage a été dessiné une fois, on réutilise CETTE image comme
+      // référence pour ses scènes suivantes — il devient sa propre planche.
+      const speakerKey = sc.speaker?.trim().toLowerCase() ?? ''
+      const learntRef = speakerKey ? speakerRefs.get(speakerKey) : undefined
+      const refPath = learntRef ?? opts.characterRefPath
+      const hasRef = !!refPath
       // ⚠️ La référence peut être une image RÉELLE de la source (reproduction) :
       // elle porte donc souvent des sous-titres incrustés, un logo ou un pseudo —
       // à ne SURTOUT pas recopier, sinon on hérite du texte de l'original.
-      const refPrompt = `The reference image is a CONTACT SHEET: a grid of several stills from the same source video, showing its cast and art style. Using EXACTLY these characters (same faces, colors, outfits, designs — pick the ones relevant to this scene), create ONE new single scene (not a grid): ${sc.imagePrompt}. Keep the SAME rendering technique as the reference — do not turn it into a flat 2D illustration${opts.imageStyle ? `: ${opts.imageStyle}` : ''}. Vertical 9:16 composition, vivid saturated colors, expressive, dynamic. IGNORE and REMOVE any text, subtitle, caption, username, logo or watermark visible in the reference image — the output must contain NO text of any kind.`
-      const hasRef = !!opts.characterRefPath
+      const refPrompt = learntRef
+        ? `The reference image shows the SAME CHARACTER as the one speaking in this scene. Reuse them EXACTLY (identical face, head shape, colors, hair, outfit, proportions) and place them in this new scene: ${sc.imagePrompt}. Keep the SAME rendering technique${opts.imageStyle ? `: ${opts.imageStyle}` : ''}. Vertical 9:16, vivid saturated colors, expressive. The output must contain NO text of any kind.`
+        : `The reference image is a CONTACT SHEET: a grid of several stills from the same source video, showing its cast and art style. Using EXACTLY these characters (same faces, colors, outfits, designs — pick the ones relevant to this scene), create ONE new single scene (not a grid): ${sc.imagePrompt}. Keep the SAME rendering technique as the reference — do not turn it into a flat 2D illustration${opts.imageStyle ? `: ${opts.imageStyle}` : ''}. Vertical 9:16 composition, vivid saturated colors, expressive, dynamic. IGNORE and REMOVE any text, subtitle, caption, username, logo or watermark visible in the reference image — the output must contain NO text of any kind.`
       let imgDone = false
       if (opts.deepinfraKey) {
         try {
-          await genImageDeepinfra(opts.deepinfraKey, hasRef ? refPrompt : `${imgPrompt}. Vertical 9:16 composition, no text, no watermark.`, png, opts.characterRefPath)
+          await genImageDeepinfra(opts.deepinfraKey, hasRef ? refPrompt : `${imgPrompt}. Vertical 9:16 composition, no text, no watermark.`, png, refPath)
           imgDone = true
         } catch (e) {
           log?.(`Scène ${i + 1}/${scenes.length} — image DeepInfra indisponible (${e instanceof Error ? e.message : String(e)}) → repli`)
@@ -1218,13 +1234,17 @@ export async function generateVideoFromIdea(
       }
       if (!imgDone && opts.geminiKey && hasRef) {
         try {
-          await genImageGemini(opts.geminiKey, refPrompt, png, opts.characterRefPath)
+          await genImageGemini(opts.geminiKey, refPrompt, png, refPath)
           imgDone = true
         } catch {
           /* repli OpenAI ci-dessous */
         }
       }
       if (!imgDone) await genImage(opts.openaiKey, imgPrompt, png, log, !!opts.imageStyle)
+
+      // Première apparition réussie de ce personnage → son portrait devient la
+      // référence de toutes ses scènes suivantes.
+      if (speakerKey && !speakerRefs.has(speakerKey) && existsSync(png)) speakerRefs.set(speakerKey, png)
 
       // 2a) Moteur VEO : scène PARLÉE — le personnage prononce sa réplique
       // (voix native jouée + vraie synchro labiale + bruitages d'ambiance).
@@ -1496,7 +1516,10 @@ NO TEXT — CRITICAL: nothing written anywhere in the frame. No subtitles, no ca
           '-i', animClip,
           '-i', mp3,
           '-filter_complex',
-          `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setpts=${ratio.toFixed(4)}*PTS,fps=30,setsar=1${subFilter}[v]`,
+          // Le modèle d'animation glisse parfois un horodatage ou un filigrane
+          // sur le bord bas (« 17-38 2D-E-4?b… »). On rogne 8 % : assez pour les
+          // faire disparaître, trop peu pour amputer la scène.
+          `[0:v]crop=iw:ih*0.92:0:0,scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setpts=${ratio.toFixed(4)}*PTS,fps=30,setsar=1${subFilter}[v]`,
           '-map', '[v]', '-map', '1:a',
           '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
           '-c:a', 'aac', '-ar', '44100', '-ac', '2', '-b:a', '128k',
