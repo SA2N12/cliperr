@@ -979,7 +979,10 @@ export async function generateVideoFromIdea(
       // Chaîne d'images : DeepInfra (Seedream, fournisseur centralisé) → Gemini
       // (Nano Banana) → OpenAI. Chacun sait exploiter la planche de référence pour
       // garder les personnages identiques ; on ne descend d'un cran qu'en cas d'échec.
-      const refPrompt = `Using EXACTLY the characters and art style from the reference image (same faces, colors, outfits, designs), create this new scene: ${sc.imagePrompt}. Vertical 9:16 composition, vivid saturated colors, expressive, dynamic, no text, no watermark.`
+      // ⚠️ La référence peut être une image RÉELLE de la source (reproduction) :
+      // elle porte donc souvent des sous-titres incrustés, un logo ou un pseudo —
+      // à ne SURTOUT pas recopier, sinon on hérite du texte de l'original.
+      const refPrompt = `Using EXACTLY the characters and art style from the reference image (same faces, colors, outfits, designs), create this new scene: ${sc.imagePrompt}. Keep the SAME rendering technique as the reference — do not turn it into a flat 2D illustration${opts.imageStyle ? `: ${opts.imageStyle}` : ''}. Vertical 9:16 composition, vivid saturated colors, expressive, dynamic. IGNORE and REMOVE any text, subtitle, caption, username, logo or watermark visible in the reference image — the output must contain NO text of any kind.`
       const hasRef = !!opts.characterRefPath
       let imgDone = false
       if (opts.deepinfraKey) {

@@ -455,7 +455,9 @@ async function runVideoGen(
       // porté par l'idée (mode inspiration : style repris de la vidéo source).
       imageStyle: opts.imageStyle ?? idea.imageStyle,
       geminiKey: getEncrypted('gemini_key'),
-      characterRefPath: opts.characterRefPath,
+      // Série : planche de personnages fournie. Reproduction : image réelle de la
+      // source (bien plus fidèle qu'une description textuelle des personnages).
+      characterRefPath: opts.characterRefPath ?? (idea.refImage && existsSync(idea.refImage) ? idea.refImage : undefined),
       falKey: getEncrypted('fal_key'),
       falVideoModel: repo.getSetting('fal_video_model') || undefined,
       falLipsyncModel: repo.getSetting('fal_lipsync_model') || undefined,
@@ -1622,6 +1624,19 @@ app.post('/api/ideas/inspire', wrap(async (req, res) => {
     // Source MUETTE (aucune parole transcrite) : on la reproduit SANS voix — sinon
     // l'IA invente un dialogue/une narration que la source n'avait pas, et Veo se
     // met à parler par-dessus des images qui devaient rester silencieuses.
+    // Planche de référence : une image RÉELLE de la source, conservée avec l'idée
+    // et réinjectée à chaque scène → les personnages ressemblent vraiment à ceux
+    // de la vidéo d'origine, au lieu d'être redessinés d'après une description.
+    if (mode === 'reproduce' && filePath) {
+      try {
+        const refDest = join(paths.clips, `idearef-${tmpId}.jpg`)
+        const at = Math.max(0.5, (meta.durationSec || 6) * 0.35)
+        await run(ctx.bin.ffmpeg, ['-y', '-loglevel', 'error', '-ss', at.toFixed(2), '-i', filePath, '-frames:v', '1', '-vf', 'scale=720:-2', '-q:v', '3', refDest])
+        if (existsSync(refDest)) idea.refImage = refDest
+      } catch {
+        /* pas bloquant : on retombe sur la description textuelle du style */
+      }
+    }
     if (transcriptOk && transcript.replace(/\s+/g, '').length < 15) {
       idea.mute = true
       idea.dialogue = false

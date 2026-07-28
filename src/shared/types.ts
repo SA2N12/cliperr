@@ -70,6 +70,9 @@ export interface ViralIdea {
   /** Reproduction : la source est MUETTE (aucune parole détectée à la transcription).
    *  On reproduit alors sans aucune voix — visuels + sous-titres seulement. */
   mute?: boolean
+  /** Reproduction : image RÉELLE extraite de la vidéo source, servant de planche de
+   *  référence à chaque scène → les personnages ressemblent vraiment à l'original. */
+  refImage?: string
 }
 
 export interface SavedIdea extends ViralIdea {
