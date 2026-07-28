@@ -1123,7 +1123,7 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
   const genVideo = async (): Promise<void> => {
     if (!idea) return
     try {
-      await api.generateIdeaVideo(idea.id)
+      await api.generateIdeaVideo(idea.id, lang)
       setLaunched(true)
       setTimeout(loadQuota, 8000) // le quota Veo se décompte au fil des scènes
       toast('Vidéo lancée — suis la progression en bas à droite ; elle arrivera dans « Clips »')
@@ -1155,18 +1155,7 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
           </button>
         </div>
         <div className="genai-platforms" style={{ justifyContent: 'space-between' }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            <MIcon name="check_circle" size={13} /> Fonctionne avec <b>TikTok</b> · <b>Instagram Reels</b> · <b>YouTube Shorts</b> (10 min max)
-            <select
-              className="genai-lang"
-              value={lang}
-              onChange={(e) => changeLang(e.target.value as 'fr' | 'en')}
-              title="Langue des dialogues de la reproduction. EN : répliques traduites en anglais, voix natives des moteurs vidéo (bien meilleures en anglais) + moteur Seedance moins cher."
-            >
-              <option value="fr">🇫🇷 Dialogues FR</option>
-              <option value="en">🇬🇧 Dialogues EN</option>
-            </select>
-          </span>
+          <span><MIcon name="check_circle" size={13} /> Fonctionne avec <b>TikTok</b> · <b>Instagram Reels</b> · <b>YouTube Shorts</b> (10 min max)</span>
           {quota && (quota.remainingVideos > 0 || !quota.deepinfra ? (
             <span
               className={`veo-quota${quota.remainingVideos <= 0 ? ' empty' : ''}`}
@@ -1261,7 +1250,19 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
           )}
 
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center', flexWrap: 'wrap' }}>
-            <span className="muted small" style={{ marginRight: 'auto' }}>Vidéo montée : voix off + images + sous-titres.</span>
+            <span className="muted small" style={{ marginRight: 'auto' }}>Vidéo montée : voix + images + sous-titres.</span>
+            {/* Langue des dialogues, choisie AU MOMENT de générer. EN : répliques
+                traduites, voix natives des moteurs (excellentes en anglais). */}
+            <select
+              className="genai-lang"
+              value={lang}
+              onChange={(e) => changeLang(e.target.value as 'fr' | 'en')}
+              disabled={launched}
+              title="Langue des dialogues de cette vidéo. EN : répliques traduites en anglais, voix natives des moteurs vidéo (bien meilleures en anglais) + moteur Seedance moins cher."
+            >
+              <option value="fr">🇫🇷 Voix françaises</option>
+              <option value="en">🇬🇧 Voix anglaises</option>
+            </select>
             <button className="btn" onClick={() => { setIdea(null); setUrl('') }}>Nouvelle inspiration</button>
             <button className="btn primary" onClick={() => void genVideo()} disabled={launched}>
               {launched

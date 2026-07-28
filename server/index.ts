@@ -376,7 +376,7 @@ function reloadScheduler(): void {
 let videoChain: Promise<void> = Promise.resolve()
 async function runVideoGen(
   ideaId: number,
-  opts: { profile?: string; autoPublish?: boolean; imageStyle?: string; characterRefPath?: string; animateScenes?: boolean; dialogue?: boolean; noMusic?: boolean; videoType?: string; music?: string } = {}
+  opts: { profile?: string; autoPublish?: boolean; imageStyle?: string; characterRefPath?: string; animateScenes?: boolean; dialogue?: boolean; noMusic?: boolean; videoType?: string; music?: string; lang?: 'fr' | 'en' } = {}
 ): Promise<number | null> {
   const idea = repo.getIdea(ideaId)
   if (!idea) return null
@@ -490,10 +490,11 @@ async function runVideoGen(
         const v = parseInt(repo.getSetting('repro_max_scenes') || '', 10)
         return Number.isFinite(v) && v > 0 ? v : undefined
       })(),
-      // Langue des dialogues d'une repro (réglage `repro_lang`, sélecteur sur la
-      // page Génération IA) : 'en' → répliques traduites en anglais, voix natives
-      // Seedance/Veo + voix ElevenLabs anglaises. Les vidéos de niche restent FR.
-      lang: idea.reproduce && repo.getSetting('repro_lang') === 'en' ? 'en' : 'fr',
+      // Langue des dialogues : choix explicite du lancement (sélecteur de la
+      // carte d'idée), sinon le dernier choix mémorisé (`repro_lang`). 'en' →
+      // répliques traduites en anglais, voix natives Seedance/Veo + voix
+      // ElevenLabs anglaises. Les vidéos de niche/séries restent FR.
+      lang: opts.lang ?? (idea.reproduce && repo.getSetting('repro_lang') === 'en' ? 'en' : 'fr'),
       // Reproduction d'un DIALOGUE : moteur de série (Veo si activé) — voix natives
       // JOUÉES + vraie synchro labiale, générées ensemble donc jamais décalées. Si
       // une scène bascule (erreur/quota Veo), le repli prend les voix ElevenLabs
@@ -1932,7 +1933,10 @@ app.post('/api/ideas/:id/video', wrap((req, res) => {
   const id = Number(req.params.id)
   if (!repo.getIdea(id)) return res.status(404).json({ error: 'Idée introuvable' })
   if (!getEncrypted('openai_key')) return res.status(400).json({ error: 'Configure ta clé OpenAI dans les Réglages.' })
-  videoChain = videoChain.then(() => runVideoGen(id)).then(() => undefined, () => undefined)
+  // Langue choisie AU MOMENT de générer (sélecteur de la carte d'idée) —
+  // prioritaire sur le réglage mémorisé `repro_lang`.
+  const lang = req.body?.lang === 'en' ? 'en' as const : req.body?.lang === 'fr' ? 'fr' as const : undefined
+  videoChain = videoChain.then(() => runVideoGen(id, { lang })).then(() => undefined, () => undefined)
   res.json({ ok: true })
 }))
 
