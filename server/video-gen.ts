@@ -1062,7 +1062,7 @@ WrapStyle: 0
 ScaledBorderAndShadow: yes
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BackColour, Bold, Italic, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV
-Style: Def,${SUB_FONT},104,&H00FFFFFF,&H00000000,&H00000000,1,0,1,7,0,2,80,80,430
+Style: Def,${SUB_FONT},86,&H00FFFFFF,&H00000000,&H00000000,1,0,1,6,0,2,90,90,430
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
 
