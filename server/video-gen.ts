@@ -60,6 +60,8 @@ export interface VideoGenOptions {
   /** Clé DeepInfra : Veo payé à la seconde, SANS quota journalier — repli des
    *  scènes parlées quand le quota gratuit Google est épuisé. */
   deepinfraKey?: string | null
+  /** Clé Groq : repli pour le calage mot à mot des sous-titres (Whisper). */
+  groqKey?: string | null
   /** Autoriser Veo PAYANT (DeepInfra, ~1,20 $/scène) une fois le quota gratuit
    *  Google épuisé. Off par défaut : on préfère le repli à ~0,30 $/scène. */
   veoPaid?: boolean
@@ -933,7 +935,66 @@ function assEscape(s: string): string {
   return s.replace(/\\/g, '\\\\').replace(/[{}]/g, '').replace(/\r?\n/g, ' ').trim()
 }
 /** Sous-titre plein écran (bas) pour une scène, brûlé via le filtre subtitles. */
-function sceneAss(text: string, durationSec: number): string {
+/** Timings MOT À MOT RÉELS de la parole (Whisper) → sous-titres parfaitement calés.
+ *  Sans ça, on ne peut que répartir les mots au prorata de leur longueur : le
+ *  décalage est perceptible dès qu'il y a une pause ou un changement de débit.
+ *  Renvoie `null` si indisponible (l'appelant retombe sur la répartition). */
+async function speechWordTimings(
+  ctx: PipelineContext,
+  mediaPath: string,
+  work: string,
+  idx: number,
+  keys: { deepinfraKey?: string | null; groqKey?: string | null },
+  log?: (m: string) => void
+): Promise<{ text: string; start: number; end: number }[] | null> {
+  const targets: { name: string; url: string; key: string; model: string }[] = []
+  if (keys.deepinfraKey) targets.push({ name: 'DeepInfra', url: 'https://api.deepinfra.com/v1/openai/audio/transcriptions', key: keys.deepinfraKey, model: 'openai/whisper-large-v3-turbo' })
+  if (keys.groqKey) targets.push({ name: 'Groq', url: 'https://api.groq.com/openai/v1/audio/transcriptions', key: keys.groqKey, model: 'whisper-large-v3-turbo' })
+  if (!targets.length) return null
+  const mp3 = join(work, `sub${idx}.mp3`)
+  try {
+    await run(ctx.bin.ffmpeg, ['-y', '-loglevel', 'error', '-i', mediaPath, '-vn', '-ac', '1', '-ar', '16000', '-b:a', '32k', mp3])
+  } catch {
+    return null // pas de piste audio (scène muette) → répartition proportionnelle
+  }
+  const buf = await readFile(mp3).catch(() => null)
+  if (!buf) return null
+  for (const t of targets) {
+    try {
+      const form = new FormData()
+      form.append('model', t.model)
+      form.append('response_format', 'verbose_json')
+      form.append('timestamp_granularities[]', 'word')
+      form.append('file', new Blob([buf], { type: 'audio/mpeg' }), 'a.mp3')
+      const r = await fetch(t.url, { method: 'POST', headers: { Authorization: `Bearer ${t.key}` }, body: form })
+      if (!r.ok) throw new Error(`${t.name} ${r.status}`)
+      const j = (await r.json()) as { words?: { word: string; start: number; end: number }[] }
+      const raw = (j.words ?? [])
+        .map((w) => ({ text: String(w.word ?? '').trim(), start: Number(w.start), end: Number(w.end) }))
+        .filter((w) => w.text && Number.isFinite(w.start) && Number.isFinite(w.end))
+      // Whisper découpe les élisions (« j » + « 'ai ») et isole la ponctuation :
+      // affichés seuls, ces fragments clignotent. On les recolle au mot précédent.
+      const words: { text: string; start: number; end: number }[] = []
+      for (const w of raw) {
+        const glue = /^['’]/.test(w.text) || /^[.,!?;:…»)\]]+$/.test(w.text)
+        if (glue && words.length) {
+          const prev = words[words.length - 1]
+          prev.text += w.text.startsWith("'") || w.text.startsWith('’') ? w.text : ` ${w.text}`.trimEnd()
+          prev.end = w.end
+        } else {
+          words.push({ ...w })
+        }
+      }
+      if (words.length) return words
+      return null // audio sans parole détectée
+    } catch (e) {
+      log?.(`Sous-titres : calage ${t.name} indisponible (${e instanceof Error ? e.message : String(e)})`)
+    }
+  }
+  return null
+}
+
+function sceneAss(text: string, durationSec: number, timed?: { text: string; start: number; end: number }[] | null): string {
   // Sous-titres MOT À MOT (style TikTok) : un seul mot affiché à la fois, en très
   // gros. Chaque mot occupe une part de la scène proportionnelle à sa longueur —
   // approximation du débit de parole, sans avoir à re-transcrire la voix générée.
@@ -948,6 +1009,16 @@ Format: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BackColour, Bold
 Style: Def,Liberation Sans,116,&H00FFFFFF,&H00000000,&H96000000,1,0,1,7,4,2,90,90,430
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
+  // Timings RÉELS disponibles (Whisper sur l'audio de la scène) : chaque mot
+  // s'affiche exactement quand il est prononcé — c'est le seul calage fiable.
+  if (timed && timed.length) {
+    const lines = timed.map((w) => {
+      const start = Math.max(0, Math.min(durationSec, w.start))
+      const end = Math.max(start + 0.12, Math.min(durationSec, w.end))
+      return `Dialogue: 0,${assTime(start)},${assTime(end)},Def,,0,0,0,,${assEscape(w.text)}`
+    })
+    return `${header}\n${lines.join('\n')}`
+  }
   const words = assEscape(text).split(/\s+/).filter(Boolean)
   if (!words.length) return header
   // Poids ≥ 2 : un mot très court reste lisible au lieu de clignoter.
@@ -1123,7 +1194,11 @@ NO TEXT — CRITICAL: nothing written anywhere in the frame. No subtitles, no ca
         }
         if (gotClip) {
           const clipDur = await mediaDuration(ctx.bin.ffprobe, clip)
-          await writeFile(ass, sceneAss(subText, clipDur))
+          // La voix est générée PAR le modèle : on ne connaît son rythme qu'en
+          // l'écoutant. Sans ce calage, les mots défilaient sur toute la durée du
+          // clip (silences compris) → décalage très visible.
+          const timed = await speechWordTimings(ctx, clip, work, i, { deepinfraKey: opts.deepinfraKey, groqKey: opts.groqKey }, log)
+          await writeFile(ass, sceneAss(subText, clipDur, timed))
           await run(ctx.bin.ffmpeg, [
             '-y', '-loglevel', 'error',
             '-i', clip,
@@ -1266,7 +1341,11 @@ NO TEXT — CRITICAL: nothing written anywhere in the frame. No subtitles, no ca
       }
 
       log?.(`Scène ${i + 1}/${scenes.length} — montage…`)
-      await writeFile(ass, sceneAss(subText, dur))
+      // Calage des sous-titres sur la voix RÉELLE (TTS) — inutile en muet.
+      const timedTts = opts.mute
+        ? null
+        : await speechWordTimings(ctx, mp3, work, i, { deepinfraKey: opts.deepinfraKey, groqKey: opts.groqKey }, log)
+      await writeFile(ass, sceneAss(subText, dur, timedTts))
       if (animClip && opts.mute) {
         // Source MUETTE : aucune voix à caler → on garde le clip TEL QUEL (pas de
         // setpts) avec SA piste d'ambiance si le modèle en a produit une ; sinon
@@ -1274,7 +1353,7 @@ NO TEXT — CRITICAL: nothing written anywhere in the frame. No subtitles, no ca
         // (le concat final l'exige).
         const clipDur = await mediaDuration(ctx.bin.ffprobe, animClip)
         const ambient = await hasAudioStream(ctx.bin.ffprobe, animClip)
-        await writeFile(ass, sceneAss(subText, clipDur))
+        await writeFile(ass, sceneAss(subText, clipDur)) // muet : aucune parole à caler
         await run(ctx.bin.ffmpeg, [
           '-y', '-loglevel', 'error',
           '-i', animClip,
@@ -1297,7 +1376,8 @@ NO TEXT — CRITICAL: nothing written anywhere in the frame. No subtitles, no ca
         // — on recadre, on brûle le sous-titre et on remet la voix TTS d'origine
         // (garantie présente et déjà celle sur laquelle la bouche a été calée).
         const clipDur = await mediaDuration(ctx.bin.ffprobe, animClip)
-        await writeFile(ass, sceneAss(subText, clipDur))
+        // Même voix TTS que ci-dessus → on réutilise ses timings réels.
+        await writeFile(ass, sceneAss(subText, clipDur, timedTts))
         await run(ctx.bin.ffmpeg, [
           '-y', '-loglevel', 'error',
           '-i', animClip,

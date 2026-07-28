@@ -464,6 +464,7 @@ async function runVideoGen(
       // Veo sans plafond : quand le quota gratuit Google est épuisé, les scènes
       // parlées continuent via DeepInfra (payé à la seconde) au lieu du repli TTS.
       deepinfraKey: getEncrypted('deepinfra_key'),
+      groqKey: getEncrypted('groq_key'),
       // Reproduction fidèle : la source est une VIDÉO, pas un diaporama. On anime
       // donc les scènes (fal.ai) si la clé est là, au lieu d'un simple Ken Burns
       // sur des images fixes.
