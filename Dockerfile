@@ -11,7 +11,7 @@ FROM node:20-bookworm-slim
 # (5.1.x) les gère sans problème. yt-dlp l'utilise pour extraire une portion de
 # VOD ; ffmpeg-static reste pour le montage local (recadrage, sous-titres).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 make g++ ca-certificates fontconfig fonts-liberation ffmpeg \
+    python3 make g++ ca-certificates fontconfig fonts-liberation fonts-inter ffmpeg \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

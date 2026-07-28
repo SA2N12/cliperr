@@ -1018,10 +1018,15 @@ async function speechWordTimings(
   return null
 }
 
+// ── Sous-titres style TikTok : groupes de 3 MOTS, TOUT EN MAJUSCULES, le mot en
+// cours de prononciation surligné en JAUNE, police Inter (moderne, celle du
+// dashboard ; paquet fonts-inter installé dans l'image). ──
+const SUB_GROUP = 3
+/** Jaune ASS = &HBBGGRR& → bleu 00, vert FF, rouge FF. */
+const SUB_HILITE = '{\\c&H00FFFF&}'
+const SUB_NORMAL = '{\\c&HFFFFFF&}'
+
 function sceneAss(text: string, durationSec: number, timed?: { text: string; start: number; end: number }[] | null): string {
-  // Sous-titres MOT À MOT (style TikTok) : un seul mot affiché à la fois, en très
-  // gros. Chaque mot occupe une part de la scène proportionnelle à sa longueur —
-  // approximation du débit de parole, sans avoir à re-transcrire la voix générée.
   const header = `[Script Info]
 ScriptType: v4.00+
 PlayResX: 1080
@@ -1030,31 +1035,58 @@ WrapStyle: 0
 ScaledBorderAndShadow: yes
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BackColour, Bold, Italic, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV
-Style: Def,Liberation Sans,116,&H00FFFFFF,&H00000000,&H96000000,1,0,1,7,4,2,90,90,430
+Style: Def,Inter,94,&H00FFFFFF,&H00000000,&H00000000,1,0,1,8,0,2,110,110,430
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
-  // Timings RÉELS disponibles (Whisper sur l'audio de la scène) : chaque mot
-  // s'affiche exactement quand il est prononcé — c'est le seul calage fiable.
-  if (timed && timed.length) {
-    const lines = timed.map((w) => {
-      const start = Math.max(0, Math.min(durationSec, w.start))
-      const end = Math.max(start + 0.12, Math.min(durationSec, w.end))
-      return `Dialogue: 0,${assTime(start)},${assTime(end)},Def,,0,0,0,,${assEscape(w.text)}`
-    })
-    return `${header}\n${lines.join('\n')}`
+
+  /** Une ligne = le groupe entier, seul le mot `active` passe en jaune. */
+  const groupLine = (group: string[], active: number, start: number, end: number): string => {
+    const txt = group
+      .map((w, k) => (k === active ? `${SUB_HILITE}${w}${SUB_NORMAL}` : w))
+      .join(' ')
+    return `Dialogue: 0,${assTime(start)},${assTime(end)},Def,,0,0,0,,${txt}`
   }
-  const words = assEscape(text).split(/\s+/).filter(Boolean)
+
+  // Timings RÉELS (Whisper sur l'audio de la scène) : chaque mot se colore
+  // exactement quand il est prononcé, et le groupe reste affiché entre-temps.
+  if (timed && timed.length) {
+    const words = timed.map((w) => ({ ...w, text: assEscape(w.text).toUpperCase() })).filter((w) => w.text)
+    const lines: string[] = []
+    for (let g = 0; g < words.length; g += SUB_GROUP) {
+      const group = words.slice(g, g + SUB_GROUP)
+      group.forEach((w, j) => {
+        const start = Math.max(0, Math.min(durationSec, w.start))
+        // Le mot reste surligné jusqu'au SUIVANT (pas de clignotement entre les
+        // mots) ; le dernier du groupe tient jusqu'au groupe d'après.
+        const next = words[g + j + 1]
+        const rawEnd = next ? next.start : w.end
+        const end = Math.max(start + 0.12, Math.min(durationSec, rawEnd))
+        lines.push(groupLine(group.map((x) => x.text), j, start, end))
+      })
+    }
+    return lines.length ? `${header}\n${lines.join('\n')}` : header
+  }
+
+  // Repli sans timings : répartition proportionnelle à la longueur des mots.
+  const words = assEscape(text).toUpperCase().split(/\s+/).filter(Boolean)
   if (!words.length) return header
-  // Poids ≥ 2 : un mot très court reste lisible au lieu de clignoter.
   const weights = words.map((w) => Math.max(2, w.length))
   const total = weights.reduce((a, b) => a + b, 0)
+  const bounds: { start: number; end: number }[] = []
   let t = 0
-  const lines = words.map((w, i) => {
+  words.forEach((_, i) => {
     const end = i === words.length - 1 ? durationSec : t + (durationSec * weights[i]) / total
-    const line = `Dialogue: 0,${assTime(t)},${assTime(end)},Def,,0,0,0,,${w}`
+    bounds.push({ start: t, end })
     t = end
-    return line
   })
+  const lines: string[] = []
+  for (let g = 0; g < words.length; g += SUB_GROUP) {
+    const group = words.slice(g, g + SUB_GROUP)
+    group.forEach((_, j) => {
+      const b = bounds[g + j]
+      lines.push(groupLine(group, j, b.start, b.end))
+    })
+  }
   return `${header}\n${lines.join('\n')}`
 }
 
