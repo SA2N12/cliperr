@@ -3,6 +3,8 @@ import cookieParser from 'cookie-parser'
 import multer from 'multer'
 import cron, { type ScheduledTask } from 'node-cron'
 import { mkdirSync, existsSync, readdirSync, rmSync, readFileSync } from 'fs'
+import { mkdir, copyFile, unlink, readdir } from 'fs/promises'
+import { randomBytes } from 'crypto'
 import { join, basename } from 'path'
 import Anthropic from '@anthropic-ai/sdk'
 
@@ -471,6 +473,14 @@ async function runVideoGen(
       burnSubtitles: repo.getSetting('repro_subtitles') !== '0',
       // Source muette : on reproduit SANS voix (ni Veo parlé, ni TTS).
       mute: !!idea.mute,
+      // Économie : au-delà du quota Veo GRATUIT, on ne paie pas 1,20 $/scène —
+      // on repasse sur animation + voix ElevenLabs (~0,30 $). `veo_paid=1` pour
+      // forcer la qualité max quoi qu'il en coûte.
+      veoPaid: repo.getSetting('veo_paid') === '1',
+      // Synchro labiale p-video sur nos voix (~0,16 $/scène) — activable une fois
+      // le rendu validé sur les personnages illustrés.
+      prunaLipsync: repo.getSetting('pruna_lipsync') === '1',
+      publishPublic: publishPublicFile,
       // Reproduction d'un DIALOGUE : moteur de série (Veo si activé) — voix natives
       // JOUÉES + vraie synchro labiale, générées ensemble donc jamais décalées. Si
       // une scène bascule (erreur/quota Veo), le repli prend les voix ElevenLabs
@@ -1306,6 +1316,46 @@ app.get('/api/tiktok/callback', async (req, res) => {
 // Tout le reste de l'API est protégé
 app.use('/api', requireAuth)
 app.use('/media', requireAuth)
+
+// ── Fichiers temporaires PUBLICS (`/pub`) ────────────────────────────────────
+// Certains modèles (p-video) vont chercher l'image/l'audio EUX-MÊMES par URL et
+// refusent le base64 : ils ne peuvent donc pas passer par /media (protégé). Ces
+// fichiers portent un nom aléatoire de 32 hex (non devinable), ne sont exposés
+// que le temps de la génération, et sont supprimés juste après.
+app.use('/pub', express.static(paths.pub, { maxAge: '10m' }))
+
+/** Copie un fichier dans /pub sous un nom aléatoire → URL publique + nettoyage.
+ *  `null` si aucune origine publique n'est configurée (PUBLIC_URL). */
+async function publishPublicFile(localPath: string): Promise<{ url: string; cleanup: () => Promise<void> } | null> {
+  const base = config.publicUrl || (repo.getSetting('public_base_url') || '').replace(/\/+$/, '')
+  if (!base) return null
+  await mkdir(paths.pub, { recursive: true })
+  const ext = (localPath.match(/\.[a-z0-9]+$/i)?.[0] ?? '').toLowerCase()
+  const name = `${randomBytes(16).toString('hex')}${ext}`
+  const dest = join(paths.pub, name)
+  await copyFile(localPath, dest)
+  return {
+    url: `${base}/pub/${name}`,
+    cleanup: async () => {
+      try {
+        await unlink(dest)
+      } catch {
+        /* déjà nettoyé */
+      }
+    }
+  }
+}
+// Balayage au démarrage : supprime les restes d'une génération interrompue.
+void (async () => {
+  try {
+    await mkdir(paths.pub, { recursive: true })
+    for (const f of await readdir(paths.pub)) {
+      await unlink(join(paths.pub, f)).catch(() => undefined)
+    }
+  } catch {
+    /* dossier absent : rien à nettoyer */
+  }
+})()
 
 const wrap = (fn: (req: Request, res: Response) => unknown) => (req: Request, res: Response) => {
   Promise.resolve(fn(req, res)).catch((e) => res.status(500).json({ error: String(e?.message ?? e) }))

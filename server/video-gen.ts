@@ -60,6 +60,14 @@ export interface VideoGenOptions {
   /** Clé DeepInfra : Veo payé à la seconde, SANS quota journalier — repli des
    *  scènes parlées quand le quota gratuit Google est épuisé. */
   deepinfraKey?: string | null
+  /** Autoriser Veo PAYANT (DeepInfra, ~1,20 $/scène) une fois le quota gratuit
+   *  Google épuisé. Off par défaut : on préfère le repli à ~0,30 $/scène. */
+  veoPaid?: boolean
+  /** Synchro labiale p-video (0,02 $/s) calée sur nos voix, à la place de
+   *  l'animation muette. Nécessite `publishPublic` (le modèle exige des URL). */
+  prunaLipsync?: boolean
+  /** Publie un fichier local sur une URL publique éphémère (+ nettoyage). */
+  publishPublic?: (localPath: string) => Promise<{ url: string; cleanup: () => Promise<void> } | null>
   /** Active l'animation vidéo des scènes (mode série). */
   animateScenes?: boolean
   /** Mode dialogue : les personnages parlent (voix + intonation par personnage), pas de narrateur. */
@@ -758,6 +766,34 @@ async function saveDeepinfraVideo(key: string, j: Record<string, unknown>, dest:
   if (!dl.ok) throw new Error(`DeepInfra téléchargement ${dl.status}`)
   await writeFile(dest, Buffer.from(await dl.arrayBuffer()))
 }
+// ── p-video (PrunaAI, via DeepInfra) : anime l'image EN SE CALANT SUR UNE PISTE
+// AUDIO fournie → vraie synchro labiale sur NOS voix ElevenLabs (constantes), pour
+// 0,02 $/s au lieu de 0,15 $/s (Veo). ⚠️ Le modèle va chercher l'image et l'audio
+// LUI-MÊME par URL : il refuse le base64 → d'où les fichiers publics éphémères. ──
+export const DI_PRUNA_MODEL = 'PrunaAI/p-video'
+export async function genVideoPruna(
+  key: string,
+  prompt: string,
+  dest: string,
+  imageUrl: string,
+  audioUrl: string,
+  model = DI_PRUNA_MODEL
+): Promise<void> {
+  const r = await fetch(`${DEEPINFRA}/v1/inference/${model}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      prompt,
+      image: imageUrl,
+      audio: audioUrl, // fournir l'audio ⇒ la durée suit la voix (param `duration` ignoré)
+      aspect_ratio: '9:16',
+      resolution: '720p'
+    })
+  })
+  if (!r.ok) throw new Error(`p-video ${r.status} : ${(await r.text()).slice(0, 160)}`)
+  await saveDeepinfraVideo(key, (await r.json()) as Record<string, unknown>, dest)
+}
+
 export async function genVideoVeoDeepinfra(
   key: string,
   prompt: string,
@@ -998,7 +1034,9 @@ NO TEXT — CRITICAL: nothing written anywhere in the frame. No subtitles, no ca
           }
         }
         // 2) DeepInfra : même Veo, payé à la seconde, sans plafond journalier.
-        if (!gotClip && opts.deepinfraKey) {
+        // Réservé au mode « qualité max » : sinon on descend sur le chemin
+        // animation + voix ElevenLabs (~4× moins cher) juste en dessous.
+        if (!gotClip && opts.deepinfraKey && opts.veoPaid) {
           log?.(`Scène ${i + 1}/${scenes.length} — scène parlée (Veo via DeepInfra)…`)
           try {
             await genVideoVeoDeepinfra(opts.deepinfraKey, veoPrompt, clip, png)
@@ -1066,7 +1104,34 @@ NO TEXT — CRITICAL: nothing written anywhere in the frame. No subtitles, no ca
 
       let animClip: string | null = null
       let lipSynced = false
-      if (opts.animateScenes && (opts.deepinfraKey || opts.falKey)) {
+      // p-video : anime l'image EN SE CALANT SUR notre piste vocale → vraie synchro
+      // labiale avec des voix constantes, pour ~7× moins cher qu'une scène Veo.
+      // (Le modèle télécharge image + audio par URL : d'où la publication éphémère.)
+      if (opts.animateScenes && !opts.mute && opts.prunaLipsync && opts.deepinfraKey && opts.publishPublic) {
+        log?.(`Scène ${i + 1}/${scenes.length} — scène parlée (p-video, synchro sur la voix)…`)
+        const pub: { url: string; cleanup: () => Promise<void> }[] = []
+        try {
+          const img = await opts.publishPublic(png)
+          const aud = await opts.publishPublic(mp3)
+          if (!img || !aud) throw new Error('aucune URL publique configurée (PUBLIC_URL)')
+          pub.push(img, aud)
+          const target = join(work, `v${i}.mp4`)
+          await genVideoPruna(
+            opts.deepinfraKey,
+            `Animate this exact scene, keeping the character and art style strictly identical to the first frame. The character speaks the provided audio with accurate lip-sync, expressive face and natural head motion. No on-screen text, no captions, no subtitles.`,
+            target,
+            img.url,
+            aud.url
+          )
+          animClip = target
+          lipSynced = true // clip DÉJÀ calé sur la voix → montage sans étirement
+        } catch (e) {
+          log?.(`Scène ${i + 1}/${scenes.length} — p-video indisponible (${e instanceof Error ? e.message : String(e)}) → animation simple`)
+        } finally {
+          for (const p of pub) await p.cleanup()
+        }
+      }
+      if (!animClip && opts.animateScenes && (opts.deepinfraKey || opts.falKey)) {
         // Pas de lip-sync ici : on n'insiste PAS sur la bouche (sinon un
         // mouvement de lèvres non synchronisé se remarque). On mise sur
         // l'expression et les gestes ; les sous-titres portent la réplique.

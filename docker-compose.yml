@@ -13,6 +13,10 @@ services:
       # Proxy (résidentiel/ISP) pour yt-dlp — l'IP datacenter du VPS se fait flaguer
       # par YouTube sous la charge. Renseigné dans /opt/cliperr/.env (hors git). Vide = IP directe.
       - DOWNLOAD_PROXY=${DOWNLOAD_PROXY:-}
+      # Origine publique du dashboard : sert à donner une URL atteignable aux
+      # modèles qui téléchargent eux-mêmes les fichiers (p-video). Vide = /pub
+      # inutilisable, on retombe sur les modèles qui acceptent le base64.
+      - PUBLIC_URL=${PUBLIC_URL:-}
       - NODE_ENV=production
     volumes:
       - ttc-data:/data
