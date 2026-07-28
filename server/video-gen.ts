@@ -1035,7 +1035,7 @@ WrapStyle: 0
 ScaledBorderAndShadow: yes
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BackColour, Bold, Italic, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV
-Style: Def,Inter,94,&H00FFFFFF,&H00000000,&H00000000,1,0,1,8,0,2,110,110,430
+Style: Def,Inter,112,&H00FFFFFF,&H00000000,&H00000000,1,0,1,9,0,2,80,80,430
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
 
