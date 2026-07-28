@@ -229,8 +229,15 @@ export async function downloadVideo(
         // « Conversion failed »). Un format combiné se télécharge d'un bloc, sans
         // remux, donc sans doubler l'espace. Plafond 480p : amplement suffisant
         // pour un clip vertical recadré, et ~5 Go pour une longue VOD au lieu de 23.
+        // `[format_id!*=bytevc]` : les variantes TikTok bytevc1 (h265) ANNONCENT de
+        // l'aac dans leurs métadonnées mais le fichier téléchargé n'a AUCUNE piste
+        // audio (vérifié sur pièce : ffprobe → hevc,video seulement) → transcription
+        // impossible → répliques inventées. Filtrer `acodec` ne sert à rien
+        // (métadonnées mensongères) : on écarte les formats bytevc eux-mêmes.
+        // Sans effet ailleurs (Twitch = « 480p30 », YouTube = ids numériques).
+        // Le `b` final reste en dernier recours absolu.
         '-f',
-        'b[height<=480]/bv*[height<=480]+ba/b[height<=720]/b',
+        'b[height<=480][format_id!*=bytevc]/bv*[height<=480]+ba/b[height<=720][format_id!*=bytevc]/b[format_id!*=bytevc]/bv*+ba/b',
         // Garde-fou taille (efficace sur les téléchargements progressifs ; les flux
         // HLS de Twitch l'ignorent, d'où le plafond de résolution ci-dessus).
         '--max-filesize',

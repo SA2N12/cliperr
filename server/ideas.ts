@@ -246,7 +246,7 @@ ${srcBlock}
 
 ÉTAPE 1 — Reconstitue le déroulé EXACT de la source : découpe la transcription en moments/plans successifs, dans l'ordre, sans rien inventer, sans réorganiser, sans « améliorer ». Le champ « script » = ce déroulé (une étape par moment), fidèle au contenu, aux exemples et à la chute. Reformule seulement pour un français oral propre (nombres en toutes lettres, phrases courtes). Garde le hook d'origine et la chute d'origine.${'\n'}${'  '}Si c'est un DIALOGUE, préfixe chaque réplique par le nom du personnage (« Père : … », « Fille : … »).
 ÉTAPE 2 — Décris le STYLE VISUEL de la source (champ imageStyle, en anglais)${frames.length ? ', d’après les captures' : ''} pour régénérer des images IA dans CE style à l'identique.
-ÉTAPE 3 — Renseigne le champ « dialogue » : VRAI si plusieurs personnages se parlent dans la source, FAUX si une seule voix off/narration.
+ÉTAPE 3 — Renseigne le champ « dialogue » : VRAI dès que des personnages PARLENT dans la source (échange de répliques, conversation téléphonique, personnage qui s'adresse à un autre ou à la caméra en INCARNANT un rôle — même si une seule voix joue tous les rôles). FAUX uniquement si une voix off RACONTE l'histoire à la troisième personne sans jamais incarner de personnage. Une mini-série à personnages (saynète, sitcom, feuilleton) est presque toujours VRAI.
 
 RÈGLES :
 - On REPRODUIT, on ne transforme pas : ne change ni le sujet, ni les exemples, ni la chute. N'ajoute PAS de question/CTA « à la TikTok » si la source n'en a pas.

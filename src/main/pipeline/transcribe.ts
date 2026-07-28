@@ -1,6 +1,6 @@
 import { join } from 'path'
 import { readFile, writeFile } from 'fs/promises'
-import { run, type PipelineContext } from './context'
+import { run, runCapture, type PipelineContext } from './context'
 
 export interface Word {
   start: number // secondes
@@ -98,6 +98,14 @@ export async function transcribeWithGroq(
   deepinfraKey?: string | null,
   onNote?: (m: string) => void
 ): Promise<Word[]> {
+  // Fichier SANS piste audio (source réellement silencieuse) : transcription vide
+  // RÉUSSIE — à distinguer d'un échec technique (qui, lui, ne prouve rien).
+  try {
+    const probe = await runCapture(ctx.bin.ffprobe, ['-v', 'error', '-select_streams', 'a', '-show_entries', 'stream=codec_type', '-of', 'csv=p=0', source])
+    if (!probe.trim()) return []
+  } catch {
+    /* probe indisponible : on tente l'extraction normalement */
+  }
   // 32 kbps mono : ~14 Mo pour 1h (sous la limite Groq de 25 Mo) ; suffisant pour la parole.
   const mp3 = join(ctx.dirs.downloads, `${sourceId}.mp3`)
   await run(ctx.bin.ffmpeg, [

@@ -1624,14 +1624,31 @@ app.post('/api/ideas/inspire', wrap(async (req, res) => {
     // Source MUETTE (aucune parole transcrite) : on la reproduit SANS voix — sinon
     // l'IA invente un dialogue/une narration que la source n'avait pas, et Veo se
     // met à parler par-dessus des images qui devaient rester silencieuses.
-    // Planche de référence : une image RÉELLE de la source, conservée avec l'idée
-    // et réinjectée à chaque scène → les personnages ressemblent vraiment à ceux
-    // de la vidéo d'origine, au lieu d'être redessinés d'après une description.
+    // Planche de référence : PLANCHE-CONTACT 2×2 de frames RÉELLES de la source,
+    // conservée avec l'idée et réinjectée à chaque scène. Une frame UNIQUE était
+    // une loterie (tombée sur le personnage le plus humain de l'épisode → toute
+    // la vidéo a suivi) ; quatre moments répartis montrent tout le casting.
     if (mode === 'reproduce' && filePath) {
       try {
         const refDest = join(paths.clips, `idearef-${tmpId}.jpg`)
-        const at = Math.max(0.5, (meta.durationSec || 6) * 0.35)
-        await run(ctx.bin.ffmpeg, ['-y', '-loglevel', 'error', '-ss', at.toFixed(2), '-i', filePath, '-frames:v', '1', '-vf', 'scale=720:-2', '-q:v', '3', refDest])
+        const dur = meta.durationSec || (await probeDuration(ctx, filePath).catch(() => 0)) || 6
+        const shots: string[] = []
+        for (const [k, r] of ([...[0.15, 0.38, 0.62, 0.85].entries()] as [number, number][])) {
+          const f = join(paths.downloads, `${tmpId}.ref${k}.jpg`)
+          await run(ctx.bin.ffmpeg, ['-y', '-loglevel', 'error', '-ss', Math.max(0.3, dur * r).toFixed(2), '-i', filePath, '-frames:v', '1', '-vf', 'scale=540:-2', '-q:v', '3', f])
+          if (existsSync(f)) shots.push(f)
+        }
+        if (shots.length === 4) {
+          await run(ctx.bin.ffmpeg, [
+            '-y', '-loglevel', 'error',
+            '-i', shots[0], '-i', shots[1], '-i', shots[2], '-i', shots[3],
+            '-filter_complex', '[0][1]hstack[t];[2][3]hstack[b];[t][b]vstack',
+            '-q:v', '3', refDest
+          ])
+        } else if (shots.length > 0) {
+          await run(ctx.bin.ffmpeg, ['-y', '-loglevel', 'error', '-i', shots[0], '-q:v', '3', refDest])
+        }
+        for (const f of shots) rmSync(f, { force: true })
         if (existsSync(refDest)) idea.refImage = refDest
       } catch {
         /* pas bloquant : on retombe sur la description textuelle du style */
