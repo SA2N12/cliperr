@@ -973,14 +973,19 @@ export async function generateVideoFromIdea(
 ): Promise<{ filePath: string; durationSec: number; usage: Usage | null }> {
   const voice = opts.voice || 'ash' // ash = plus expressive/dynamique qu'onyx (par défaut)
   const log = opts.onProgress
-  log?.('Écriture du storyboard (IA)…')
+  // La langue est tracée : c'est le premier endroit où un mauvais réglage se voit.
+  log?.(`Écriture du storyboard (IA) — dialogues en ${opts.lang === 'en' ? 'ANGLAIS' : 'français'}…`)
   const { scenes, cast, usage } = await buildStoryboard(
     opts.anthropicKey,
     opts.anthropicModel || 'claude-haiku-4-5',
     opts.idea,
     opts.imageStyle,
     opts.dialogue,
-    opts.reproMaxScenes
+    opts.reproMaxScenes,
+    // ⚠️ SANS ce paramètre, le storyboard reste en FRANÇAIS alors que le reste de
+    // la chaîne bascule en anglais : les moteurs anglophones prononcent alors du
+    // texte français (accent étranger) et les sous-titres restent en français.
+    opts.lang
   )
   if (!scenes.length) throw new Error('Storyboard vide — réessaie')
   const castMap = new Map(cast.map((c) => [c.name.trim().toLowerCase(), c]))
