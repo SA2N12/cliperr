@@ -62,6 +62,8 @@ export interface VideoGenOptions {
   deepinfraKey?: string | null
   /** Clé Groq : repli pour le calage mot à mot des sous-titres (Whisper). */
   groqKey?: string | null
+  /** Débit de parole (0.7–1.2, défaut 1.15). Réglage `speech_speed`. */
+  speechSpeed?: number
   /** Autoriser Veo PAYANT (DeepInfra, ~1,20 $/scène) une fois le quota gratuit
    *  Google épuisé. Off par défaut : on préfère le repli à ~0,30 $/scène. */
   veoPaid?: boolean
@@ -323,16 +325,32 @@ Réponds via l’outil pick_mood.`
  */
 // Consignes de JEU pour la voix off — le vrai levier contre l'effet monotone/IA
 // (gpt-4o-mini-tts obéit à ces instructions de ton, débit, émotion).
-function voiceInstructions(characterStyle?: string): string {
+function voiceInstructions(characterStyle?: string, speed?: number): string {
+  // gpt-4o-mini-tts n'a pas de paramètre de vitesse : le débit se pilote par la
+  // consigne. On la formule en fonction du réglage pour rester cohérent avec
+  // ElevenLabs (qui, lui, a un vrai paramètre).
+  const pace = clampSpeed(speed) >= 1.1
+    ? ' DÉBIT RAPIDE et enlevé, façon TikTok : enchaîne sans traîner, pas de silence inutile entre les phrases.'
+    : clampSpeed(speed) <= 0.9
+      ? ' Débit posé, prends ton temps.'
+      : ''
   if (characterStyle) {
-    return `Tu es un doubleur pro de dessin animé, français de France, prononciation native impeccable. Tu INCARNES ce personnage : ${characterStyle}. Joue-le à fond : intonation très expressive et théâtrale, émotions marquées (cris, chuchotements, rires), rythme vivant. Jamais monocorde.`
+    return `Tu es un doubleur pro de dessin animé, français de France, prononciation native impeccable. Tu INCARNES ce personnage : ${characterStyle}. Joue-le à fond : intonation très expressive et théâtrale, émotions marquées (cris, chuchotements, rires), rythme vivant. Jamais monocorde.${pace}`
   }
-  return `Tu es un créateur TikTok français natif (France) qui raconte une histoire à un pote — PAS un lecteur robotique. Mets de l'ÉNERGIE et surtout des VARIATIONS de ton : accélère sur l'action, RALENTIS et baisse la voix sur le suspense/le mystère, remonte en intensité vers la révélation finale. Marque de vraies respirations et micro-pauses aux virgules. Appuie fort sur les mots-clés (dates, chiffres, mots chocs). Ton complice, vivant, légèrement théâtral, avec des inflexions naturelles — surtout JAMAIS plat ni monotone. Prononciation française impeccable : liaisons naturelles, nombres et noms propres bien articulés.`
+  return `Tu es un créateur TikTok français natif (France) qui raconte une histoire à un pote — PAS un lecteur robotique. Mets de l'ÉNERGIE et surtout des VARIATIONS de ton : accélère sur l'action, RALENTIS et baisse la voix sur le suspense/le mystère, remonte en intensité vers la révélation finale. Marque de vraies respirations et micro-pauses aux virgules. Appuie fort sur les mots-clés (dates, chiffres, mots chocs). Ton complice, vivant, légèrement théâtral, avec des inflexions naturelles — surtout JAMAIS plat ni monotone. Prononciation française impeccable : liaisons naturelles, nombres et noms propres bien articulés.${pace}`
 }
 
 // ── ElevenLabs : voix off HUMAINES (modèle multilingue v2). Voix repérée par ID. ──
 const ELEVEN = 'https://api.elevenlabs.io/v1'
-async function elevenSpeech(key: string, voiceId: string, text: string): Promise<Buffer> {
+/** Débit de parole. 1 = naturel (trop posé pour TikTok), 1.15 = vif. ElevenLabs
+ *  n'accepte QUE 0.7–1.2 (au-delà : 400 invalid_voice_settings). */
+const SPEECH_SPEED_MIN = 0.7
+const SPEECH_SPEED_MAX = 1.2
+export const SPEECH_SPEED_DEFAULT = 1.15
+const clampSpeed = (s?: number): number =>
+  Math.max(SPEECH_SPEED_MIN, Math.min(SPEECH_SPEED_MAX, Number.isFinite(s) ? (s as number) : SPEECH_SPEED_DEFAULT))
+
+async function elevenSpeech(key: string, voiceId: string, text: string, speed?: number): Promise<Buffer> {
   const res = await fetch(`${ELEVEN}/text-to-speech/${encodeURIComponent(voiceId)}`, {
     method: 'POST',
     headers: { 'xi-api-key': key, 'Content-Type': 'application/json', Accept: 'audio/mpeg' },
@@ -340,7 +358,8 @@ async function elevenSpeech(key: string, voiceId: string, text: string): Promise
       text,
       model_id: 'eleven_multilingual_v2',
       // stabilité basse + style = plus d'émotion/variations (moins monotone).
-      voice_settings: { stability: 0.4, similarity_boost: 0.8, style: 0.45, use_speaker_boost: true }
+      // `speed` : mesuré 6,92 s à 0.7 contre 3,71 s à 1.2 sur la même phrase.
+      voice_settings: { stability: 0.4, similarity_boost: 0.8, style: 0.45, use_speaker_boost: true, speed: clampSpeed(speed) }
     })
   })
   if (!res.ok) throw new Error(`ElevenLabs ${res.status} : ${(await res.text()).slice(0, 200)}`)
@@ -396,7 +415,7 @@ function assignElevenVoices(pool: { id: string; name: string; gender: string; la
   return map
 }
 
-async function openaiSpeech(openaiKey: string, voice: string, text: string, instructions: string): Promise<Buffer> {
+async function openaiSpeech(openaiKey: string, voice: string, text: string, instructions: string, speed?: number): Promise<Buffer> {
   // Voix inconnue (ex. un ID ElevenLabs en repli) → voix OpenAI sûre.
   const v = OPENAI_VOICES.includes(voice) ? voice : 'ash'
   let res = await fetch(`${OPENAI}/audio/speech`, {
@@ -408,7 +427,7 @@ async function openaiSpeech(openaiKey: string, voice: string, text: string, inst
     res = await fetch(`${OPENAI}/audio/speech`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'tts-1-hd', voice: v, input: text, response_format: 'mp3', speed: 1.08 })
+      body: JSON.stringify({ model: 'tts-1-hd', voice: v, input: text, response_format: 'mp3', speed: clampSpeed(speed) })
     })
   }
   if (!res.ok) throw new Error(`OpenAI TTS ${res.status} : ${(await res.text()).slice(0, 200)}`)
@@ -419,6 +438,8 @@ export interface VoiceOpts {
   openaiKey: string
   provider?: string
   elevenKey?: string | null
+  /** Débit de parole (0.7–1.2). Défaut 1.15 : le débit naturel fait trop posé sur TikTok. */
+  speed?: number
   onNote?: (m: string) => void
 }
 
@@ -426,8 +447,9 @@ export interface VoiceOpts {
 export async function ttsPreview(voice: string, o: VoiceOpts): Promise<Buffer> {
   const sample =
     'En mille neuf cent quarante-cinq, cinq avions décollent… et disparaissent sans laisser la moindre trace. Accident, ou dissimulation ? Dis-moi en commentaire.'
-  if (o.provider === 'elevenlabs' && o.elevenKey && voice) return elevenSpeech(o.elevenKey, voice, sample)
-  return openaiSpeech(o.openaiKey, voice, sample, voiceInstructions())
+  // L'aperçu doit avoir le MÊME débit que les vidéos, sinon il ne représente rien.
+  if (o.provider === 'elevenlabs' && o.elevenKey && voice) return elevenSpeech(o.elevenKey, voice, sample, o.speed)
+  return openaiSpeech(o.openaiKey, voice, sample, voiceInstructions(undefined, o.speed), o.speed)
 }
 
 async function tts(voice: string, text: string, dest: string, o: VoiceOpts, characterStyle?: string): Promise<void> {
@@ -435,13 +457,13 @@ async function tts(voice: string, text: string, dest: string, o: VoiceOpts, char
   // ne doit jamais faire échouer toute la vidéo).
   if (o.provider === 'elevenlabs' && o.elevenKey && voice) {
     try {
-      await writeFile(dest, await elevenSpeech(o.elevenKey, voice, text))
+      await writeFile(dest, await elevenSpeech(o.elevenKey, voice, text, o.speed))
       return
     } catch (e) {
       o.onNote?.(`ElevenLabs indisponible (${e instanceof Error ? e.message.split('\n')[0] : e}) → repli voix OpenAI`)
     }
   }
-  await writeFile(dest, await openaiSpeech(o.openaiKey, voice, text, voiceInstructions(characterStyle)))
+  await writeFile(dest, await openaiSpeech(o.openaiKey, voice, text, voiceInstructions(characterStyle, o.speed), o.speed))
 }
 
 /** Rejet du filtre de sécurité OpenAI (le plus souvent : un mineur dans la scène). */
@@ -1150,7 +1172,7 @@ export async function generateVideoFromIdea(
         // Voix RÉUTILISÉE À L'IDENTIQUE à chaque scène pour ce personnage → Veo
         // garde la même voix au lieu d'en réinventer une par clip.
         const voiceDesc = member?.voiceSignature?.trim() || (member?.style ? `expressive cartoon voice, ${member.style}` : 'an expressive, distinctive cartoon voice')
-        const veoPrompt = `${sc.imagePrompt}. The character "${who}" says in ${opts.lang === 'en' ? 'English' : 'French'}, EXACTLY: « ${sc.narration} ». VOICE — use this EXACT SAME voice for "${who}" in every single scene, never change it between scenes: ${voiceDesc}. Lip-sync must be perfectly accurate: the mouth shapes match each spoken syllable and start/stop exactly with the speech. Expressive face and natural hand gestures while speaking; the other characters stay silent and only listen. Keep the characters, their outfits and the art style strictly identical to the first frame. Vivid colors.
+        const veoPrompt = `${sc.imagePrompt}. The character "${who}" says in ${opts.lang === 'en' ? 'English' : 'French'}, EXACTLY: « ${sc.narration} ». VOICE — use this EXACT SAME voice for "${who}" in every single scene, never change it between scenes: ${voiceDesc}. Speak at a brisk, energetic TikTok pace — no slow delivery, no dead air before or after the line. Lip-sync must be perfectly accurate: the mouth shapes match each spoken syllable and start/stop exactly with the speech. Expressive face and natural hand gestures while speaking; the other characters stay silent and only listen. Keep the characters, their outfits and the art style strictly identical to the first frame. Vivid colors.
 AUDIO — CRITICAL: the ONLY audio is that spoken line, dry and clean. Absolutely NO background music, NO soundtrack, NO score, NO singing, NO musical instrument of any kind, no sound effects; at most an almost inaudible room tone. Silence apart from the voice.
 NO TEXT — CRITICAL: nothing written anywhere in the frame. No subtitles, no captions, no burned-in text, no titles, no signs, no labels, no watermark, no logo, no letters or numbers of any kind.`
         // 1) Google (quota gratuit) — 2 tentatives : évite qu'une scène bascule
@@ -1247,7 +1269,7 @@ NO TEXT — CRITICAL: nothing written anywhere in the frame. No subtitles, no ca
           sceneVoice,
           sc.narration,
           mp3,
-          { openaiKey: opts.openaiKey, provider: opts.voiceProvider, elevenKey: opts.elevenKey, onNote: log },
+          { openaiKey: opts.openaiKey, provider: opts.voiceProvider, elevenKey: opts.elevenKey, speed: opts.speechSpeed, onNote: log },
           eleven ? undefined : member ? `${member.name} — ${member.style}` : undefined
         )
         dur = (await mediaDuration(ctx.bin.ffprobe, mp3)) + 0.4

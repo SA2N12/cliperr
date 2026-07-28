@@ -465,6 +465,12 @@ async function runVideoGen(
       // parlées continuent via DeepInfra (payé à la seconde) au lieu du repli TTS.
       deepinfraKey: getEncrypted('deepinfra_key'),
       groqKey: getEncrypted('groq_key'),
+      // Débit de parole (réglage `speech_speed`, 0.7–1.2) : le débit naturel fait
+      // trop posé pour TikTok → 1.15 par défaut.
+      speechSpeed: (() => {
+        const v = parseFloat(repo.getSetting('speech_speed') || '')
+        return Number.isFinite(v) && v > 0 ? v : undefined
+      })(),
       // Reproduction fidèle : la source est une VIDÉO, pas un diaporama. On anime
       // donc les scènes (fal.ai) si la clé est là, au lieu d'un simple Ken Burns
       // sur des images fixes.
@@ -2920,7 +2926,8 @@ app.get('/api/tts/preview', wrap(async (req, res) => {
   if (provider === 'openai' && !openaiKey) return res.status(400).json({ error: 'Clé OpenAI manquante (Réglages).' })
   if (provider === 'elevenlabs' && !voice) return res.status(400).json({ error: 'Choisis une voix.' })
   try {
-    const buf = await ttsPreview(voice, { openaiKey: openaiKey || '', provider, elevenKey })
+    const speed = parseFloat(repo.getSetting('speech_speed') || '')
+    const buf = await ttsPreview(voice, { openaiKey: openaiKey || '', provider, elevenKey, speed: Number.isFinite(speed) && speed > 0 ? speed : undefined })
     res.setHeader('Content-Type', 'audio/mpeg')
     res.setHeader('Cache-Control', 'no-store')
     res.send(buf)
