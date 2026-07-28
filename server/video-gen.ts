@@ -65,9 +65,9 @@ export interface VideoGenOptions {
   groqKey?: string | null
   /** Débit de parole (0.7–1.2, défaut 1.15). Réglage `speech_speed`. */
   speechSpeed?: number
-  /** Autoriser Veo PAYANT (DeepInfra, ~1,20 $/scène) une fois le quota gratuit
-   *  Google épuisé. Off par défaut : on préfère le repli à ~0,30 $/scène. */
-  veoPaid?: boolean
+  /** Moteur PAYANT autorisé une fois le quota Veo gratuit épuisé : 'seedance'
+   *  (~0,84 $/scène) ou 'veo' (~1,20 $). Absent = repli économique (~0,30 $). */
+  paidEngine?: 'seedance' | 'veo'
   /** Synchro labiale p-video (0,02 $/s) calée sur nos voix, à la place de
    *  l'animation muette. Nécessite `publishPublic` (le modèle exige des URL). */
   prunaLipsync?: boolean
@@ -905,6 +905,32 @@ export async function genVideoSeedanceTalking(
   await saveDeepinfraVideo(key, (await r.json()) as Record<string, unknown>, dest)
 }
 
+// ── Seedance 2.0 (ByteDance, via DeepInfra) : scène PARLÉE avec voix native,
+// lip-sync et personnage FIDÈLE. ⚠️ Le paramètre `image` est IGNORÉ par ce modèle
+// (comme en 1.5) — la fidélité passe par `reference_images`, qui exige des URL
+// publiques. Vérifié : réplique française respectée quasi au mot près, personnage
+// et décor identiques à la référence. ~0,84 $ les 5 s. ──
+export async function genVideoSeedance2(
+  key: string,
+  prompt: string,
+  dest: string,
+  refImageUrl: string,
+  durationSec: number
+): Promise<void> {
+  const r = await fetch(`${DEEPINFRA}/v1/inference/ByteDance/Seedance-2.0`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      prompt,
+      reference_images: [refImageUrl],
+      duration: Math.max(4, Math.min(15, Math.round(durationSec))),
+      aspect_ratio: '9:16'
+    })
+  })
+  if (!r.ok) throw new Error(`Seedance 2.0 ${r.status} : ${(await r.text()).slice(0, 160)}`)
+  await saveDeepinfraVideo(key, (await r.json()) as Record<string, unknown>, dest)
+}
+
 export async function genVideoVeoDeepinfra(
   key: string,
   prompt: string,
@@ -1294,10 +1320,24 @@ NO TEXT — CRITICAL: nothing written anywhere in the frame. No subtitles, no ca
             log?.(`Scène ${i + 1}/${scenes.length} — Seedance indisponible (${e instanceof Error ? e.message : String(e)})`)
           }
         }
-        // 3) DeepInfra : même Veo, payé à la seconde, sans plafond journalier.
-        // Réservé au mode « qualité max » : sinon on descend sur le chemin
-        // animation + voix ElevenLabs (~4× moins cher) juste en dessous.
-        if (!gotClip && opts.deepinfraKey && opts.veoPaid) {
+        // 3) Seedance 2.0 : voix native + lip-sync + personnage fidèle, ~30 % moins
+        // cher que Veo. Passe par `reference_images`, qui exige une URL publique.
+        if (!gotClip && opts.deepinfraKey && opts.paidEngine === 'seedance' && opts.publishPublic) {
+          log?.(`Scène ${i + 1}/${scenes.length} — scène parlée (Seedance 2.0)…`)
+          const pub = await opts.publishPublic(png).catch(() => null)
+          try {
+            if (!pub) throw new Error('aucune URL publique configurée (PUBLIC_URL)')
+            await genVideoSeedance2(opts.deepinfraKey, veoPrompt, clip, pub.url, veoDur)
+            gotClip = true
+          } catch (e) {
+            log?.(`Scène ${i + 1}/${scenes.length} — Seedance 2.0 indisponible (${e instanceof Error ? e.message : String(e)})`)
+          } finally {
+            await pub?.cleanup()
+          }
+        }
+        // 4) Veo payant : le plus cher, réservé au mode « qualité max ». Sinon on
+        // descend sur animation + voix ElevenLabs (~4× moins cher) juste en dessous.
+        if (!gotClip && opts.deepinfraKey && opts.paidEngine === 'veo') {
           log?.(`Scène ${i + 1}/${scenes.length} — scène parlée (Veo via DeepInfra)…`)
           try {
             await genVideoVeoDeepinfra(opts.deepinfraKey, veoPrompt, clip, png)

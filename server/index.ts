@@ -376,7 +376,7 @@ function reloadScheduler(): void {
 let videoChain: Promise<void> = Promise.resolve()
 async function runVideoGen(
   ideaId: number,
-  opts: { profile?: string; autoPublish?: boolean; imageStyle?: string; characterRefPath?: string; animateScenes?: boolean; dialogue?: boolean; noMusic?: boolean; videoType?: string; music?: string; lang?: 'fr' | 'en'; veoPaid?: boolean } = {}
+  opts: { profile?: string; autoPublish?: boolean; imageStyle?: string; characterRefPath?: string; animateScenes?: boolean; dialogue?: boolean; noMusic?: boolean; videoType?: string; music?: string; lang?: 'fr' | 'en'; quality?: 'seedance' | 'veo' } = {}
 ): Promise<number | null> {
   const idea = repo.getIdea(ideaId)
   if (!idea) return null
@@ -488,11 +488,10 @@ async function runVideoGen(
       burnSubtitles: repo.getSetting('repro_subtitles') !== '0',
       // Source muette : on reproduit SANS voix (ni Veo parlé, ni TTS).
       mute: !!idea.mute,
-      // Au-delà du quota Veo GRATUIT, Veo payant (1,20 $/scène) n'est utilisé que
-      // sur demande EXPLICITE de cette génération (sélecteur « Qualité » de la
-      // carte d'idée) ; sinon on descend sur les moteurs économiques. Le réglage
-      // `veo_paid=1` reste un interrupteur global pour tout autoriser.
-      veoPaid: opts.veoPaid === true || repo.getSetting('veo_paid') === '1',
+      // Au-delà du quota Veo GRATUIT, un moteur PAYANT n'est utilisé que sur
+      // demande EXPLICITE de cette génération (sélecteur « Qualité » de la carte
+      // d'idée) ; sinon on descend sur les moteurs économiques.
+      paidEngine: opts.quality ?? (repo.getSetting('veo_paid') === '1' ? 'veo' : undefined),
       // Synchro labiale p-video sur nos voix (~0,16 $/scène) — activable une fois
       // le rendu validé sur les personnages illustrés.
       prunaLipsync: repo.getSetting('pruna_lipsync') === '1',
@@ -1962,10 +1961,11 @@ app.post('/api/ideas/:id/video', wrap((req, res) => {
   // Langue ET qualité choisies AU MOMENT de générer (sélecteurs de la carte
   // d'idée) — prioritaires sur les réglages mémorisés.
   const lang = req.body?.lang === 'en' ? 'en' as const : req.body?.lang === 'fr' ? 'fr' as const : undefined
-  // `veoPaid` : autorise Veo payant (~1,20 $/scène) POUR CETTE VIDÉO seulement,
-  // une fois le quota gratuit épuisé. Jamais implicite : c'est de l'argent.
-  const veoPaid = req.body?.veoPaid === true ? true : undefined
-  videoChain = videoChain.then(() => runVideoGen(id, { lang, veoPaid })).then(() => undefined, () => undefined)
+  // `quality` : moteur payant autorisé POUR CETTE VIDÉO une fois le quota gratuit
+  // épuisé ('seedance' ou 'veo'). Jamais implicite : c'est de l'argent.
+  const q = req.body?.quality
+  const quality = q === 'seedance' || q === 'veo' ? q : undefined
+  videoChain = videoChain.then(() => runVideoGen(id, { lang, quality })).then(() => undefined, () => undefined)
   res.json({ ok: true })
 }))
 
@@ -2146,6 +2146,7 @@ app.get('/api/veo/quota', wrap((_req, res) => res.json({
   deepinfra: !!getEncrypted('deepinfra_key'),
   pricing: {
     veoPaidScene: 1.2, // 0,15 $/s × 8 s (DeepInfra n'accepte pas de durée plus courte)
+    seedance2Scene: 0.84, // Seedance 2.0 : voix native + lip-sync + perso fidèle
     seedanceScene: 0.12, // ordre de grandeur mesuré (facturation en tokens)
     prunaScene: 0.16, // p-video ~0,02 $/s, durée calée sur la voix
     image: 0.028, // Qwen-Image-Edit avec planche de référence
