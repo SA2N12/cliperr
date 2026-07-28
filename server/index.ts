@@ -1155,6 +1155,14 @@ async function runAutopilotTick(force = false): Promise<void> {
         deepinfraKey: getEncrypted('deepinfra_key'),
         niche: topic,
         cta: ctaMapForProfile(user).niche ?? '',
+        // Anti-répétition, comme pour les vidéos : sans l'historique du compte,
+        // l'IA repropose ses sujets favoris (« La règle des 2 minutes » ×3).
+        recentTitles: repo
+          .listClips()
+          .filter((c) => c.profile === user && !!c.title)
+          .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
+          .slice(0, 30)
+          .map((c) => c.title as string),
         onProgress: (m: string) => emitLog(`Pilote auto (carrousel) : ${m}`)
       })
       if (usage) addSpend(model, usage)

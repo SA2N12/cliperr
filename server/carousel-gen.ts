@@ -33,7 +33,10 @@ export async function buildCarousel(
   niche: string,
   cta: string,
   /** Déroulé d'une vidéo source (mode Inspiration) : les diapos le suivent. */
-  source?: { title: string; hook: string; script: string[] }
+  source?: { title: string; hook: string; script: string[] },
+  /** Titres déjà publiés sur ce compte (vidéos ET carrousels) — sans ça, l'IA
+   *  repropose les mêmes sujets : « La règle des 2 minutes » est sortie 3 fois. */
+  recentTitles?: string[]
 ): Promise<{ carousel: Carousel | null; usage: Usage | null }> {
   const client = new Anthropic({ apiKey: anthropicKey, maxRetries: 5 })
   const tool = {
@@ -83,7 +86,24 @@ Légende : 1 à 2 phrases + une question.${cta ? `\nTermine la légende par ce C
 Réponds uniquement via l'outil carrousel.`
     : ''
 
-  const prompt = sourcePrompt || `Tu écris un CARROUSEL PHOTO pour TikTok (des images qu'on fait défiler, pas une vidéo) dans la niche : « ${niche} ».
+  // Anti-répétition : sans cette liste, l'IA repropose ses sujets « favoris » de la
+  // niche à chaque appel (constaté : 3 carrousels « La règle des 2 minutes »).
+  const avoidBlock =
+    recentTitles && recentTitles.length
+      ? `\n\n⛔ SUJETS DÉJÀ PUBLIÉS RÉCEMMENT SUR CE COMPTE (vidéos ET carrousels) :\n${recentTitles
+          .slice(0, 30)
+          .map((t) => `- ${t}`)
+          .join('\n')}
+
+Deux interdits, le second est le plus important :
+1. NE traite PAS ces sujets, même reformulés ou sous un autre angle.
+2. NE RÉUTILISE PAS LEUR MOULE DE TITRE. Repère le patron qui domine la liste
+   (« La règle des X minutes », « Le signal/le mystère de … », etc.) et écris un
+   titre qui n'y ressemble en RIEN — autre construction, autre entrée en matière.
+Choisis un sujet FRANCHEMENT différent de tout ce qui précède.`
+      : ''
+
+  const prompt = sourcePrompt || `Tu écris un CARROUSEL PHOTO pour TikTok (des images qu'on fait défiler, pas une vidéo) dans la niche : « ${niche} ».${avoidBlock}
 
 Le format carrousel se lit en silence : c'est le TEXTE sur l'image qui fait tout le travail.
 
@@ -172,6 +192,8 @@ export interface CarouselGenOptions {
   cta?: string
   /** Déroulé d'une vidéo source à transposer en diapos (mode Inspiration). */
   source?: { title: string; hook: string; script: string[] }
+  /** Titres récents du compte → l'IA ne repropose pas les mêmes sujets. */
+  recentTitles?: string[]
   onProgress?: (m: string) => void
 }
 
@@ -190,7 +212,8 @@ export async function generateCarousel(
     opts.anthropicModel || 'claude-haiku-4-5',
     opts.niche,
     opts.cta ?? '',
-    opts.source
+    opts.source,
+    opts.recentTitles
   )
   if (!carousel || !carousel.slides.length) throw new Error('Carrousel vide — réessaie')
 
