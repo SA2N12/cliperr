@@ -1053,8 +1053,13 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
   const [veoPaid, setVeoPaid] = useState(false)
   // Quota Veo du jour (vidéos parlées restantes, réparties sur fast/full/lite).
   // `deepinfra` : un repli payant sans plafond prend le relais à quota épuisé.
-  const [quota, setQuota] = useState<{ remainingVideos: number; remainingRequests: number; deepinfra: boolean } | null>(null)
-  const loadQuota = (): void => { api.veoQuota().then((q) => setQuota({ remainingVideos: q.remainingVideos, remainingRequests: q.remainingRequests, deepinfra: q.deepinfra })).catch(() => undefined) }
+  const [quota, setQuota] = useState<{
+    remainingVideos: number
+    remainingRequests: number
+    deepinfra: boolean
+    pricing: { veoPaidScene: number; seedanceScene: number; prunaScene: number; image: number; storyboard: number }
+  } | null>(null)
+  const loadQuota = (): void => { api.veoQuota().then((q) => setQuota({ remainingVideos: q.remainingVideos, remainingRequests: q.remainingRequests, deepinfra: q.deepinfra, pricing: q.pricing })).catch(() => undefined) }
   useEffect(loadQuota, [])
 
   useEffect(() => {
@@ -1113,6 +1118,21 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
     persistSaved(saved.filter((s) => s.url !== u))
     void inspire(u)
   }
+  // Estimation du COÛT de la génération, calculée AVANT de lancer : une scène par
+  // réplique de la source, les premières couvertes par le quota Veo gratuit, le
+  // reste au tarif du moteur choisi. Les tarifs viennent du serveur (source unique).
+  const estimate = (): { scenes: number; free: number; total: number } | null => {
+    if (!idea || !quota) return null
+    const scenes = Math.max(1, Math.min(60, (idea.script ?? []).length || 8))
+    const free = Math.max(0, Math.min(scenes, quota.remainingRequests))
+    const paid = scenes - free
+    const p = quota.pricing
+    const perPaid = veoPaid ? p.veoPaidScene : lang === 'en' ? p.seedanceScene : p.prunaScene
+    return { scenes, free, total: p.storyboard + scenes * p.image + paid * perPaid }
+  }
+  const est = estimate()
+  const money = (n: number): string => (n < 1 ? `${Math.round(n * 100)} ¢` : `${n.toFixed(2)} $`)
+
   const platformOf = (u: string): { icon: string; label: string } => {
     if (/tiktok\.com/i.test(u)) return { icon: 'music_note', label: 'TikTok' }
     if (/instagram\.com/i.test(u)) return { icon: 'photo_camera', label: 'Instagram' }
@@ -1254,19 +1274,22 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
           )}
 
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center', flexWrap: 'wrap' }}>
-            {/* Le déroulé affiché ci-dessus est l'ANALYSE de la source, toujours en
-                français. La traduction a lieu à la génération (storyboard) : on le
-                dit ici, sinon on croit que le mode anglais n'a pas été pris. */}
+            {/* Estimation AVANT de lancer : une scène par réplique de la source,
+                les premières couvertes par le quota Veo gratuit, le reste au tarif
+                du moteur choisi. (Le déroulé affiché plus haut reste en français :
+                la traduction a lieu à la génération.) */}
             <span className="muted small" style={{ marginRight: 'auto' }}>
-              {veoPaid && quota && quota.remainingVideos <= 0
-                ? <><b style={{ color: 'var(--bad)' }}>Quota gratuit épuisé : cette vidéo sera facturée</b> — ~1,20 $ par scène (Veo payant).</>
-                : veoPaid
-                  ? <>Veo tant qu’il reste du quota gratuit, puis <b>Veo payant (~1,20 $/scène)</b>.</>
-                  : quota && quota.remainingVideos <= 0
-                    ? 'Quota Veo gratuit épuisé : moteur économique (qualité moindre). Passe en 💎 pour rester en Veo.'
-                    : lang === 'en'
-                    ? 'Le déroulé ci-dessus reste en français : les répliques seront traduites en anglais à la génération (voix + sous-titres en anglais).'
-                    : 'Vidéo montée : voix + images + sous-titres.'}
+              {est ? (
+                <>
+                  <b style={est.total >= 1 ? { color: 'var(--bad)' } : undefined}>≈ {money(est.total)}</b>
+                  {' · '}{est.scenes} scène{est.scenes > 1 ? 's' : ''}
+                  {est.free > 0 && <> — {est.free} gratuite{est.free > 1 ? 's' : ''} (quota Veo)</>}
+                  {est.free < est.scenes && <>, {est.scenes - est.free} en {veoPaid ? <b>Veo payant</b> : 'moteur économique'}</>}
+                  {lang === 'en' && ' · dialogues traduits en anglais'}
+                </>
+              ) : lang === 'en'
+                ? 'Le déroulé ci-dessus reste en français : les répliques seront traduites en anglais à la génération.'
+                : 'Vidéo montée : voix + images + sous-titres.'}
             </span>
             {/* Langue des dialogues, choisie AU MOMENT de générer. EN : répliques
                 traduites, voix natives des moteurs (excellentes en anglais). */}

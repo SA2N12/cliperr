@@ -99,7 +99,9 @@ async function buildStoryboard(
   idea: ViralIdea,
   styleHint?: string,
   dialogue?: boolean,
-  reproMax = 8,
+  /** `undefined` = AUCUN plafond : une scène par étape de la source (fidélité
+   *  maximale). Un nombre force le regroupement (réglage `repro_max_scenes`). */
+  reproMax?: number,
   lang: 'fr' | 'en' = 'fr'
 ): Promise<{ scenes: Scene[]; cast: CastMember[]; usage: Usage | null }> {
   // Mode anglais (reproductions) : les répliques/voix off sont écrites en anglais
@@ -158,12 +160,11 @@ async function buildStoryboard(
   // template « niche » (hook choc / boucle / CTA) qui la dénaturerait. Peut être en
   // narration (une voix off) OU en dialogue (voix par personnage) selon la source.
   const reproduce = !!idea.reproduce
-  // Plafond de scènes pour une reproduction : un Reel très bavard peut donner 30+
-  // étapes → prompt trop long à générer (tool-call tronqué par max_tokens → storyboard
-  // vide) ET vidéo interminable/coûteuse (une image IA + un clip par scène). On
-  // regroupe alors. Configurable (réglage `repro_max_scenes`) : 8 par défaut,
-  // montable à 16-24 depuis que p-video rend la scène bien moins chère.
-  const REPRO_MAX = Math.max(4, Math.min(24, reproMax))
+  // Plus de plafond « produit » : par défaut on suit la source RÉPLIQUE PAR
+  // RÉPLIQUE (fidélité maximale — le regroupement faisait perdre des deux tiers
+  // du dialogue). Le 60 restant n'est qu'un garde-fou TECHNIQUE : au-delà, le
+  // tool-call dépasserait max_tokens et reviendrait tronqué (storyboard vide).
+  const REPRO_MAX = Math.max(4, Math.min(60, reproMax ?? ((idea.script ?? []).length || 8)))
   const steps = (idea.script ?? []).slice(0, REPRO_MAX)
   const grouped = (idea.script ?? []).length > REPRO_MAX
   const reproducePrompt = `Tu es monteur TikTok. On REPRODUIT FIDÈLEMENT une vidéo existante : garde son déroulé, son ordre, sa chute et son style. Ne la transforme PAS en vidéo « à la TikTok » (pas de hook choc réinventé, pas de boucle forcée, aucun CTA commentaire/partage si la source n'en a pas).
@@ -230,8 +231,9 @@ Pour chaque scène : ${dialogue ? 'la RÉPLIQUE (speaker + narration)' : 'la phr
     // « très détaillés » dépassait parfois 3000 tokens → tool-call tronqué → JSON
     // invalide → « Storyboard vide ». On laisse de la marge.
     // Assez de marge pour REPRO_MAX scènes détaillées (narration + imagePrompt +
-    // casting) sans troncature du tool-call (= storyboard vide).
-    max_tokens: Math.max(6000, 2000 + REPRO_MAX * 450),
+    // casting) sans troncature du tool-call (= storyboard vide). Plafonné à 32k :
+    // au-delà, certains modèles refusent la requête.
+    max_tokens: Math.min(32000, Math.max(6000, 2000 + REPRO_MAX * 450)),
     tools: [tool],
     tool_choice: { type: 'tool', name: 'storyboard' },
     messages: [{ role: 'user', content: prompt }]

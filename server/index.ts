@@ -2121,7 +2121,19 @@ app.post('/api/settings/groq', wrap((req, res) => {
 // Vue d'ensemble des fournisseurs externes : état (configuré ou non) en un appel.
 // Quota Veo du jour (répartition sur fast/full/lite) → « N vidéos restantes ».
 // `deepinfra` : un repli payant sans quota est branché → jamais bloqué à zéro.
-app.get('/api/veo/quota', wrap((_req, res) => res.json({ ...veoQuota(), deepinfra: !!getEncrypted('deepinfra_key') })))
+// `pricing` : tarifs unitaires observés, pour que l'interface estime le coût
+// AVANT de générer (source unique de vérité — ne pas les dupliquer côté client).
+app.get('/api/veo/quota', wrap((_req, res) => res.json({
+  ...veoQuota(),
+  deepinfra: !!getEncrypted('deepinfra_key'),
+  pricing: {
+    veoPaidScene: 1.2, // 0,15 $/s × 8 s (DeepInfra n'accepte pas de durée plus courte)
+    seedanceScene: 0.12, // ordre de grandeur mesuré (facturation en tokens)
+    prunaScene: 0.16, // p-video ~0,02 $/s, durée calée sur la voix
+    image: 0.028, // Qwen-Image-Edit avec planche de référence
+    storyboard: 0.05 // Claude (script + storyboard)
+  }
+})))
 
 app.get('/api/providers', wrap((_req, res) => {
   res.json({
