@@ -1250,7 +1250,14 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
           )}
 
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center', flexWrap: 'wrap' }}>
-            <span className="muted small" style={{ marginRight: 'auto' }}>Vidéo montée : voix + images + sous-titres.</span>
+            {/* Le déroulé affiché ci-dessus est l'ANALYSE de la source, toujours en
+                français. La traduction a lieu à la génération (storyboard) : on le
+                dit ici, sinon on croit que le mode anglais n'a pas été pris. */}
+            <span className="muted small" style={{ marginRight: 'auto' }}>
+              {lang === 'en'
+                ? 'Le déroulé ci-dessus reste en français : les répliques seront traduites en anglais à la génération (voix + sous-titres en anglais).'
+                : 'Vidéo montée : voix + images + sous-titres.'}
+            </span>
             {/* Langue des dialogues, choisie AU MOMENT de générer. EN : répliques
                 traduites, voix natives des moteurs (excellentes en anglais). */}
             <select
