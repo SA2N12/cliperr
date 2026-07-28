@@ -396,12 +396,12 @@ async function runVideoGen(
       // Choix manuel d'une piste précise pour ce bloc (prioritaire sur l'IA).
       musicTrack = join(musicDir, opts.music)
       emitIdeaVideo({ ideaId, status: 'running', message: `Musique : ${cleanName(opts.music)}` })
-    } else if (idea.reproduce && !idea.mute) {
+    } else if (idea.reproduce) {
       // Reproduction fidèle : la bande-son fait partie de ce qu'on reproduit.
       // Plaquer une piste de la playlist par-dessus dénature la source — on ne
       // met donc AUCUNE musique, sauf demande explicite d'une piste précise.
-      // (Exception : source MUETTE — il n'y a aucune bande-son à préserver, et une
-      //  vidéo 100 % silencieuse ne tient pas sur TikTok → on remet la playlist.)
+      // (Vaut aussi pour une source muette : « muet » = sans VOIX, les bruits
+      //  d'ambiance générés avec la scène sont conservés tels quels.)
       emitIdeaVideo({ ideaId, status: 'running', message: 'Reproduction fidèle : pas de musique ajoutée.' })
     } else if (tracks.length && !opts.noMusic) {
       // Playlist du compte : on prend la piste suivante (rotation) → les vidéos

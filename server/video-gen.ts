@@ -788,7 +788,9 @@ export async function genVideoDeepinfra(
   dest: string,
   refImagePath: string,
   durationSec: number,
-  model = 'Pixverse/Pixverse-6-I2V'
+  model = 'Pixverse/Pixverse-6-I2V',
+  /** Source muette : on demande les BRUITS D'AMBIANCE (pas de voix) au modèle. */
+  withAmbientAudio = false
 ): Promise<void> {
   const r = await fetch(`${DEEPINFRA}/v1/inference/${model}`, {
     method: 'POST',
@@ -797,11 +799,22 @@ export async function genVideoDeepinfra(
       prompt,
       image: `data:image/png;base64,${(await readFile(refImagePath)).toString('base64')}`,
       quality: '720p',
-      duration: Math.max(1, Math.min(15, Math.round(durationSec)))
+      duration: Math.max(1, Math.min(15, Math.round(durationSec))),
+      ...(withAmbientAudio ? { generate_audio_switch: true } : {})
     })
   })
   if (!r.ok) throw new Error(`DeepInfra vidéo ${r.status} : ${(await r.text()).slice(0, 160)}`)
   await saveDeepinfraVideo(key, (await r.json()) as Record<string, unknown>, dest)
+}
+
+/** Le fichier contient-il une piste audio ? (clip d'animation avec ambiance ou non) */
+async function hasAudioStream(ffprobe: string, file: string): Promise<boolean> {
+  try {
+    const out = await runCapture(ffprobe, ['-v', 'error', '-select_streams', 'a', '-show_entries', 'stream=codec_type', '-of', 'csv=p=0', file])
+    return out.trim().length > 0
+  } catch {
+    return false
+  }
 }
 
 /** Durée d'un média en secondes (ffprobe). */
@@ -1037,16 +1050,23 @@ NO TEXT — CRITICAL: nothing written anywhere in the frame. No subtitles, no ca
         // Pas de lip-sync ici : on n'insiste PAS sur la bouche (sinon un
         // mouvement de lèvres non synchronisé se remarque). On mise sur
         // l'expression et les gestes ; les sous-titres portent la réplique.
-        const talking = sc.speaker
-          ? ` The character "${sc.speaker}" is speaking, with a lively expressive face, subtle natural head motion and hand gestures.`
+        const talking = opts.mute
+          ? ''
+          : sc.speaker
+            ? ` The character "${sc.speaker}" is speaking, with a lively expressive face, subtle natural head motion and hand gestures.`
+            : ''
+        // Source muette : PERSONNE ne parle, mais les bruits de la scène (pas,
+        // objets, ambiance) font partie de ce qu'on reproduit → on les demande.
+        const ambient = opts.mute
+          ? ' Nobody speaks: no dialogue, no voice, no narration, no singing — only the natural diegetic sounds of the scene (objects, movement, room ambience).'
           : ''
-        const animPrompt = `Animate this exact scene keeping the characters and art style strictly identical: ${sc.imagePrompt}.${talking} Natural lively character motion, smooth cinematic camera movement, vivid colors, no text.`
+        const animPrompt = `Animate this exact scene keeping the characters and art style strictly identical: ${sc.imagePrompt}.${talking} Natural lively character motion, smooth cinematic camera movement, vivid colors, no text.${ambient}`
         const target = join(work, `v${i}.mp4`)
         // DeepInfra (fournisseur centralisé) d'abord, fal.ai en repli.
         if (opts.deepinfraKey) {
-          log?.(`Scène ${i + 1}/${scenes.length} — animation vidéo (DeepInfra)…`)
+          log?.(`Scène ${i + 1}/${scenes.length} — animation vidéo (DeepInfra)${opts.mute ? ' + ambiance sonore' : ''}…`)
           try {
-            await genVideoDeepinfra(opts.deepinfraKey, animPrompt, target, png, dur > 6.5 ? 10 : 5)
+            await genVideoDeepinfra(opts.deepinfraKey, animPrompt, target, png, dur > 6.5 ? 10 : 5, undefined, !!opts.mute)
             animClip = target
           } catch (e) {
             log?.(`Scène ${i + 1}/${scenes.length} — DeepInfra indisponible (${e instanceof Error ? e.message : String(e)})${opts.falKey ? ' → fal.ai' : ' → image animée'}`)
@@ -1086,6 +1106,30 @@ NO TEXT — CRITICAL: nothing written anywhere in the frame. No subtitles, no ca
 
       log?.(`Scène ${i + 1}/${scenes.length} — montage…`)
       await writeFile(ass, sceneAss(subText, dur))
+      if (animClip && opts.mute) {
+        // Source MUETTE : aucune voix à caler → on garde le clip TEL QUEL (pas de
+        // setpts) avec SA piste d'ambiance si le modèle en a produit une ; sinon
+        // la piste silencieuse, pour que toutes les scènes aient bien de l'audio
+        // (le concat final l'exige).
+        const clipDur = await mediaDuration(ctx.bin.ffprobe, animClip)
+        const ambient = await hasAudioStream(ctx.bin.ffprobe, animClip)
+        await writeFile(ass, sceneAss(subText, clipDur))
+        await run(ctx.bin.ffmpeg, [
+          '-y', '-loglevel', 'error',
+          '-i', animClip,
+          ...(ambient ? [] : ['-i', mp3]),
+          '-filter_complex',
+          `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,setsar=1${subFilter}[v]`,
+          '-map', '[v]', '-map', ambient ? '0:a' : '1:a',
+          '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+          '-c:a', 'aac', '-ar', '44100', '-ac', '2', '-b:a', '128k',
+          '-shortest',
+          scene
+        ])
+        if (!ambient) log?.(`Scène ${i + 1}/${scenes.length} — pas d’ambiance sonore fournie par le modèle (scène silencieuse)`)
+        sceneFiles.push(scene)
+        continue
+      }
       if (animClip && lipSynced) {
         // Clip DÉJÀ synchronisé (bouche calée sur la voix) : on garde la vidéo
         // TELLE QUELLE — surtout PAS de setpts (ça désynchroniserait les lèvres)
