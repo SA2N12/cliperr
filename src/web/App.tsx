@@ -1049,14 +1049,14 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
   const changeLang = (v: 'fr' | 'en'): void => { setLang(v); void api.setFlag('repro_lang', v).catch(() => undefined) }
   // Qualité des scènes parlées une fois le quota Veo GRATUIT épuisé. Jamais
   // mémorisé : un choix qui coûte de l'argent doit être refait sciemment.
-  const [quality, setQuality] = useState<'eco' | 'seedance' | 'veo'>('eco')
+  const [quality, setQuality] = useState<'eco' | 'wan' | 'seedance' | 'veo'>('eco')
   // Quota Veo du jour (vidéos parlées restantes, réparties sur fast/full/lite).
   // `deepinfra` : un repli payant sans plafond prend le relais à quota épuisé.
   const [quota, setQuota] = useState<{
     remainingVideos: number
     remainingRequests: number
     deepinfra: boolean
-    pricing: { veoPaidScene: number; seedance2Scene: number; seedanceScene: number; prunaScene: number; image: number; storyboard: number }
+    pricing: { veoPaidScene: number; wanScene: number; seedance2Scene: number; seedanceScene: number; prunaScene: number; image: number; storyboard: number }
   } | null>(null)
   const loadQuota = (): void => { api.veoQuota().then((q) => setQuota({ remainingVideos: q.remainingVideos, remainingRequests: q.remainingRequests, deepinfra: q.deepinfra, pricing: q.pricing })).catch(() => undefined) }
   useEffect(loadQuota, [])
@@ -1129,6 +1129,7 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
     const perPaid =
       quality === 'veo' ? p.veoPaidScene
         : quality === 'seedance' ? p.seedance2Scene
+          : quality === 'wan' ? p.wanScene
           : lang === 'en' ? p.seedanceScene : p.prunaScene
     return { scenes, free, total: p.storyboard + scenes * p.image + paid * perPaid }
   }
@@ -1286,7 +1287,7 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
                   <b style={est.total >= 1 ? { color: 'var(--bad)' } : undefined}>≈ {money(est.total)}</b>
                   {' · '}{est.scenes} scène{est.scenes > 1 ? 's' : ''}
                   {est.free > 0 && <> — {est.free} gratuite{est.free > 1 ? 's' : ''} (quota Veo)</>}
-                  {est.free < est.scenes && <>, {est.scenes - est.free} en {quality === 'veo' ? <b>Veo payant</b> : quality === 'seedance' ? <b>Seedance 2.0</b> : 'moteur économique'}</>}
+                  {est.free < est.scenes && <>, {est.scenes - est.free} en {quality === 'veo' ? <b>Veo payant</b> : quality === 'seedance' ? <b>Seedance 2.0</b> : quality === 'wan' ? <b>Wan 2.7</b> : 'moteur économique'}</>}
                   {lang === 'en' && ' · dialogues traduits en anglais'}
                 </>
               ) : lang === 'en'
@@ -1310,11 +1311,12 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
             <select
               className="genai-lang"
               value={quality}
-              onChange={(e) => setQuality(e.target.value as 'eco' | 'seedance' | 'veo')}
+              onChange={(e) => setQuality(e.target.value as 'eco' | 'wan' | 'seedance' | 'veo')}
               disabled={launched}
               title="Moteur des scènes parlées UNE FOIS le quota Veo gratuit épuisé. Tant qu'il reste du quota, Veo est utilisé dans tous les cas. Seedance 2.0 : voix native + lip-sync + personnage fidèle, ~30 % moins cher que Veo."
             >
               <option value="eco">⚡ Économique</option>
+              <option value="wan">🎯 Wan 2.7 (nos voix + lip-sync)</option>
               <option value="seedance">✨ Seedance 2.0</option>
               <option value="veo">💎 Veo payant</option>
             </select>

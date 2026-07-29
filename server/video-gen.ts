@@ -65,9 +65,10 @@ export interface VideoGenOptions {
   groqKey?: string | null
   /** Débit de parole (0.7–1.2, défaut 1.15). Réglage `speech_speed`. */
   speechSpeed?: number
-  /** Moteur PAYANT autorisé une fois le quota Veo gratuit épuisé : 'seedance'
-   *  (~0,84 $/scène) ou 'veo' (~1,20 $). Absent = repli économique (~0,30 $). */
-  paidEngine?: 'seedance' | 'veo'
+  /** Moteur PAYANT autorisé une fois le quota Veo gratuit épuisé : 'wan' (~0,50 $
+   *  /scène, NOS voix + lip-sync), 'seedance' (~0,84 $) ou 'veo' (~1,20 $).
+   *  Absent = repli économique Pixverse (~0,22 $, sans lip-sync). */
+  paidEngine?: 'wan' | 'seedance' | 'veo'
   /** Synchro labiale p-video (0,02 $/s) calée sur nos voix, à la place de
    *  l'animation muette. Nécessite `publishPublic` (le modèle exige des URL). */
   prunaLipsync?: boolean
@@ -852,6 +853,35 @@ async function saveDeepinfraVideo(key: string, j: Record<string, unknown>, dest:
 // AUDIO fournie → vraie synchro labiale sur NOS voix ElevenLabs (constantes), pour
 // 0,02 $/s au lieu de 0,15 $/s (Veo). ⚠️ Le modèle va chercher l'image et l'audio
 // LUI-MÊME par URL : il refuse le base64 → d'où les fichiers publics éphémères. ──
+// ── Wan 2.7 (Alibaba, via DeepInfra) : LE meilleur rapport qualité/prix pour une
+// scène parlée. `first_frame` conserve le personnage à l'identique, et
+// `driving_audio` cale le lip-sync sur NOTRE piste vocale — donc nos voix
+// ElevenLabs, constantes par personnage, au lieu d'une voix réinventée par le
+// modèle. 0,10 $/s (≈ 0,50 $ les 5 s), contre 0,15 $/s pour Veo.
+// ⚠️ Les deux entrées exigent des URL : le base64 dépasse leur limite de taille.
+export async function genVideoWan27(
+  key: string,
+  prompt: string,
+  dest: string,
+  firstFrameUrl: string,
+  drivingAudioUrl: string
+): Promise<void> {
+  const r = await fetch(`${DEEPINFRA}/v1/inference/Wan-AI/Wan2.7-I2V`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      prompt,
+      negative_prompt: 'text, subtitles, captions, watermark, logo, timestamp, letters, numbers',
+      first_frame: firstFrameUrl,
+      // La durée est dictée par l'audio : ne PAS envoyer `duration` (400 sinon).
+      driving_audio: drivingAudioUrl,
+      resolution: '720P'
+    })
+  })
+  if (!r.ok) throw new Error(`Wan 2.7 ${r.status} : ${(await r.text()).slice(0, 160)}`)
+  await saveDeepinfraVideo(key, (await r.json()) as Record<string, unknown>, dest)
+}
+
 export const DI_PRUNA_MODEL = 'PrunaAI/p-video'
 export async function genVideoPruna(
   key: string,
@@ -1412,8 +1442,8 @@ NO TEXT — CRITICAL: nothing written anywhere in the frame. No subtitles, no ca
       // p-video : anime l'image EN SE CALANT SUR notre piste vocale → vraie synchro
       // labiale avec des voix constantes, pour ~7× moins cher qu'une scène Veo.
       // (Le modèle télécharge image + audio par URL : d'où la publication éphémère.)
-      if (opts.animateScenes && !opts.mute && opts.prunaLipsync && opts.deepinfraKey && opts.publishPublic) {
-        log?.(`Scène ${i + 1}/${scenes.length} — scène parlée (p-video, synchro sur la voix)…`)
+      if (opts.animateScenes && !opts.mute && opts.paidEngine === 'wan' && opts.deepinfraKey && opts.publishPublic) {
+        log?.(`Scène ${i + 1}/${scenes.length} — scène parlée (Wan 2.7, synchro sur la voix)…`)
         const pub: { url: string; cleanup: () => Promise<void> }[] = []
         try {
           const img = await opts.publishPublic(png)
@@ -1421,9 +1451,9 @@ NO TEXT — CRITICAL: nothing written anywhere in the frame. No subtitles, no ca
           if (!img || !aud) throw new Error('aucune URL publique configurée (PUBLIC_URL)')
           pub.push(img, aud)
           const target = join(work, `v${i}.mp4`)
-          await genVideoPruna(
+          await genVideoWan27(
             opts.deepinfraKey,
-            `Animate this exact scene, keeping the character and art style strictly identical to the first frame. The character speaks the provided audio with accurate lip-sync, expressive face and natural head motion. No on-screen text, no captions, no subtitles.`,
+            `The character speaks the provided audio with accurate lip-sync, expressive face and natural head motion. Keep the exact same character, outfit, colors and art style as the first frame. No on-screen text, no captions, no subtitles.`,
             target,
             img.url,
             aud.url
@@ -1431,7 +1461,7 @@ NO TEXT — CRITICAL: nothing written anywhere in the frame. No subtitles, no ca
           animClip = target
           lipSynced = true // clip DÉJÀ calé sur la voix → montage sans étirement
         } catch (e) {
-          log?.(`Scène ${i + 1}/${scenes.length} — p-video indisponible (${e instanceof Error ? e.message : String(e)}) → animation simple`)
+          log?.(`Scène ${i + 1}/${scenes.length} — Wan 2.7 indisponible (${e instanceof Error ? e.message : String(e)}) → animation simple`)
         } finally {
           for (const p of pub) await p.cleanup()
         }

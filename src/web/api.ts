@@ -179,7 +179,7 @@ export const api = {
   inspireIdea: (url: string, niche: string, mode: 'reproduce' | 'inspire') => post<{ idea: SavedIdea }>('/api/ideas/inspire', { url, niche, mode }),
   savedIdeas: () => req<{ ideas: SavedIdea[] }>('/api/ideas/saved'),
   deleteIdea: (id: number) => req(`/api/ideas/${id}`, { method: 'DELETE' }),
-  generateIdeaVideo: (id: number, lang?: 'fr' | 'en', quality?: 'eco' | 'seedance' | 'veo') =>
+  generateIdeaVideo: (id: number, lang?: 'fr' | 'en', quality?: 'eco' | 'wan' | 'seedance' | 'veo') =>
     post(`/api/ideas/${id}/video`, { ...(lang ? { lang } : {}), ...(quality && quality !== 'eco' ? { quality } : {}) }),
   veoQuota: () => req<{
     limit: number
@@ -188,7 +188,7 @@ export const api = {
     scenesPerVideo: number
     deepinfra: boolean
     perModel: { model: string; used: number; left: number }[]
-    pricing: { veoPaidScene: number; seedance2Scene: number; seedanceScene: number; prunaScene: number; image: number; storyboard: number }
+    pricing: { veoPaidScene: number; wanScene: number; seedance2Scene: number; seedanceScene: number; prunaScene: number; image: number; storyboard: number }
   }>('/api/veo/quota'),
   openaiStatus: () => req<{ has: boolean }>('/api/settings/openai'),
   setOpenaiKey: (key: string) => post('/api/settings/openai', { key }),

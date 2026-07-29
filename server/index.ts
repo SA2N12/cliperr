@@ -376,7 +376,7 @@ function reloadScheduler(): void {
 let videoChain: Promise<void> = Promise.resolve()
 async function runVideoGen(
   ideaId: number,
-  opts: { profile?: string; autoPublish?: boolean; imageStyle?: string; characterRefPath?: string; animateScenes?: boolean; dialogue?: boolean; noMusic?: boolean; videoType?: string; music?: string; lang?: 'fr' | 'en'; quality?: 'seedance' | 'veo' } = {}
+  opts: { profile?: string; autoPublish?: boolean; imageStyle?: string; characterRefPath?: string; animateScenes?: boolean; dialogue?: boolean; noMusic?: boolean; videoType?: string; music?: string; lang?: 'fr' | 'en'; quality?: 'wan' | 'seedance' | 'veo' } = {}
 ): Promise<number | null> {
   const idea = repo.getIdea(ideaId)
   if (!idea) return null
@@ -1964,7 +1964,7 @@ app.post('/api/ideas/:id/video', wrap((req, res) => {
   // `quality` : moteur payant autorisé POUR CETTE VIDÉO une fois le quota gratuit
   // épuisé ('seedance' ou 'veo'). Jamais implicite : c'est de l'argent.
   const q = req.body?.quality
-  const quality = q === 'seedance' || q === 'veo' ? q : undefined
+  const quality = q === 'wan' || q === 'seedance' || q === 'veo' ? q : undefined
   videoChain = videoChain.then(() => runVideoGen(id, { lang, quality })).then(() => undefined, () => undefined)
   res.json({ ok: true })
 }))
@@ -2146,6 +2146,7 @@ app.get('/api/veo/quota', wrap((_req, res) => res.json({
   deepinfra: !!getEncrypted('deepinfra_key'),
   pricing: {
     veoPaidScene: 1.2, // 0,15 $/s × 8 s (DeepInfra n'accepte pas de durée plus courte)
+    wanScene: 0.5, // Wan 2.7 : NOS voix + lip-sync + perso identique (0,10 $/s)
     seedance2Scene: 0.84, // Seedance 2.0 : voix native + lip-sync + perso fidèle
     seedanceScene: 0.12, // ordre de grandeur mesuré (facturation en tokens)
     prunaScene: 0.16, // p-video ~0,02 $/s, durée calée sur la voix
