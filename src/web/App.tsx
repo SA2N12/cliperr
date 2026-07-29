@@ -146,6 +146,17 @@ function GenerationsWidget({ sources, progress, ideaVideo }: { sources: SourceDT
 
 type PubProfile = { username: string; handle: string | null; avatarUrl: string | null }
 
+function Avatar({ url, name, size = 22 }: { url: string | null; name?: string; size?: number }): JSX.Element {
+  const [err, setErr] = useState(false)
+  return url && !err ? (
+    <img src={url} alt="" width={size} height={size} referrerPolicy="no-referrer" onError={() => setErr(true)} style={{ borderRadius: '50%', objectFit: 'cover', flexShrink: 0, background: '#000' }} />
+  ) : (
+    <span style={{ width: size, height: size, borderRadius: '50%', background: 'var(--accent)', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.5, fontWeight: 600, flexShrink: 0 }}>
+      {(name?.[0] ?? 'C').toUpperCase()}
+    </span>
+  )
+}
+
 function GlobeBadge({ size = 22 }: { size?: number }): JSX.Element {
   return (
     <span style={{ width: size, height: size, borderRadius: '50%', background: 'var(--accent)', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -163,7 +174,9 @@ function ProfilePicker({ profiles, active, onChange }: { profiles: PubProfile[];
     <div style={{ position: 'relative' }}>
       {/* Style Supabase : sans bordure ni fond, fond au survol, double chevron. */}
       <button className="tb-picker" onClick={() => setOpen((o) => !o)}>
-        {isAll && <GlobeBadge />}
+        {/* Pas de pastille ici : le libellé suffit à dire où l'on est, et la barre
+            du haut reste sobre. Les vignettes restent dans la liste déroulante,
+            où elles servent à repérer un compte d'un coup d'œil. */}
         {isAll ? 'Tous les comptes' : cur ? label(cur) : '—'}
         <svg className="tb-chev" width="10" height="14" viewBox="0 0 10 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
           <path d="M2 5.5L5 2.5L8 5.5" />
@@ -194,6 +207,7 @@ function ProfilePicker({ profiles, active, onChange }: { profiles: PubProfile[];
                 onClick={() => { onChange(p.username); setOpen(false) }}
                 style={{ display: 'flex', alignItems: 'center', gap: 8, background: p.username === active ? 'var(--accent-soft-2)' : undefined }}
               >
+                <Avatar url={p.avatarUrl} name={p.username} />
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label(p)}</span>
               </button>
             ))}
@@ -781,6 +795,7 @@ function Dashboard({ scope }: { scope: string }): JSX.Element {
         <div className="page-head">
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <button className="btn icon-btn" onClick={() => setOpen(null)} title="Retour">←</button>
+            <Avatar url={open.avatarUrl} name={open.profile} size={36} />
             <div>
               <h1 style={{ fontSize: 22 }}>{open.handle ? '@' + open.handle : open.profile}</h1>
               <p>Détail par vidéo (publiées via Cliperr)</p>
@@ -978,6 +993,7 @@ function Dashboard({ scope }: { scope: string }): JSX.Element {
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span className="rank">{i + 1}</span>
+                      <Avatar url={p.avatarUrl} name={p.profile} size={22} />
                       <div style={{ flex: 1, minWidth: 0, lineHeight: 1.25 }}>
                         <div style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {p.handle ? '@' + p.handle : p.profile}
@@ -2012,6 +2028,7 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
       <div className="sp-head line">
         <div className="row" style={{ gap: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+            <Avatar url={slot.avatarUrl} name={slot.user} size={32} />
             <div style={{ minWidth: 0 }}>
               <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{slot.handle ? '@' + slot.handle : slot.user}</div>
               <div className="muted small">Vidéo n°{slot.ordinal} du jour</div>
@@ -2311,6 +2328,7 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
         <div className="sp-head">
           <div className="row" style={{ marginBottom: 14, gap: 8 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+              <Avatar url={profile?.avatarUrl ?? null} name={user} size={34} />
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile?.handle ? '@' + profile.handle : user}</div>
                 {/* Cadence : info en lecture seule (elle se règle sur le planning) —
@@ -2561,6 +2579,7 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
             <MIcon name={s.music === 'none' ? 'music_off' : 'music_note'} size={13} />
           )}
         </div>
+        {!opts?.hideAvatar && <Avatar url={s.avatarUrl} name={s.user} size={30} />}
         {!opts?.hideAvatar && (
           <div className="muted small" style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {s.handle ? '@' + s.handle : s.user}
@@ -2746,6 +2765,7 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
                   >
                     <MIcon name="drag_indicator" size={16} />
                   </span>
+                  <Avatar url={a.avatarUrl} name={u} size={32} />
                   <div style={{ minWidth: 0, flex: 1 }}>
                     {/* Nom en entier (pas d'ellipsis) : la colonne est assez large. */}
                     <div className="small" style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>{a.handle ? '@' + a.handle : u}</div>
