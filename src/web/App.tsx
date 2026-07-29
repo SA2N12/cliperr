@@ -2632,7 +2632,7 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
   // Écart appliqué aux lignes traversées = hauteur de la ligne saisie + le gap
   // de la colonne, pour qu'elles libèrent exactement sa place. La MÊME constante
   // sert au `gap` CSS de la colonne : les deux ne peuvent pas diverger.
-  const GAP = 10
+  const GAP = 8
   const startDrag = (e: ReactPointerEvent<HTMLElement>, index: number): void => {
     if (e.button !== 0) return
     e.preventDefault()
@@ -2688,9 +2688,9 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
 
   return (
     <div className="card ap-plan-card">
-      <div className="row" style={{ marginBottom: 4 }}>
+      <div className="row" style={{ marginBottom: 0 }}>
         <div>
-          <div style={{ display: 'inline-flex', gap: 3, background: 'var(--panel-2)', borderRadius: 0, padding: 3, marginBottom: 7 }}>
+          <div style={{ display: 'inline-flex', gap: 3, background: 'var(--panel-2)', borderRadius: 0, padding: 3, marginBottom: 5 }}>
             {([[0, 'Aujourd’hui'], [1, 'Demain']] as const).map(([d, lbl]) => (
               <button
                 key={d}
@@ -2740,7 +2740,7 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
         </div>
       </div>
       {groupByAccount ? (
-        <div className="ap-rows" style={{ display: 'flex', flexDirection: 'column', gap: GAP, marginTop: 10 }}>
+        <div className="ap-rows" style={{ display: 'flex', flexDirection: 'column', gap: GAP, marginTop: 6 }}>
           {ordered.map((a, accIdx) => {
             const u = a.user
             const userSlots = slots.filter((s) => s.user === u)

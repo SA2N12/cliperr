@@ -546,6 +546,8 @@ button {
 }
 .ap-fit > .page-head {
   flex-shrink: 0;
+  /* Chaque pixel repris ici est un pixel rendu aux lignes de comptes. */
+  margin-bottom: 10px;
 }
 .ap-fit > .ap-plan-card {
   flex: 1;
@@ -553,6 +555,10 @@ button {
   display: flex;
   flex-direction: column;
   margin-bottom: 0;
+  /* Marge verticale resserrée (18 → 12) : sur un écran 1080p avec la mise à
+     l'échelle Windows à 125 %, la fenêtre ne fait que ~740 px de haut et les
+     5 comptes n'y tenaient pas. Marge horizontale inchangée. */
+  padding: 12px 18px;
 }
 .ap-fit .ap-rows {
   flex: 1;
