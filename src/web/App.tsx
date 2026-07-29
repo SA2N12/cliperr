@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type MouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useId, useRef, useState, type ChangeEvent, type CSSProperties, type MouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import {
   api,
   subscribe,
@@ -59,13 +59,22 @@ function Icon({ name, size = 18 }: { name: string; size?: number }): JSX.Element
 }
 
 function Logo({ size = 26 }: { size?: number }): JSX.Element {
+  // Identifiant de dégradé UNIQUE par instance : le logo est rendu à deux
+  // endroits, et deux `<linearGradient id="...">` identiques dans le même
+  // document feraient pointer les deux marques sur la première définition.
+  const grad = `cliperr-grad-${useId()}`
   return (
-    <svg width={size} height={size} viewBox="210 40 260 260" xmlns="http://www.w3.org/2000/svg" aria-label="Cliperr" style={{ display: 'block', flexShrink: 0 }}>
-      <rect x="210" y="40" width="260" height="260" rx="40" fill="#0a0a0d" />
-      <g transform="translate(340,170) rotate(-22)" fill="none" stroke="#fff" strokeWidth="16" strokeLinecap="round">
+    <svg width={size} height={size} viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Cliperr" style={{ display: 'block', flexShrink: 0 }}>
+      <defs>
+        <linearGradient id={grad} x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#6EE7B7" />
+          <stop offset="100%" stopColor="#3ECF8E" />
+        </linearGradient>
+      </defs>
+      <g transform="translate(100,100) rotate(-22)" fill="none" stroke={`url(#${grad})`} strokeWidth="22" strokeLinecap="round">
         <path d="M 10.4,-59.1 A 60,60 0 1 0 10.4,59.1" />
-        <path d="M 35.3,-48.5 A 60,60 0 0 1 60,0" />
-        <path d="M 53.9,26.3 A 60,60 0 0 1 35.3,48.5" />
+        <path d="M 39.4,-45.3 A 60,60 0 0 1 59.8,-5.2" />
+        <path d="M 53.9,26.3 A 60,60 0 0 1 39.4,45.3" />
       </g>
     </svg>
   )
