@@ -382,17 +382,38 @@ export async function listElevenVoices(key: string): Promise<{ id: string; name:
   return (j.voices ?? []).map((v) => ({ id: v.voice_id, name: v.name }))
 }
 
-/** Voix du compte avec genre + LANGUE (labels ElevenLabs) → casting par personnage. */
+/** Voix du compte avec genre + LANGUE (labels ElevenLabs) → casting par personnage.
+ *  La langue n'est PAS toujours dans `labels.language` : les voix « premade » la
+ *  portent là, mais une voix importée de la Voice Library l'expose plutôt dans son
+ *  `locale` (« fr-FR ») ou dans `verified_languages`. On lit les trois dans l'ordre
+ *  du plus fiable au moins fiable — sinon ajouter des voix françaises au compte
+ *  resterait SANS EFFET, et en silence. */
 async function elevenVoicePool(key: string): Promise<{ id: string; name: string; gender: string; lang: string }[]> {
   const res = await fetch(`${ELEVEN}/voices`, { headers: { 'xi-api-key': key } })
   if (!res.ok) throw new Error(`ElevenLabs voices ${res.status}`)
-  const j = (await res.json()) as { voices?: { voice_id: string; name: string; labels?: Record<string, string> }[] }
-  return (j.voices ?? []).map((v) => ({
-    id: v.voice_id,
-    name: v.name,
-    gender: (v.labels?.gender ?? '').toLowerCase(),
-    lang: (v.labels?.language ?? '').toLowerCase()
-  }))
+  const j = (await res.json()) as {
+    voices?: {
+      voice_id: string
+      name: string
+      labels?: Record<string, string>
+      locale?: string
+      verified_languages?: { language?: string; locale?: string }[]
+    }[]
+  }
+  return (j.voices ?? []).map((v) => {
+    // « fr-FR », « fr_CA » → « fr ». On garde le PREMIER code à deux lettres
+    // exploitable : les sources sont rangées de la plus fiable à la moins fiable.
+    const lang =
+      [
+        v.labels?.language,
+        v.labels?.locale,
+        v.locale,
+        ...(v.verified_languages ?? []).flatMap((l) => [l.language, l.locale])
+      ]
+        .map((c) => (c ?? '').toLowerCase().split(/[-_]/)[0])
+        .find((c) => /^[a-z]{2}$/.test(c)) ?? ''
+    return { id: v.voice_id, name: v.name, gender: (v.labels?.gender ?? '').toLowerCase(), lang }
+  })
 }
 /** Attribue à CHAQUE personnage une voix ElevenLabs DISTINCTE. Priorité aux voix
  *  FRANÇAISES (label language=fr) : la bibliothèque par défaut ne contient que des
@@ -1225,7 +1246,27 @@ export async function generateVideoFromIdea(
         const prefLang = opts.lang === 'en' ? 'en' : 'fr'
         if (!elevenFallbackVoice) elevenFallbackVoice = (pool.find((v) => v.lang === prefLang) ?? pool[0]).id
         elevenCast = assignElevenVoices(pool, cast, prefLang)
-        log?.(`Voix ElevenLabs par personnage : ${cast.map((c) => c.name).join(', ')}`)
+        // On NOMME la voix retenue pour chaque personnage : c'est la seule façon de
+        // voir, dans le journal, qu'un rôle est parti sur une voix d'une autre langue.
+        const byId = new Map(pool.map((v) => [v.id, v]))
+        log?.(
+          `Voix ElevenLabs : ${cast
+            .map((c) => {
+              const v = byId.get(elevenCast.get(c.name.trim().toLowerCase()) ?? '')
+              return `${c.name} → ${v ? `${v.name} [${v.lang || 'langue inconnue'}]` : '?'}`
+            })
+            .join(' · ')}`
+        )
+        // Aucune voix dans la langue demandée : le texte SERA lu avec un accent
+        // étranger. Ce n'est pas un bug du moteur, c'est la bibliothèque du compte
+        // qui est incomplète — on le dit, au lieu de laisser deviner à l'écoute.
+        if (!pool.some((v) => v.lang === prefLang)) {
+          log?.(
+            `⚠ Aucune voix « ${prefLang} » parmi les ${pool.length} voix du compte ElevenLabs — ` +
+              `le dialogue sera lu avec un accent étranger. Ajoute des voix ` +
+              `${prefLang === 'fr' ? 'françaises' : 'anglaises'} depuis la Voice Library ElevenLabs.`
+          )
+        }
       }
     } catch (e) {
       log?.(`ElevenLabs : liste des voix indisponible (${e instanceof Error ? e.message : String(e)}) → voix unique du compte`)
