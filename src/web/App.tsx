@@ -118,7 +118,7 @@ function GenerationsWidget({ sources, progress, ideaVideo }: { sources: SourceDT
   return (
     <div className="genw" style={{ position: 'fixed', right: 16, bottom: 16, zIndex: 60, width: open ? 330 : 'auto', maxWidth: 'calc(100vw - 32px)' }}>
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        <button onClick={() => setOpen((o) => !o)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', background: 'var(--accent)', color: '#fff', border: 0, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
+        <button onClick={() => setOpen((o) => !o)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', background: 'var(--accent)', color: '#fff', border: 0, cursor: 'pointer', fontWeight: 500, fontSize: 13 }}>
           <span className="dot" style={{ background: '#fff' }} />
           {items.length} génération{items.length > 1 ? 's' : ''} en cours
           <span style={{ marginLeft: 'auto', fontSize: 12 }}>{open ? '▾' : '▴'}</span>
@@ -128,7 +128,7 @@ function GenerationsWidget({ sources, progress, ideaVideo }: { sources: SourceDT
             {items.map((it) => (
               <div key={it.key}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                  <span className="small" style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.label}</span>
+                  <span className="small" style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.label}</span>
                   <span className="muted small">{Math.round(it.pct)}%</span>
                 </div>
                 <div className="muted small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: '2px 0 5px' }}>{it.msg}</div>
@@ -145,17 +145,6 @@ function GenerationsWidget({ sources, progress, ideaVideo }: { sources: SourceDT
 }
 
 type PubProfile = { username: string; handle: string | null; avatarUrl: string | null }
-
-function Avatar({ url, name, size = 22 }: { url: string | null; name?: string; size?: number }): JSX.Element {
-  const [err, setErr] = useState(false)
-  return url && !err ? (
-    <img src={url} alt="" width={size} height={size} referrerPolicy="no-referrer" onError={() => setErr(true)} style={{ borderRadius: '50%', objectFit: 'cover', flexShrink: 0, background: '#000' }} />
-  ) : (
-    <span style={{ width: size, height: size, borderRadius: '50%', background: 'var(--accent)', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.5, fontWeight: 700, flexShrink: 0 }}>
-      {(name?.[0] ?? 'C').toUpperCase()}
-    </span>
-  )
-}
 
 function GlobeBadge({ size = 22 }: { size?: number }): JSX.Element {
   return (
@@ -174,7 +163,7 @@ function ProfilePicker({ profiles, active, onChange }: { profiles: PubProfile[];
     <div style={{ position: 'relative' }}>
       {/* Style Supabase : sans bordure ni fond, fond au survol, double chevron. */}
       <button className="tb-picker" onClick={() => setOpen((o) => !o)}>
-        {isAll ? <GlobeBadge /> : <Avatar url={cur?.avatarUrl ?? null} name={cur?.username} />}
+        {isAll && <GlobeBadge />}
         {isAll ? 'Tous les comptes' : cur ? label(cur) : '—'}
         <svg className="tb-chev" width="10" height="14" viewBox="0 0 10 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
           <path d="M2 5.5L5 2.5L8 5.5" />
@@ -193,7 +182,7 @@ function ProfilePicker({ profiles, active, onChange }: { profiles: PubProfile[];
             >
               <GlobeBadge />
               <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.2 }}>
-                <span style={{ fontWeight: 600 }}>Tous les comptes</span>
+                <span style={{ fontWeight: 500 }}>Tous les comptes</span>
                 <span className="muted small">Vue d’ensemble</span>
               </span>
             </button>
@@ -205,7 +194,6 @@ function ProfilePicker({ profiles, active, onChange }: { profiles: PubProfile[];
                 onClick={() => { onChange(p.username); setOpen(false) }}
                 style={{ display: 'flex', alignItems: 'center', gap: 8, background: p.username === active ? 'var(--accent-soft-2)' : undefined }}
               >
-                <Avatar url={p.avatarUrl} name={p.username} />
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label(p)}</span>
               </button>
             ))}
@@ -793,7 +781,6 @@ function Dashboard({ scope }: { scope: string }): JSX.Element {
         <div className="page-head">
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <button className="btn icon-btn" onClick={() => setOpen(null)} title="Retour">←</button>
-            <Avatar url={open.avatarUrl} name={open.profile} size={36} />
             <div>
               <h1 style={{ fontSize: 22 }}>{open.handle ? '@' + open.handle : open.profile}</h1>
               <p>Détail par vidéo (publiées via Cliperr)</p>
@@ -817,13 +804,13 @@ function Dashboard({ scope }: { scope: string }): JSX.Element {
                 <div className="row" style={{ gap: 12, alignItems: 'center' }}>
                   {v.filePath && <video src={clipUrl(v.filePath)} muted preload="metadata" style={{ width: 46, borderRadius: 8, background: '#000', aspectRatio: '9 / 16', flexShrink: 0 }} />}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.title || `Vidéo #${v.clipId}`}</div>
+                    <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.title || `Vidéo #${v.clipId}`}</div>
                     {v.postUrl && <a href={v.postUrl} target="_blank" rel="noreferrer" className="small" style={{ color: 'var(--accent)' }}>Voir sur TikTok ↗</a>}
                   </div>
                   <div style={{ display: 'flex', gap: 16, flexShrink: 0 }}>
                     {[['Vues', v.views], ['Likes', v.likes], ['Comm.', v.comments], ['Part.', v.shares]].map(([l, n]) => (
                       <div key={l as string} style={{ textAlign: 'center' }}>
-                        <div style={{ fontWeight: 700 }}>{fmtNum(n as number)}</div>
+                        <div style={{ fontWeight: 600 }}>{fmtNum(n as number)}</div>
                         <div className="muted small">{l}</div>
                       </div>
                     ))}
@@ -991,9 +978,8 @@ function Dashboard({ scope }: { scope: string }): JSX.Element {
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span className="rank">{i + 1}</span>
-                      <Avatar url={p.avatarUrl} name={p.profile} size={22} />
                       <div style={{ flex: 1, minWidth: 0, lineHeight: 1.25 }}>
-                        <div style={{ fontWeight: 700, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <div style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {p.handle ? '@' + p.handle : p.profile}
                         </div>
                       </div>
@@ -1002,7 +988,7 @@ function Dashboard({ scope }: { scope: string }): JSX.Element {
                     <div style={{ display: 'flex', gap: 11, marginTop: 1, alignItems: 'baseline', lineHeight: 1.25 }}>
                       {[['vues', fmtNum(p.views), true], ['likes', fmtNum(p.likes), false], ['com.', fmtNum(p.comments), false], ['part.', fmtNum(p.shares), false]].map(([l, v, big]) => (
                         <span key={l as string} style={{ whiteSpace: 'nowrap' }}>
-                          <b style={{ fontWeight: 700, fontSize: big ? 15 : 13, color: big ? 'var(--accent-strong)' : undefined }}>{v}</b>
+                          <b style={{ fontWeight: 600, fontSize: big ? 15 : 13, color: big ? 'var(--accent-strong)' : undefined }}>{v}</b>
                           <span className="muted small" style={{ marginLeft: 3 }}>{l}</span>
                           {big === true && totals.views > 0 && (
                             <span className="muted small" style={{ marginLeft: 4 }}>({Math.round((p.views / totals.views) * 100)}%)</span>
@@ -1239,7 +1225,7 @@ function InspireTab({ toast }: { toast: (m: string) => void }): JSX.Element {
 
       {busy && (
         <div className="genai-progress clip-anim" style={{ marginTop: 12 }}>
-          <div className="small" style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div className="small" style={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}>
             <MIcon name="progress_activity" size={14} spin /> Téléchargement → transcription → analyse → écriture…
           </div>
           <div className="muted small" style={{ marginTop: 3 }}>1 à 2 minutes selon la durée de la vidéo source.</div>
@@ -1568,7 +1554,7 @@ function Clipage({ sources, clips, progress, onRefresh, toast }: { sources: Sour
                 onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files?.[0]; if (f) void uploadFile(f) }}
               >
                 <div className="dz-icon"><Icon name="upload" size={26} /></div>
-                <div style={{ fontWeight: 700, fontSize: 16 }}>{uploadPct !== null ? `Upload en cours… ${uploadPct}%` : 'Glisse ton fichier vidéo ici'}</div>
+                <div style={{ fontWeight: 600, fontSize: 16 }}>{uploadPct !== null ? `Upload en cours… ${uploadPct}%` : 'Glisse ton fichier vidéo ici'}</div>
                 <div className="small" style={{ marginTop: 5 }}>ou clique pour parcourir · mp4, mov, mkv, webm</div>
               </div>
               {uploadPct !== null && <div className="bar" style={{ marginTop: 12 }}><div style={{ width: `${uploadPct}%` }} /></div>}
@@ -1590,7 +1576,7 @@ function Clipage({ sources, clips, progress, onRefresh, toast }: { sources: Sour
           <div className="clip-selected">
             <div className="clip-selected-ic"><MIcon name="movie" size={20} /></div>
             <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ fontWeight: 700, fontSize: 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{newSource.title || newSource.url?.split(/[\\/]/).pop()}</div>
+              <div style={{ fontWeight: 600, fontSize: 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{newSource.title || newSource.url?.split(/[\\/]/).pop()}</div>
               <div className="muted small" style={{ marginTop: 2 }}>Vidéo prête{dur != null ? ` · ${fmtDur(dur)}` : ''}</div>
             </div>
             <button className="btn small" style={{ flexShrink: 0 }} onClick={() => setNewSource(null)}><MIcon name="cancel" size={14} /> Changer</button>
@@ -1603,7 +1589,7 @@ function Clipage({ sources, clips, progress, onRefresh, toast }: { sources: Sour
       <div className="card clip-config clip-anim" style={{ animationDelay: '0.1s' }}>
         {isLong ? (
           <div className="sp-note accent" style={{ marginBottom: 18 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, color: 'var(--text)', marginBottom: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 500, color: 'var(--text)', marginBottom: 8 }}>
               <MIcon name="movie" size={14} /> Vidéo longue ({fmtDur(dur!)}) — choisis la portion à cliper
             </div>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
@@ -1884,7 +1870,7 @@ function Clips({ clips, sources, onRefresh, toast, scope }: { clips: ClipDTO[]; 
       {list.length === 0 ? (
         <div className="card" style={{ textAlign: 'center', padding: 36 }}>
           <div className="dz-icon" style={{ margin: '0 auto 12px' }}><Icon name={tab === 'published' ? 'send' : 'clips'} size={24} /></div>
-          <div style={{ fontWeight: 600 }}>
+          <div style={{ fontWeight: 500 }}>
             {tab === 'published' ? 'Aucun clip publié pour l’instant' : 'Aucun clip en stock'}
           </div>
           <p className="muted small">
@@ -2026,9 +2012,8 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
       <div className="sp-head line">
         <div className="row" style={{ gap: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-            <Avatar url={slot.avatarUrl} name={slot.user} size={32} />
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{slot.handle ? '@' + slot.handle : slot.user}</div>
+              <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{slot.handle ? '@' + slot.handle : slot.user}</div>
               <div className="muted small">Vidéo n°{slot.ordinal} du jour</div>
             </div>
           </div>
@@ -2290,7 +2275,7 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
   // (le CTA appliqué à la légende dépend du type du bloc publié).
   const ctaField = (key: 'niche' | 'serie' | 'custom' | 'clip', label: string, ph: string): JSX.Element => (
     <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
-      <label className="muted small" style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>{label}</label>
+      <label className="muted small" style={{ display: 'block', marginBottom: 4, fontWeight: 500 }}>{label}</label>
       <input className="input-full" value={ctas[key] ?? ''} placeholder={ph} onChange={(e) => setCtas((c) => ({ ...c, [key]: e.target.value }))} />
     </div>
   )
@@ -2326,9 +2311,8 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
         <div className="sp-head">
           <div className="row" style={{ marginBottom: 14, gap: 8 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-              <Avatar url={profile?.avatarUrl ?? null} name={user} size={34} />
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile?.handle ? '@' + profile.handle : user}</div>
+                <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile?.handle ? '@' + profile.handle : user}</div>
                 {/* Cadence : info en lecture seule (elle se règle sur le planning) —
                     remontée ici depuis l'ancien onglet « Général ». */}
                 <div className="muted small" title="S'ajuste sur le planning : bouton + en bout de ligne pour ajouter une vidéo, 🗑 Supprimer sur un bloc pour en retirer une.">
@@ -2358,7 +2342,7 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
             {/* Voix off du compte : une voix différente par compte diversifie le "son"
                 (utile contre la détection de contenu IA) et casse l'effet monotone. */}
             <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
-              <label className="muted small" style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>Voix off du compte</label>
+              <label className="muted small" style={{ display: 'block', marginBottom: 4, fontWeight: 500 }}>Voix off du compte</label>
               <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
                 {/* Les deux familles cohabitent : le fournisseur découle de la voix choisie. */}
                 <select className="input-full" style={{ flex: 1 }} value={voice} onChange={(e) => setVoice(e.target.value)}>
@@ -2380,7 +2364,7 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
             {/* Playlist : réglage du COMPTE (elle sert aussi aux séries dont le bloc
                 impose une piste) — logée ici, l'onglet principal du compte. */}
             <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
-              <label className="muted small" style={{ display: 'block', marginBottom: 8, fontWeight: 600 }}>Musique du compte</label>
+              <label className="muted small" style={{ display: 'block', marginBottom: 8, fontWeight: 500 }}>Musique du compte</label>
               {tracks.length === 0 ? (
                 <div className="muted small">Aucune musique disponible — ajoute des pistes dans Réglages → Musique, ou importe un MP3 depuis un bloc du planning.</div>
               ) : (
@@ -2397,7 +2381,7 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
                             style={{ flexShrink: 0 }}
                           />
                           {/* Le numéro montre l'ordre de passage dans la rotation. */}
-                          {i >= 0 && <span className="ap-time" style={{ fontSize: 11, fontWeight: 700, color: 'var(--ap-green-deep)', flexShrink: 0 }}>{i + 1}</span>}
+                          {i >= 0 && <span className="ap-time" style={{ fontSize: 11, fontWeight: 600, color: 'var(--ap-green-deep)', flexShrink: 0 }}>{i + 1}</span>}
                           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{trackLabel(t)}</span>
                         </label>
                       )
@@ -2445,7 +2429,7 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
                   const l = chanLine(r)
                   return (
                     <div key={r.channel} className="small" style={{ padding: '8px 10px', borderRadius: 8, background: 'var(--panel-2)', border: '1px solid var(--border)' }}>
-                      <span style={{ fontWeight: 600, color: l.color }}><MIcon name={l.icon} size={14} /> {r.channel}</span>{' '}
+                      <span style={{ fontWeight: 500, color: l.color }}><MIcon name={l.icon} size={14} /> {r.channel}</span>{' '}
                       <span style={{ color: l.color }}>{l.text}</span>
                     </div>
                   )
@@ -2577,7 +2561,6 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
             <MIcon name={s.music === 'none' ? 'music_off' : 'music_note'} size={13} />
           )}
         </div>
-        {!opts?.hideAvatar && <Avatar url={s.avatarUrl} name={s.user} size={30} />}
         {!opts?.hideAvatar && (
           <div className="muted small" style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {s.handle ? '@' + s.handle : s.user}
@@ -2598,7 +2581,7 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
           <div
             className="ap-time"
             title="Coût estimé de cette vidéo (aperçu — aucun débit pour l’instant)"
-            style={{ fontSize: 11, fontWeight: 700, padding: '1px 8px', borderRadius: 999, background: '#fff', border: '1px solid var(--border)', color: 'var(--muted)' }}
+            style={{ fontSize: 11, fontWeight: 600, padding: '1px 8px', borderRadius: 999, background: '#fff', border: '1px solid var(--border)', color: 'var(--muted)' }}
           >
             {s.credits} cr
           </div>
@@ -2763,10 +2746,9 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
                   >
                     <MIcon name="drag_indicator" size={16} />
                   </span>
-                  <Avatar url={a.avatarUrl} name={u} size={32} />
                   <div style={{ minWidth: 0, flex: 1 }}>
                     {/* Nom en entier (pas d'ellipsis) : la colonne est assez large. */}
-                    <div className="small" style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{a.handle ? '@' + a.handle : u}</div>
+                    <div className="small" style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>{a.handle ? '@' + a.handle : u}</div>
                     <div className="muted small" style={{ whiteSpace: 'nowrap' }}>{userSlots.length === 0 ? 'Aucune vidéo prévue' : `${uDone}/${userSlots.length} publiée${uDone > 1 ? 's' : ''}${uCredits > 0 ? ` · ${uCredits} cr` : ''}`}</div>
                   </div>
                   <button className="btn icon-btn" title="Réglages du compte (cadence, niche, CTA, série)" onClick={() => { setEditSlot(null); setCfgUser(u) }} style={{ width: 30, height: 30, flexShrink: 0 }}>
@@ -3076,7 +3058,7 @@ function IdeaCard({ idea, onCopy, meta, onDelete, onGenVideo, gen }: { idea: Vir
       <div className="row" style={{ alignItems: 'flex-start' }}>
         <div style={{ minWidth: 0 }}>
           {meta && <div className="muted small" style={{ marginBottom: 2 }}>{meta}</div>}
-          <div style={{ fontWeight: 700, fontSize: 16 }}>{idea.title}</div>
+          <div style={{ fontWeight: 600, fontSize: 16 }}>{idea.title}</div>
           <div className="small" style={{ marginTop: 4 }}><b>Hook :</b> {idea.hook}</div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
@@ -3086,13 +3068,13 @@ function IdeaCard({ idea, onCopy, meta, onDelete, onGenVideo, gen }: { idea: Vir
         </div>
       </div>
       {gen && (
-        <div className="small" style={{ marginTop: 8, fontWeight: 600, color: gen.status === 'error' ? '#b91c1c' : gen.status === 'done' ? 'var(--good)' : 'var(--accent-strong)' }}>
+        <div className="small" style={{ marginTop: 8, fontWeight: 500, color: gen.status === 'error' ? '#b91c1c' : gen.status === 'done' ? 'var(--good)' : 'var(--accent-strong)' }}>
           {gen.status === 'running' ? '⏳ ' : gen.status === 'done' ? '✅ ' : '⚠️ '}{gen.message}
         </div>
       )}
       <div className="muted small" style={{ marginTop: 6 }}><b>Pourquoi ça marche :</b> {idea.angle}</div>
       <div style={{ marginTop: 8 }}>
-        <div className="muted small" style={{ fontWeight: 600 }}>Script</div>
+        <div className="muted small" style={{ fontWeight: 500 }}>Script</div>
         <ol style={{ margin: '4px 0 0', paddingLeft: 18 }}>
           {idea.script.map((s, j) => <li key={j} className="small" style={{ marginBottom: 2 }}>{s}</li>)}
         </ol>
@@ -3266,7 +3248,7 @@ function Analyse({ toast }: { toast: (m: string) => void }): JSX.Element {
       {!res && !busy && (
         <div className="card" style={{ textAlign: 'center', padding: '40px 20px' }}>
           <div style={{ fontSize: 40, marginBottom: 10 }}>📊</div>
-          <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>Analyse de croissance</div>
+          <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 6 }}>Analyse de croissance</div>
           <div className="muted small" style={{ maxWidth: 460, margin: '0 auto 18px' }}>
             L’IA lit les stats réelles de tes 5 comptes (vues, engagement, trajectoire) et les titres de tes vidéos, puis te rend un plan d’action priorisé. Compte ~30 secondes.
           </div>
@@ -3276,7 +3258,7 @@ function Analyse({ toast }: { toast: (m: string) => void }): JSX.Element {
 
       {busy && (
         <div className="card" style={{ textAlign: 'center', padding: '40px 20px' }}>
-          <div style={{ fontWeight: 700, marginBottom: 6 }}>⏳ L’IA analyse tes comptes…</div>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>⏳ L’IA analyse tes comptes…</div>
           <div className="muted small">Lecture des stats, des titres et de la trajectoire de chaque compte. ~30 secondes.</div>
         </div>
       )}
@@ -3284,13 +3266,13 @@ function Analyse({ toast }: { toast: (m: string) => void }): JSX.Element {
       {res && !busy && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div className="card ap-banner">
-            <div className="muted small" style={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>Diagnostic</div>
+            <div className="muted small" style={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>Diagnostic</div>
             <div style={{ fontSize: 15, lineHeight: 1.5 }}>{res.diagnostic}</div>
           </div>
 
           <div className="card" style={{ borderColor: 'var(--ap-green-border)' }}>
-            <div className="muted small" style={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>⚡ Levier n°1</div>
-            <div style={{ fontSize: 15, lineHeight: 1.5, fontWeight: 600 }}>{res.levierPrincipal}</div>
+            <div className="muted small" style={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>⚡ Levier n°1</div>
+            <div style={{ fontSize: 15, lineHeight: 1.5, fontWeight: 500 }}>{res.levierPrincipal}</div>
           </div>
 
           <div>
@@ -3299,7 +3281,7 @@ function Analyse({ toast }: { toast: (m: string) => void }): JSX.Element {
               {res.recommandations.map((r, i) => (
                 <div key={i} className="card">
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
-                    <span style={{ fontWeight: 700 }}>{r.titre}</span>
+                    <span style={{ fontWeight: 600 }}>{r.titre}</span>
                     <span className="chip" style={{ fontSize: 10, color: impactColor(r.impact), background: 'var(--panel-2)' }}>impact {r.impact}</span>
                     <span className="chip" style={{ fontSize: 10 }}>{r.type === 'systeme' ? '⚙️ système' : '🖐 manuel'}</span>
                   </div>
@@ -3311,7 +3293,7 @@ function Analyse({ toast }: { toast: (m: string) => void }): JSX.Element {
 
           {res.aArreter.length > 0 && (
             <div className="card" style={{ background: '#fef2f2', border: '1px solid #fecaca' }}>
-              <div className="small" style={{ fontWeight: 700, color: '#b91c1c', marginBottom: 6 }}>🛑 À arrêter</div>
+              <div className="small" style={{ fontWeight: 600, color: '#b91c1c', marginBottom: 6 }}>🛑 À arrêter</div>
               <ul className="small" style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4, color: '#7f1d1d' }}>
                 {res.aArreter.map((s, i) => <li key={i}>{s}</li>)}
               </ul>
