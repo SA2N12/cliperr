@@ -157,14 +157,6 @@ function Avatar({ url, name, size = 22 }: { url: string | null; name?: string; s
   )
 }
 
-function GlobeBadge({ size = 22 }: { size?: number }): JSX.Element {
-  return (
-    <span style={{ width: size, height: size, borderRadius: '50%', background: 'var(--accent)', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-      <Icon name="globe" size={Math.round(size * 0.62)} />
-    </span>
-  )
-}
-
 function ProfilePicker({ profiles, active, onChange }: { profiles: PubProfile[]; active: string; onChange: (u: string) => void }): JSX.Element {
   const [open, setOpen] = useState(false)
   const isAll = active === ALL_SCOPE
@@ -187,13 +179,12 @@ function ProfilePicker({ profiles, active, onChange }: { profiles: PubProfile[];
         <>
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 80 }} />
           {/* Aligné à GAUCHE : le sélecteur vit dans la barre du haut, côté gauche. */}
-          <div className="card" style={{ position: 'absolute', left: 0, top: 'calc(100% + 6px)', zIndex: 81, minWidth: 240, padding: 6, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <div className="card tb-menu" style={{ position: 'absolute', left: 0, top: 'calc(100% + 6px)', zIndex: 81, minWidth: 240, padding: 6, display: 'flex', flexDirection: 'column', gap: 2 }}>
             <button
               className="nav-item"
               onClick={() => { onChange(ALL_SCOPE); setOpen(false) }}
               style={{ display: 'flex', alignItems: 'center', gap: 8, background: isAll ? 'var(--accent-soft-2)' : undefined }}
             >
-              <GlobeBadge />
               <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.2 }}>
                 <span style={{ fontWeight: 500 }}>Tous les comptes</span>
                 <span className="muted small">Vue d’ensemble</span>
@@ -207,7 +198,6 @@ function ProfilePicker({ profiles, active, onChange }: { profiles: PubProfile[];
                 onClick={() => { onChange(p.username); setOpen(false) }}
                 style={{ display: 'flex', alignItems: 'center', gap: 8, background: p.username === active ? 'var(--accent-soft-2)' : undefined }}
               >
-                <Avatar url={p.avatarUrl} name={p.username} />
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label(p)}</span>
               </button>
             ))}
