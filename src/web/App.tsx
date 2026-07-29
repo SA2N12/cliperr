@@ -268,7 +268,7 @@ function Login({ onOk }: { onOk: () => void }): JSX.Element {
     <div className="login-wrap">
       <div className="card login-card">
         <div className="brand" style={{ justifyContent: 'center' }}>
-<Logo size={34} /> Cliperr
+<Logo size={44} /> Cliperr
         </div>
         <p className="muted small" style={{ marginTop: 0 }}>Connecte-toi pour accéder au dashboard.</p>
         <input
@@ -415,7 +415,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
           recherche · compte du dashboard. */}
       <header className="topbar">
         {/* Logo centré dans une zone de la largeur du rail → aligné avec les icônes de la sidebar. */}
-        <div className="tb-logo"><Logo size={22} /></div>
+        <div className="tb-logo"><Logo size={30} /></div>
         {/* Sélecteur de comptes collé au bord droit de la sidebar (pas de « / »). */}
         {(pub?.profiles.length ?? 0) > 0 && (
           <ProfilePicker profiles={pub?.profiles ?? []} active={scope} onChange={changeScope} />
