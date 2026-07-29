@@ -570,6 +570,18 @@ button {
 .ap-fit .ap-rows::-webkit-scrollbar {
   display: none;
 }
+/* Les lignes se PARTAGENT la hauteur restante au lieu d'être figées : plus de
+   marge morte sous la dernière quand il reste de la place, et la mise en page
+   s'adapte d'elle-même au nombre de comptes — aucune hauteur en dur à retoucher.
+   `flex-shrink: 0` protège leur hauteur naturelle : au-delà, c'est .ap-rows qui
+   défile (comportement voulu), les lignes ne s'écrasent jamais. */
+.ap-fit .ap-rows > .ap-acc-row {
+  flex-grow: 1;
+  flex-shrink: 0;
+  /* Plafond : avec un seul compte configuré, une ligne ne doit pas s'étirer sur
+     toute la carte — elle paraîtrait vide. */
+  max-height: 148px;
+}
 
 /* ── Apparitions du tableau de bord ────────────────────────────────────────
    `backwards` (et non `both`) : une fois l'animation finie, les styles normaux
