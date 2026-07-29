@@ -195,8 +195,12 @@ button {
 .tb-menu > *:nth-child(n + 7) {
   animation-delay: 168ms;
 }
-/* Survol : glissement léger vers la droite, dans le sens d'entrée des lignes. */
+/* Survol : glissement léger vers la droite, dans le sens d'entrée des lignes.
+   Graisse allégée par rapport au `.nav-item` général (500), qui sert aussi à la
+   barre latérale : dans une liste courte et déjà cadrée par le menu, le poids
+   n'apporte rien — il alourdit. */
 .tb-menu .nav-item {
+  font-weight: 400;
   transition:
     background 140ms ease,
     transform 140ms cubic-bezier(0.16, 1, 0.3, 1);

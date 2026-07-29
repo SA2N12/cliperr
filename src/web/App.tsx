@@ -186,7 +186,10 @@ function ProfilePicker({ profiles, active, onChange }: { profiles: PubProfile[];
               style={{ display: 'flex', alignItems: 'center', gap: 8, background: isAll ? 'var(--accent-soft-2)' : undefined }}
             >
               <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.2 }}>
-                <span style={{ fontWeight: 500 }}>Tous les comptes</span>
+                {/* Pas de graisse en dur : c'est `.tb-menu .nav-item` qui décide,
+                    sinon l'inline gagnerait et l'entrée resterait plus grasse
+                    que les comptes juste en dessous. */}
+                <span>Tous les comptes</span>
                 <span className="muted small">Vue d’ensemble</span>
               </span>
             </button>
