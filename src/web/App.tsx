@@ -2555,7 +2555,9 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
         title={s.failed ? `Échec : ${s.error ?? ''} — clique pour changer / retenter` : s.done ? s.niche : `${s.niche} — clique pour personnaliser (heure, type)`}
         style={{
           width: opts?.hideAvatar ? 104 : 116,
-          padding: '12px 8px',
+          // Compact : c'est la hauteur de ce bloc qui commande celle des lignes de
+          // comptes, et les 5 lignes doivent tenir sans défilement (cf. .ap-fit).
+          padding: '7px 8px',
           borderRadius: 0,
           background: s.failed ? 'rgba(220,38,38,0.06)' : s.emptyStock ? 'rgba(217,119,6,0.06)' : s.done ? 'var(--ap-green-soft)' : '#fff',
           border: s.failed ? '1.5px solid var(--bad)' : s.emptyStock ? '1.5px dashed #d97706' : s.done ? '1.5px solid var(--ap-green-border)' : `1.5px solid ${generating || s.pinned || s.type ? 'var(--ap-green)' : 'var(--border)'}`,
@@ -2563,7 +2565,7 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          gap: 6,
+          gap: 3,
           fontFamily: 'inherit'
         }}
       >
@@ -2628,8 +2630,9 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
     : accountList
 
   // Écart appliqué aux lignes traversées = hauteur de la ligne saisie + le gap
-  // de la colonne (12px), pour qu'elles libèrent exactement sa place.
-  const GAP = 12
+  // de la colonne, pour qu'elles libèrent exactement sa place. La MÊME constante
+  // sert au `gap` CSS de la colonne : les deux ne peuvent pas diverger.
+  const GAP = 10
   const startDrag = (e: ReactPointerEvent<HTMLElement>, index: number): void => {
     if (e.button !== 0) return
     e.preventDefault()
@@ -2737,7 +2740,7 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
         </div>
       </div>
       {groupByAccount ? (
-        <div className="ap-rows" style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 14 }}>
+        <div className="ap-rows" style={{ display: 'flex', flexDirection: 'column', gap: GAP, marginTop: 10 }}>
           {ordered.map((a, accIdx) => {
             const u = a.user
             const userSlots = slots.filter((s) => s.user === u)
@@ -2748,7 +2751,7 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
                 key={u}
                 ref={(el) => { if (el) rowRefs.current.set(u, el); else rowRefs.current.delete(u) }}
                 className={`ap-acc-row${drag?.from === accIdx ? ' dragging' : ''}`}
-                style={{ display: 'flex', alignItems: 'center', gap: 12, borderTop: '1px solid var(--border)', paddingTop: 12, ...dragStyle(accIdx) }}
+                style={{ display: 'flex', alignItems: 'center', gap: 12, borderTop: '1px solid var(--border)', paddingTop: 8, ...dragStyle(accIdx) }}
               >
                 <div style={{ width: 236, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
                   {/* Poignée : seule zone « draggable », sinon le glissement partirait
