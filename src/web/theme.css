@@ -8,6 +8,10 @@
      de --accent, qui sert de FOND à des éléments à texte blanc : en thème
      sombre l’un doit s’éclaircir et l’autre pas. */
   --ink: #18181b;
+  /* Teintes de statut : fonds pâles des pastilles d’alerte. En dur, elles
+     restaient claires sous une encre thématisée devenue claire aussi. */
+  --bad-soft: #fdeaea;
+  --bad-border: #f0c9c9;
   --bg: #ffffff;
   --panel: #ffffff;
   --panel-2: #fafafa;
@@ -47,7 +51,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 a {
-  color: var(--accent);
+  color: var(--ink);
   text-decoration: none;
 }
 button {
@@ -848,15 +852,17 @@ button {
 }
 .clip-state {
   left: 8px;
+  /* Encre EN DUR : le fond l’est aussi (blanc opaque posé sur la vignette).
+     Une encre thématisée devenait blanche sur blanc en thème sombre. */
   background: rgba(255, 255, 255, 0.93);
-  color: var(--text);
+  color: #18181b;
 }
 .clip-state.ok {
   background: var(--ap-green-soft);
   color: var(--ap-green-deep);
 }
 .clip-state.bad {
-  background: #fee2e2;
+  background: var(--bad-soft);
   color: var(--bad);
 }
 .clip-kind {
@@ -881,7 +887,7 @@ button {
 }
 .clip-tags {
   font-size: 12px;
-  color: var(--accent);
+  color: var(--ink);
   margin-top: 3px;
   white-space: nowrap;
   overflow: hidden;
@@ -1259,7 +1265,7 @@ button {
   transition: color 0.12s ease;
 }
 .funnel-row:hover .go {
-  color: var(--accent);
+  color: var(--ink);
 }
 .chip.warn {
   background: #fef3c7;
@@ -2319,13 +2325,13 @@ textarea:focus {
 }
 .hist-badge.ok {
   color: var(--ap-green-strong);
-  background: #e9f9ef;
-  border-color: #b7ebc6;
+  background: var(--ap-green-soft);
+  border-color: var(--ap-green-border);
 }
 .hist-badge.bad {
   color: var(--bad);
-  background: #fdeaea;
-  border-color: #f6c9c9;
+  background: var(--bad-soft);
+  border-color: var(--bad-border);
 }
 .hist-n {
   font-weight: 600;
@@ -2499,7 +2505,7 @@ textarea:focus {
   padding: 1px 6px;
 }
 .prov-tag.alt {
-  color: var(--accent);
+  color: var(--ink);
   background: var(--accent-soft);
   border-color: var(--accent-soft-2);
 }
@@ -2652,8 +2658,8 @@ select.genai-lang {
 }
 .veo-quota.empty {
   color: var(--bad);
-  background: #fdf6f6;
-  border-color: #f0c9c9;
+  background: var(--bad-soft);
+  border-color: var(--bad-border);
 }
 .veo-quota .msym {
   color: inherit;
@@ -2869,7 +2875,7 @@ select.genai-lang {
 }
 .idea-tags .tag {
   font-size: 11.5px;
-  color: var(--accent);
+  color: var(--ink);
   background: var(--accent-soft);
   padding: 2px 7px;
 }
@@ -3275,10 +3281,12 @@ input[type='checkbox'] {
    détache quand même l'élément de son panneau. */
 :root[data-theme='dark'] {
   --accent: #3f3f46;
-  --accent-strong: #52525b;
+  --accent-strong: #fafafa;
   --accent-soft: #27272a;
   --accent-soft-2: #3f3f46;
   --ink: #e4e4e7;
+  --bad-soft: #2a1417;
+  --bad-border: #5c2b30;
   --bg: #0a0a0b;
   --panel: #131316;
   --panel-2: #1c1c20;
@@ -3328,4 +3336,11 @@ input[type='checkbox'] {
   .tb-theme svg {
     transition: none;
   }
+}
+
+/* Bouton primaire : son survol s'appuyait sur --accent-strong, devenu un jeton
+   de TEXTE (clair). En thème sombre il faut un gris un peu plus clair que le
+   fond au repos, pas du blanc — le libellé est blanc. */
+:root[data-theme='dark'] .btn.primary:hover {
+  background: #52525b;
 }
