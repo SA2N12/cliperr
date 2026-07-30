@@ -1078,6 +1078,15 @@ function Dashboard({ scope }: { scope: string }): JSX.Element {
                       ))}
                       <span className="small go" style={{ marginLeft: 'auto', flexShrink: 0 }}>Voir →</span>
                     </div>
+                    {/* Part des vues, en jauge. Elle vaut le POURCENTAGE AFFICHÉ
+                        juste au-dessus (part du total), et non la part du leader :
+                        une barre qui raconterait autre chose que son chiffre
+                        sèmerait le doute sur les deux. */}
+                    {totals.views > 0 && (
+                      <div className="share-bar">
+                        <div style={{ width: `${Math.max(1, (p.views / totals.views) * 100)}%` }} />
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

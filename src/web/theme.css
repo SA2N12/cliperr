@@ -3650,3 +3650,32 @@ input[type='checkbox'] {
   color: var(--brand);
   background: color-mix(in srgb, var(--brand) 12%, transparent);
 }
+
+/* Jauge de part des vues, sous chaque compte de la répartition. Angles DROITS,
+   comme le reste de l'application — la classe `.bar` générique est arrondie et
+   sert ailleurs (progression d'un envoi), on ne la réutilise donc pas. */
+.share-bar {
+  height: 3px;
+  margin-top: 8px;
+  background: color-mix(in srgb, var(--brand) 14%, transparent);
+  overflow: hidden;
+}
+.share-bar > div {
+  height: 100%;
+  background: var(--brand);
+  /* La jauge se remplit au chargement de la page, dans le même mouvement que la
+     ligne du compte à laquelle elle appartient. */
+  animation: share-grow 0.7s cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
+  animation-delay: inherit;
+}
+@keyframes share-grow {
+  from {
+    transform: scaleX(0);
+    transform-origin: left;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .share-bar > div {
+    animation: none !important;
+  }
+}
