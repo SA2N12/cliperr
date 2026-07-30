@@ -1045,7 +1045,10 @@ function Dashboard({ scope }: { scope: string }): JSX.Element {
                 <span className="small muted">Eng. <b style={{ color: 'var(--accent-strong)' }}>{engGlobal}</b></span>
               </div>
               <p className="muted small" style={{ margin: '0 0 2px' }}>Par compte · clique pour le détail</p>
-              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
+              {/* space-between : l'espace libre se place ENTRE les comptes, pas a
+                   l'interieur d'eux. Faire grandir les lignes eloignait la jauge des
+                   chiffres qu'elle illustre — elle se lisait comme un separateur. */}
+              <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
                 {profiles.map((p, i) => (
                   <div
                     key={p.profile}

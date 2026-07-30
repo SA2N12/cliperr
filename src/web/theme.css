@@ -3696,24 +3696,6 @@ input[type='checkbox'] {
   }
 }
 
-/* Les lignes de comptes se PARTAGENT la hauteur restante du panneau, au lieu de
-   laisser un vide sous la dernière. `flex-shrink: 0` protège leur hauteur
-   naturelle : s'il y a trop de comptes, la liste défile — elles ne s'écrasent
-   jamais au point de tronquer les chiffres. */
-.dash-fit .funnel-row {
-  flex: 1 0 auto;
-  display: flex;
-  flex-direction: column;
-  /* Plafond : avec deux comptes seulement, une ligne ne doit pas s'étirer sur
-     tout le panneau — elle paraîtrait vide. */
-  max-height: 104px;
-}
-/* La jauge tient la ligne de fond : c'est elle qui matérialise le bas de la
-   ligne, et l'espace gagné se place au-dessus plutôt qu'en dessous. */
-.dash-fit .funnel-row .share-bar {
-  margin-top: auto;
-}
-
 /* Dégradé des cartes — thème sombre uniquement.
    Sur la référence, les cartes ne sont pas des aplats : une lueur verte part du
    haut et s'éteint vers le milieu. C'est ce qui leur donne du volume sans ombre
