@@ -3522,39 +3522,87 @@ function Providers({ go }: { go: (p: Page) => void }): JSX.Element {
 }
 
 // ── Page « Catégories » ────────────────────────────────────────────────────
-// Troisième axe de personnalisation, à côté du compte et du créneau : ce qui
-// distingue une vidéo de niche d'un épisode de série, quel que soit le compte.
-// N'y figurent QUE les catégories dont les réglages sont réellement lus par le
-// générateur — un carrousel et un clip ne passent pas par la même chaîne, leur
-// afficher ces champs donnerait des boutons sans effet.
-const CAT_META: { id: string; label: string; hint: string }[] = [
-  { id: 'niche', label: 'Vidéos de niche', hint: 'Le tout-venant du pilote : un sujet tiré de la niche du compte.' },
-  { id: 'serie', label: 'Épisodes de série', hint: 'Personnages récurrents et univers continu — souvent la catégorie qui mérite le plus de moyens.' },
-  { id: 'custom', label: 'Sujet libre', hint: 'Sujet imposé sur un créneau. Sans réglage propre, suit celui des vidéos de niche.' }
-]
-/** Un champ « — Réglage global — » signifie : ne rien imposer, suivre la page
- *  Réglages. On enregistre alors une chaîne vide, que le serveur efface. */
+// Troisième axe de personnalisation, à côté du compte et du créneau. Les
+// catégories suivent ce qui est PRODUIT — niches, clips de streamers,
+// génération manuelle — et non les types internes du planning : une série ou un
+// sujet libre restent des vidéos de niche dont on a imposé l'univers ou le
+// sujet, ils suivent donc les réglages « Niches ».
 function CategoriesPage({ toast }: { toast: (m: string) => void }): JSX.Element {
   const [cfg, setCfg] = useState<Record<string, Record<string, string | number>>>({})
   const [busy, setBusy] = useState('')
   useEffect(() => { api.categories().then((r) => setCfg(r.settings ?? {})).catch(() => undefined) }, [])
 
-  const champ = (cat: string, key: string, val: string | number | null): void => {
-    setCfg((c) => ({ ...c, [cat]: { ...(c[cat] ?? {}), [key]: val ?? '' } as Record<string, string | number> }))
-  }
-  const enregistrer = async (cat: string): Promise<void> => {
-    setBusy(cat)
+  const val = (cat: string, key: string): string => String(cfg[cat]?.[key] ?? '')
+  const champ = (cat: string, key: string, v: string): void =>
+    setCfg((c) => ({ ...c, [cat]: { ...(c[cat] ?? {}), [key]: v } as Record<string, string | number> }))
+
+  /** Enregistre une ou plusieurs catégories (la carte « Niches » en porte deux :
+   *  les vidéos et les carrousels sont deux chaînes de génération distinctes). */
+  const enregistrer = async (cats: string[], cle: string): Promise<void> => {
+    setBusy(cle)
     try {
-      const r = await api.saveCategory(cat, (cfg[cat] ?? {}) as Record<string, string | number | null>)
-      setCfg(r.settings ?? {})
-      toast('Réglages de la catégorie enregistrés ✓')
+      let dernier: Record<string, Record<string, string | number>> = cfg
+      for (const c of cats) {
+        const r = await api.saveCategory(c, (cfg[c] ?? {}) as Record<string, string | number | null>)
+        dernier = r.settings ?? dernier
+      }
+      setCfg(dernier)
+      toast('Réglages enregistrés ✓')
     } catch (e) {
       toast('Erreur : ' + (e as Error).message)
     } finally {
       setBusy('')
     }
   }
-  const val = (cat: string, key: string): string => String(cfg[cat]?.[key] ?? '')
+
+  const select = (cat: string, key: string, label: string, opts: [string, string][]): JSX.Element => (
+    <>
+      <label className="muted small cat-lbl">{label}</label>
+      <select className="input-full" value={val(cat, key)} onChange={(e) => champ(cat, key, e.target.value)}>
+        <option value="">— Réglage global —</option>
+        {opts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+      </select>
+    </>
+  )
+  const nombre = (cat: string, key: string, label: string, min: number, max: number, ph: string, step?: string): JSX.Element => (
+    <div>
+      <label className="muted small cat-lbl">{label}</label>
+      <input
+        className="input-full"
+        type="number"
+        min={min}
+        max={max}
+        step={step}
+        placeholder={ph}
+        value={val(cat, key)}
+        onChange={(e) => champ(cat, key, e.target.value)}
+      />
+    </div>
+  )
+  /** Les réglages communs à toute génération vidéo (niche et génération IA). */
+  const blocVideo = (cat: string): JSX.Element => (
+    <>
+      {select(cat, 'engine', 'Moteur des scènes parlées', [
+        ['seedance', 'Seedance'],
+        ['veo', 'Veo — voix natives + vraie synchro labiale'],
+        ['pixverse', 'Pixverse — économique'],
+        ['wan', 'Wan 2.7 — nos voix + synchro labiale']
+      ])}
+      {select(cat, 'quality', 'Qualité imposée', [
+        ['wan', 'Wan 2.7 (~0,50 $/scène)'],
+        ['seedance', 'Seedance 2.0 (~0,84 $/scène)'],
+        ['veo', 'Veo payant (~1,20 $/scène)']
+      ])}
+      <div className="cat-row">
+        {nombre(cat, 'maxScenes', 'Scènes max', 1, 60, 'global')}
+        {nombre(cat, 'speed', 'Débit de parole', 0.5, 2, 'global', '0.05')}
+      </div>
+      <div className="cat-row">
+        <div>{select(cat, 'lang', 'Langue', [['fr', 'Français'], ['en', 'Anglais']])}</div>
+        <div>{select(cat, 'subtitles', 'Sous-titres', [['1', 'Incrustés'], ['0', 'Aucun']])}</div>
+      </div>
+    </>
+  )
 
   return (
     <>
@@ -3562,86 +3610,60 @@ function CategoriesPage({ toast }: { toast: (m: string) => void }): JSX.Element 
         <div>
           <h1>Catégories</h1>
           <div className="muted small">
-            Ce qui distingue chaque type de vidéo, quel que soit le compte qui la publie.
+            Ce qui distingue chaque type de production, quel que soit le compte qui la publie.
             Un champ laissé sur « Réglage global » suit la page Réglages.
           </div>
         </div>
       </div>
       <div className="cat-grid">
-        {CAT_META.map((m) => (
-          <div className="card cat-card" key={m.id}>
-            <div className="cat-title">{m.label}</div>
-            <div className="muted small cat-hint">{m.hint}</div>
-
-            <label className="muted small cat-lbl">Moteur des scènes parlées</label>
-            <select className="input-full" value={val(m.id, 'engine')} onChange={(e) => champ(m.id, 'engine', e.target.value)}>
-              <option value="">— Réglage global —</option>
-              <option value="seedance">Seedance</option>
-              <option value="veo">Veo — voix natives + vraie synchro labiale</option>
-              <option value="pixverse">Pixverse — économique</option>
-              <option value="wan">Wan 2.7 — nos voix + synchro labiale</option>
-            </select>
-
-            <label className="muted small cat-lbl">Qualité imposée</label>
-            <select className="input-full" value={val(m.id, 'quality')} onChange={(e) => champ(m.id, 'quality', e.target.value)}>
-              <option value="">— Réglage global —</option>
-              <option value="wan">Wan 2.7 (~0,50 $/scène)</option>
-              <option value="seedance">Seedance 2.0 (~0,84 $/scène)</option>
-              <option value="veo">Veo payant (~1,20 $/scène)</option>
-            </select>
-
-            <div className="cat-row">
-              <div>
-                <label className="muted small cat-lbl">Scènes max</label>
-                <input
-                  className="input-full"
-                  type="number"
-                  min={1}
-                  max={60}
-                  placeholder="global"
-                  value={val(m.id, 'maxScenes')}
-                  onChange={(e) => champ(m.id, 'maxScenes', e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="muted small cat-lbl">Débit de parole</label>
-                <input
-                  className="input-full"
-                  type="number"
-                  step="0.05"
-                  min={0.5}
-                  max={2}
-                  placeholder="global"
-                  value={val(m.id, 'speed')}
-                  onChange={(e) => champ(m.id, 'speed', e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="cat-row">
-              <div>
-                <label className="muted small cat-lbl">Langue</label>
-                <select className="input-full" value={val(m.id, 'lang')} onChange={(e) => champ(m.id, 'lang', e.target.value)}>
-                  <option value="">— Réglage global —</option>
-                  <option value="fr">Français</option>
-                  <option value="en">Anglais</option>
-                </select>
-              </div>
-              <div>
-                <label className="muted small cat-lbl">Sous-titres</label>
-                <select className="input-full" value={val(m.id, 'subtitles')} onChange={(e) => champ(m.id, 'subtitles', e.target.value)}>
-                  <option value="">— Réglage global —</option>
-                  <option value="1">Incrustés</option>
-                  <option value="0">Aucun</option>
-                </select>
-              </div>
-            </div>
-
-            <button className="btn primary cat-save" disabled={busy === m.id} onClick={() => void enregistrer(m.id)}>
-              {busy === m.id ? 'Enregistrement…' : 'Enregistrer'}
-            </button>
+        {/* ── Niches : deux chaînes de génération sous un même toit ── */}
+        <div className="card cat-card">
+          <div className="cat-title">Niches</div>
+          <div className="muted small cat-hint">
+            Le tout-venant du pilote, sur la niche du compte. Les séries et les sujets imposés suivent ces réglages.
           </div>
-        ))}
+          <div className="cat-sub">Vidéos</div>
+          {blocVideo('niche')}
+          <div className="cat-sub">Carrousels</div>
+          <div className="cat-row">
+            {nombre('carousel', 'slides', 'Nombre de diapos', 3, 10, '6')}
+          </div>
+          <button className="btn primary cat-save" disabled={busy === 'niche'} onClick={() => void enregistrer(['niche', 'carousel'], 'niche')}>
+            {busy === 'niche' ? 'Enregistrement…' : 'Enregistrer'}
+          </button>
+        </div>
+
+        {/* ── Clips de streamers ── */}
+        <div className="card cat-card">
+          <div className="cat-title">Clips (cut streamer)</div>
+          <div className="muted small cat-hint">
+            Extraits découpés dans un live ou un reportage. Pas de génération : ces vidéos existent déjà.
+          </div>
+          <div className="cat-row">
+            {nombre('clip', 'clipCount', 'Candidats par source', 1, 10, '1')}
+          </div>
+          <div className="muted small cat-note">
+            Le pilote n’en publie qu’un — les autres restent en stock. En extraire plusieurs coûte
+            un peu plus de traitement mais remplit le stock d’un coup.
+          </div>
+          {select('clip', 'reframe', 'Cadrage vertical', [['center', 'Centré'], ['face', 'Suivi du visage']])}
+          <button className="btn primary cat-save" disabled={busy === 'clip'} onClick={() => void enregistrer(['clip'], 'clip')}>
+            {busy === 'clip' ? 'Enregistrement…' : 'Enregistrer'}
+          </button>
+        </div>
+
+        {/* ── Génération lancée à la main ── */}
+        <div className="card cat-card">
+          <div className="cat-title">Génération IA</div>
+          <div className="muted small cat-hint">
+            Les vidéos lancées depuis la page Génération IA. Les sélecteurs de la carte d’idée
+            (langue, qualité) restent prioritaires sur ces valeurs.
+          </div>
+          {blocVideo('genai')}
+          <button className="btn primary cat-save" disabled={busy === 'genai'} onClick={() => void enregistrer(['genai'], 'genai')}>
+            {busy === 'genai' ? 'Enregistrement…' : 'Enregistrer'}
+          </button>
+        </div>
       </div>
     </>
   )

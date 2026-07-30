@@ -23,8 +23,9 @@ const CarouselSchema = z.object({
 })
 export type Carousel = z.infer<typeof CarouselSchema>
 
-/** Nombre de diapos visé (1 hook + le corps + 1 chute). */
-const SLIDES = 6
+/** Nombre de diapos visé par DÉFAUT (1 hook + le corps + 1 chute). Surchargé
+ *  par la catégorie « Niches » de la page Catégories. */
+const SLIDES_DEFAUT = 6
 
 /** Écrit le carrousel (diapos + légende) avec Claude, dans la niche du compte. */
 export async function buildCarousel(
@@ -36,8 +37,11 @@ export async function buildCarousel(
   source?: { title: string; hook: string; script: string[] },
   /** Titres déjà publiés sur ce compte (vidéos ET carrousels) — sans ça, l'IA
    *  repropose les mêmes sujets : « La règle des 2 minutes » est sortie 3 fois. */
-  recentTitles?: string[]
+  recentTitles?: string[],
+  /** Nombre de diapos voulu — défaut SLIDES_DEFAUT. */
+  nbSlides?: number
 ): Promise<{ carousel: Carousel | null; usage: Usage | null }> {
+  const SLIDES = Math.min(10, Math.max(3, Math.round(Number(nbSlides) || SLIDES_DEFAUT)))
   const client = new Anthropic({ apiKey: anthropicKey, maxRetries: 5 })
   const tool = {
     name: 'carrousel',
@@ -194,6 +198,8 @@ export interface CarouselGenOptions {
   source?: { title: string; hook: string; script: string[] }
   /** Titres récents du compte → l'IA ne repropose pas les mêmes sujets. */
   recentTitles?: string[]
+  /** Nombre de diapos (catégorie « Niches »). */
+  slides?: number
   onProgress?: (m: string) => void
 }
 
@@ -213,7 +219,8 @@ export async function generateCarousel(
     opts.niche,
     opts.cta ?? '',
     opts.source,
-    opts.recentTitles
+    opts.recentTitles,
+    opts.slides
   )
   if (!carousel || !carousel.slides.length) throw new Error('Carrousel vide — réessaie')
 

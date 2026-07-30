@@ -3388,3 +3388,19 @@ input[type='checkbox'] {
     grid-template-columns: 1fr;
   }
 }
+/* Sous-titre d'une carte de catégorie : sépare deux chaînes de génération
+   (vidéos / carrousels) sans en faire deux cartes distinctes. */
+.cat-sub {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.cat-note {
+  margin-top: 6px;
+  line-height: 1.35;
+}

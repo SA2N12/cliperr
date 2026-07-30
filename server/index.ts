@@ -220,7 +220,8 @@ async function runForSource(sourceId: number, clipCount: number, profileOverride
 
   const apiKey = getApiKey()
   const model = MODEL_MAP[repo.getSetting(FLAG_MODEL) ?? 'haiku'] ?? MODEL_MAP.haiku
-  const reframeFocus = (repo.getSetting(FLAG_REFRAME) as ReframeFocus) || 'center'
+  // Cadrage : la catégorie « Clips » prime sur le réglage global.
+  const reframeFocus = ((catCfg('clip').reframe || repo.getSetting(FLAG_REFRAME)) as ReframeFocus) || 'center'
   const transcribeEnabled = repo.getSetting(FLAG_TRANSCRIBE) === '1'
   const backend = repo.getSetting(FLAG_TRANSCRIBE_BACKEND) || 'groq'
   const groqKey = getEncrypted('groq_key')
@@ -749,8 +750,18 @@ export type CategoryCfg = {
   subtitles?: string
   /** Débit de parole (1 = naturel). */
   speed?: number
+  /** Carrousels : nombre de diapos. */
+  slides?: number
+  /** Clips : nombre de candidats extraits d'une source. */
+  clipCount?: number
+  /** Clips : cadrage vertical ('center' | 'face'). */
+  reframe?: string
 }
-const CATEGORIES = ['niche', 'serie', 'custom', 'carousel', 'clip'] as const
+// Les catégories suivent ce que l'utilisateur PRODUIT, pas les types internes :
+// les niches (vidéos et carrousels), les clips de streamers, et la génération
+// lancée à la main. Séries et sujets libres ne sont pas des catégories à part —
+// ce sont des vidéos de niche dont on a imposé l'univers ou le sujet.
+const CATEGORIES = ['niche', 'carousel', 'clip', 'genai'] as const
 function categorySettings(): Record<string, CategoryCfg> {
   try {
     const o = JSON.parse(repo.getSetting('category_settings') || '{}') as Record<string, CategoryCfg>
@@ -759,12 +770,15 @@ function categorySettings(): Record<string, CategoryCfg> {
     return {}
   }
 }
-/** Réglages de la catégorie d'une génération. `custom` retombe sur `niche` :
- *  un sujet libre reste une vidéo de niche dont on a juste impose le sujet. */
+/** Réglages applicables à une génération, d'après son type interne.
+ *  - pas de type   → lancement MANUEL depuis la page Génération IA
+ *  - serie/custom  → vidéos de niche dont on a imposé l'univers ou le sujet */
 function catCfg(type?: string): CategoryCfg {
   const all = categorySettings()
-  const t = String(type ?? 'niche')
-  return { ...(t === 'custom' ? all.niche : undefined), ...(all[t] ?? {}) }
+  if (type == null || type === '') return all.genai ?? {}
+  const t = String(type)
+  if (t === 'serie' || t === 'custom' || t === 'niche') return all.niche ?? {}
+  return all[t] ?? {}
 }
 
 type SlotOverride = { hm?: number; type?: string; subject?: string; music?: string; from?: string; stockPick?: string }
@@ -1205,7 +1219,9 @@ async function runAutopilotTick(force = false): Promise<void> {
       if (!candidates.length) {
         emitLog(`Pilote auto : extraction de clips depuis ${clipUrl} pour « ${user} » (téléchargement + analyse)…`)
         const created = repo.createSource(clipUrl)
-        const job = pipelineChain.then(() => runForSource(created.id, 1, user))
+        // Nombre de candidats : réglable par la catégorie « Clips » (défaut 1).
+        const nbCand = Math.max(1, Math.round(Number(catCfg('clip').clipCount) || 1))
+        const job = pipelineChain.then(() => runForSource(created.id, nbCand, user))
         pipelineChain = job.then(() => undefined, () => undefined)
         await job
         const after = repo.getSource(created.id)
@@ -1243,6 +1259,8 @@ async function runAutopilotTick(force = false): Promise<void> {
         deepinfraKey: getEncrypted('deepinfra_key'),
         niche: topic,
         cta: ctaMapForProfile(user).niche ?? '',
+        // Nombre de diapos : réglable par la catégorie « Niches » (défaut 6).
+        slides: catCfg('carousel').slides,
         // Anti-répétition, comme pour les vidéos : sans l'historique du compte,
         // l'IA repropose ses sujets favoris (« La règle des 2 minutes » ×3).
         recentTitles: repo
@@ -2715,7 +2733,7 @@ app.post('/api/categories', (req, res) => {
   // Chaîne vide / null = « suivre le réglage global » : on EFFACE la clé plutôt
   // que d'enregistrer une valeur vide, sinon on ne distinguerait plus « non
   // réglé » de « réglé à vide ».
-  const setStr = (k: 'quality' | 'engine' | 'lang' | 'subtitles', autorises?: string[]): void => {
+  const setStr = (k: 'quality' | 'engine' | 'lang' | 'subtitles' | 'reframe', autorises?: string[]): void => {
     if (!(k in c)) return
     const v = String(c[k] ?? '').trim()
     if (!v || (autorises && !autorises.includes(v))) delete cur[k]
@@ -2735,6 +2753,17 @@ app.post('/api/categories', (req, res) => {
     if (Number.isFinite(v) && v > 0) cur.speed = Math.min(2, Math.max(0.5, v))
     else delete cur.speed
   }
+  if ('slides' in c) {
+    const v = Math.round(Number(c.slides))
+    if (Number.isFinite(v) && v >= 3) cur.slides = Math.min(10, v)
+    else delete cur.slides
+  }
+  if ('clipCount' in c) {
+    const v = Math.round(Number(c.clipCount))
+    if (Number.isFinite(v) && v > 0) cur.clipCount = Math.min(10, v)
+    else delete cur.clipCount
+  }
+  setStr('reframe', ['center', 'face'])
   if (Object.keys(cur).length) all[cat] = cur
   else delete all[cat]
   repo.setSetting('category_settings', JSON.stringify(all))
