@@ -3713,3 +3713,19 @@ input[type='checkbox'] {
 .dash-fit .funnel-row .share-bar {
   margin-top: auto;
 }
+
+/* Dégradé des cartes — thème sombre uniquement.
+   Sur la référence, les cartes ne sont pas des aplats : une lueur verte part du
+   haut et s'éteint vers le milieu. C'est ce qui leur donne du volume sans ombre
+   portée, dans un thème qui n'en utilise pas.
+   Il s'arrête à 58 % : au-delà, le bas des grandes cartes (graphique,
+   répartition) prendrait un voile visible et le fond cesserait d'être neutre
+   sous les données. */
+:root[data-theme='dark'] .card {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--brand) 5%, var(--panel)) 0%, var(--panel) 58%);
+}
+/* La première carte de statistiques garde une lueur plus marquée : c'est
+   l'indicateur principal, elle doit rester distincte des trois autres. */
+:root[data-theme='dark'] .stat-grid > .card:first-child {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--brand) 11%, var(--panel)) 0%, var(--panel) 62%);
+}
