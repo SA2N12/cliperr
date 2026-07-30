@@ -1240,7 +1240,9 @@ button {
 
 /* Lignes de la répartition : rang, survol, lien « Voir » */
 .funnel-row {
-  padding: 6px 8px;
+  /* 4 px et non 6 : la jauge de part ajoutée sous chaque compte a fait déborder
+     le panneau, et les 5 comptes doivent y tenir sans défilement. */
+  padding: 4px 8px;
   margin: 0 -8px;
   border-radius: 8px;
   cursor: pointer;
@@ -3656,7 +3658,9 @@ input[type='checkbox'] {
    sert ailleurs (progression d'un envoi), on ne la réutilise donc pas. */
 .share-bar {
   height: 3px;
-  margin-top: 8px;
+  /* Collée à la ligne de chiffres qu'elle illustre : à 8 px elle flottait, et
+     les 5 comptes ne tenaient plus dans la hauteur du panneau. */
+  margin-top: 4px;
   background: color-mix(in srgb, var(--brand) 14%, transparent);
   overflow: hidden;
 }
