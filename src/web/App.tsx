@@ -37,7 +37,11 @@ const ICONS: Record<string, string> = {
   plug: 'M4 5h16v5H4zM4 14h16v5H4zM7.5 7h.01M7.5 16h.01',
   terminal: 'M4 17l6-5-6-5M12 19h8',
   scissors: 'M6 9a3 3 0 100-6 3 3 0 000 6zM6 21a3 3 0 100-6 3 3 0 000 6zM20 4L8.12 15.88M14.47 14.48L20 20M8.12 9.12L12 13',
-  twitch: 'M4 4h16v10l-4 4h-3l-3 3v-3H4zM10 8v4M15 8v4'
+  twitch: 'M4 4h16v10l-4 4h-3l-3 3v-3H4zM10 8v4M15 8v4',
+  // Bascule de thème : on affiche l'icône de la destination (lune en clair =
+  // « passer en sombre »), convention la plus répandue.
+  moon: 'M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z',
+  sun: 'M12 17a5 5 0 100-10 5 5 0 000 10zM12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4'
 }
 
 // Valeur spéciale du sélecteur en haut à droite : « Tous les comptes » (vue globale).
@@ -310,6 +314,25 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
     localStorage.setItem('sidebar_mode', m)
     setSideMenuOpen(false)
   }
+  // Thème clair/sombre : préférence d'APPAREIL (localStorage), comme le mode de
+  // la sidebar — pas la BDD, un même compte peut être ouvert sur deux écrans
+  // réglés différemment. Sans choix enregistré, on suit le réglage du système.
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    const v = localStorage.getItem('theme')
+    if (v === 'light' || v === 'dark') return v
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  })
+  // L'attribut vit sur <html> et non sur un conteneur React : les volets et les
+  // menus sont rendus en `position: fixed` hors de l'arbre de l'app, ils doivent
+  // eux aussi hériter du thème.
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+  }, [theme])
+  const toggleTheme = (): void => {
+    const next = theme === 'dark' ? 'light' : 'dark'
+    setTheme(next)
+    localStorage.setItem('theme', next)
+  }
   const [progress, setProgress] = useState<Record<number, ProgressEvent>>({})
   const [ideaVideo, setIdeaVideo] = useState<Record<number, { status: 'running' | 'done' | 'error'; message: string }>>({})
   const [pub, setPub] = useState<PublishStateT | null>(null)
@@ -432,6 +455,16 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
           onClick={() => setConsoleOpen((v) => !v)}
         >
           <Icon name="terminal" size={14} /> Console
+        </button>
+        {/* Bascule clair/sombre. L'icône montre la destination, pas l'état
+            courant : en thème clair on voit une lune (« passer en sombre »). */}
+        <button
+          className="tb-theme"
+          title={theme === 'dark' ? 'Passer en thème clair' : 'Passer en thème sombre'}
+          aria-pressed={theme === 'dark'}
+          onClick={toggleTheme}
+        >
+          <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={15} />
         </button>
         {/* Compte du dashboard : tuile dégradé bleu → vert pastel, sans bordure. */}
         <button
@@ -613,8 +646,8 @@ function AreaChart({ data }: { data: Bucket[] }): JSX.Element {
         <svg className="chart-draw" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: '100%', display: 'block' }}>
           <defs>
             <linearGradient id="ag" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.24" />
-              <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
+              <stop offset="0%" stopColor="var(--ink)" stopOpacity="0.24" />
+              <stop offset="100%" stopColor="var(--ink)" stopOpacity="0" />
             </linearGradient>
           </defs>
           {[0, 0.25, 0.5, 0.75, 1].map((f) => (
@@ -633,7 +666,7 @@ function AreaChart({ data }: { data: Bucket[] }): JSX.Element {
           <path
             d={line}
             fill="none"
-            stroke="var(--accent)"
+            stroke="var(--ink)"
             strokeWidth={2.5}
             vectorEffect="non-scaling-stroke"
             strokeLinejoin="round"
@@ -2563,7 +2596,7 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
           // comptes, et les 5 lignes doivent tenir sans défilement (cf. .ap-fit).
           padding: '7px 8px',
           borderRadius: 0,
-          background: s.failed ? 'rgba(220,38,38,0.06)' : s.emptyStock ? 'rgba(217,119,6,0.06)' : s.done ? 'var(--ap-green-soft)' : '#fff',
+          background: s.failed ? 'rgba(220,38,38,0.06)' : s.emptyStock ? 'rgba(217,119,6,0.06)' : s.done ? 'var(--ap-green-soft)' : 'var(--panel)',
           border: s.failed ? '1.5px solid var(--bad)' : s.emptyStock ? '1.5px dashed #d97706' : s.done ? '1.5px solid var(--ap-green-border)' : `1.5px solid ${generating || s.pinned || s.type ? 'var(--ap-green)' : 'var(--border)'}`,
           cursor: s.done ? 'default' : 'pointer',
           display: 'flex',
@@ -2602,7 +2635,7 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
           <div
             className="ap-time"
             title="Coût estimé de cette vidéo (aperçu — aucun débit pour l’instant)"
-            style={{ fontSize: 11, fontWeight: 600, padding: '1px 8px', borderRadius: 999, background: '#fff', border: '1px solid var(--border)', color: 'var(--muted)' }}
+            style={{ fontSize: 11, fontWeight: 600, padding: '1px 8px', borderRadius: 999, background: 'var(--panel)', border: '1px solid var(--border)', color: 'var(--muted)' }}
           >
             {s.credits} cr
           </div>
@@ -2705,7 +2738,7 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
                   padding: '4px 14px',
                   fontSize: 13,
                   fontWeight: day === d ? 700 : 500,
-                  background: day === d ? '#fff' : 'transparent',
+                  background: day === d ? 'var(--panel)' : 'transparent',
                   border: day === d ? '1px solid var(--border)' : '1px solid transparent',
                   color: day === d ? 'var(--text)' : 'var(--muted)',
                   fontFamily: 'inherit'
@@ -3129,7 +3162,7 @@ function Sparkline({ data }: { data: number[] }): JSX.Element | null {
   const pts = data.map((v, i) => `${((i / (data.length - 1)) * w).toFixed(1)},${(h - (v / max) * (h - 3) - 1.5).toFixed(1)}`).join(' ')
   return (
     <svg width={w} height={h} style={{ flexShrink: 0 }} aria-hidden>
-      <polyline points={pts} fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+      <polyline points={pts} fill="none" stroke="var(--ink)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
     </svg>
   )
 }

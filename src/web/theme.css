@@ -4,6 +4,10 @@
   --accent-strong: #09090b;
   --accent-soft: #f4f4f5;
   --accent-soft-2: #e4e4e7;
+  /* Marques de PREMIER PLAN (courbes, points, aplats de graphique). Distinct
+     de --accent, qui sert de FOND à des éléments à texte blanc : en thème
+     sombre l’un doit s’éclaircir et l’autre pas. */
+  --ink: #18181b;
   --bg: #ffffff;
   --panel: #ffffff;
   --panel-2: #fafafa;
@@ -225,7 +229,7 @@ button {
   gap: 8px;
   background: var(--panel-2);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 0;
   padding: 7px 10px;
   color: var(--muted-2);
   font-size: 13px;
@@ -243,7 +247,7 @@ button {
   gap: 7px;
   background: var(--panel-2);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 0;
   padding: 7px 11px;
   color: var(--muted-2);
   font-size: 13px;
@@ -319,9 +323,9 @@ button {
 .topbar .tb-search .kbd {
   margin-left: auto;
   font-size: 11px;
-  background: #fff;
+  background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 0;
   padding: 1px 6px;
   color: var(--muted);
 }
@@ -1408,7 +1412,7 @@ textarea {
   padding: 9px 12px;
   border: 1px solid var(--border);
   border-radius: 0;
-  background: #fff;
+  background: var(--panel);
   color: var(--text);
   outline: none;
   transition: border-color 0.14s ease, box-shadow 0.14s ease;
@@ -1441,7 +1445,7 @@ textarea:focus {
   font-weight: 500;
 }
 .seg button.on {
-  background: #fff;
+  background: var(--panel);
   color: var(--text);
   box-shadow: var(--shadow);
 }
@@ -1619,7 +1623,7 @@ textarea:focus {
 .side-search .kbd {
   margin-left: auto;
   font-size: 11px;
-  background: #fff;
+  background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 1px 6px;
@@ -2219,7 +2223,7 @@ textarea:focus {
   gap: 7px;
 }
 .hist-tab.on {
-  background: #fff;
+  background: var(--panel);
   color: var(--text);
   font-weight: 600;
 }
@@ -2992,7 +2996,7 @@ input[type='checkbox'] {
 }
 .ap-banner {
   border-color: var(--ap-green-border);
-  background: linear-gradient(0deg, var(--ap-green-soft), var(--ap-green-soft)), #fff;
+  background: linear-gradient(0deg, var(--ap-green-soft), var(--ap-green-soft)), var(--panel);
 }
 .ap-pill {
   display: inline-flex;
@@ -3261,3 +3265,67 @@ input[type='checkbox'] {
   }
 }
 
+
+/* ── Thème sombre ───────────────────────────────────────────────────────────
+   Activé par `data-theme="dark"` sur <html> (bascule dans la barre du haut).
+   Rien d'autre à reprendre : toute l'app est habillée par ces variables — c'est
+   précisément pourquoi les surfaces écrites en dur ont été variabilisées avant.
+   `--accent` ne devient PAS clair : plusieurs éléments posent du texte blanc
+   dessus, ils deviendraient illisibles. Un gris moyen garde le blanc lisible et
+   détache quand même l'élément de son panneau. */
+:root[data-theme='dark'] {
+  --accent: #3f3f46;
+  --accent-strong: #52525b;
+  --accent-soft: #27272a;
+  --accent-soft-2: #3f3f46;
+  --ink: #e4e4e7;
+  --bg: #0a0a0b;
+  --panel: #131316;
+  --panel-2: #1c1c20;
+  --border: #2c2c33;
+  --text: #f4f4f5;
+  --muted: #a1a1aa;
+  --muted-2: #71717a;
+  --good: #22c55e;
+  --bad: #f87171;
+  /* Verts du pilote : les deux teintes CLAIRES (fond de bloc publié et bordure)
+     doivent s'assombrir, sinon elles éclatent sur fond noir. */
+  --ap-green: #10b981;
+  --ap-green-strong: #34d399;
+  --ap-green-deep: #6ee7b7;
+  --ap-green-soft: #10281f;
+  --ap-green-border: #1f5f47;
+}
+/* Bascule clair/sombre : même habillage que « Console », pour qu'elles forment
+   un groupe cohérent côte à côte. */
+.tb-theme {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 0;
+  color: var(--muted-2);
+  cursor: pointer;
+}
+.tb-theme:hover {
+  border-color: var(--muted-2);
+  color: var(--text);
+}
+/* L'icône pivote au changement de thème : le geste est confirmé visuellement
+   au lieu d'être seulement subi. */
+.tb-theme svg {
+  transition: transform 320ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+:root[data-theme='dark'] .tb-theme svg {
+  transform: rotate(-140deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .tb-theme svg {
+    transition: none;
+  }
+}
