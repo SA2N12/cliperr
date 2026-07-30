@@ -3773,3 +3773,9 @@ input[type='checkbox'] {
 .metric .mv {
   color: var(--text);
 }
+
+/* Tuile du compte, en bout de barre : angles droits comme tout le reste de
+   l'interface. C'était le dernier élément arrondi de la barre du haut. */
+.topbar .tb-account {
+  border-radius: 0;
+}
