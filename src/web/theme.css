@@ -619,6 +619,18 @@ button {
   display: flex;
   flex-direction: column;
 }
+/* Coque resserrée : chaque pixel repris ici est rendu à la liste des comptes,
+   qui doit afficher les 5 sans défilement même sur une fenêtre courte (écran
+   1080p avec la mise à l'échelle Windows à 125 %, barre de favoris ouverte). */
+.dash-fit > .page-head {
+  margin-bottom: 10px;
+}
+.dash-fit > .stat-grid > .card {
+  padding: 14px 16px;
+}
+.dash-fit > .dash-row > .card {
+  padding: 14px 16px;
+}
 .dash-fit > .page-head,
 .dash-fit > .stat-grid {
   flex-shrink: 0;
