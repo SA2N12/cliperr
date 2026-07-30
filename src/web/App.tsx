@@ -676,8 +676,8 @@ function AreaChart({ data }: { data: Bucket[] }): JSX.Element {
         <svg className="chart-draw" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: '100%', display: 'block' }}>
           <defs>
             <linearGradient id="ag" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--ink)" stopOpacity="0.24" />
-              <stop offset="100%" stopColor="var(--ink)" stopOpacity="0" />
+              <stop offset="0%" stopColor="var(--brand)" stopOpacity="0.24" />
+              <stop offset="100%" stopColor="var(--brand)" stopOpacity="0" />
             </linearGradient>
           </defs>
           {[0, 0.25, 0.5, 0.75, 1].map((f) => (
@@ -696,7 +696,7 @@ function AreaChart({ data }: { data: Bucket[] }): JSX.Element {
           <path
             d={line}
             fill="none"
-            stroke="var(--ink)"
+            stroke="var(--brand)"
             strokeWidth={2.5}
             vectorEffect="non-scaling-stroke"
             strokeLinejoin="round"
@@ -3250,7 +3250,7 @@ function Sparkline({ data }: { data: number[] }): JSX.Element | null {
   const pts = data.map((v, i) => `${((i / (data.length - 1)) * w).toFixed(1)},${(h - (v / max) * (h - 3) - 1.5).toFixed(1)}`).join(' ')
   return (
     <svg width={w} height={h} style={{ flexShrink: 0 }} aria-hidden>
-      <polyline points={pts} fill="none" stroke="var(--ink)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+      <polyline points={pts} fill="none" stroke="var(--brand)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
     </svg>
   )
 }

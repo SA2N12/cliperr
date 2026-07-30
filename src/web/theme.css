@@ -3003,6 +3003,12 @@ input[type='checkbox'] {
      sature que l emeraude des niches — la distinction tient donc a la teinte ET
      a la luminosite, pas au seul angle de couleur. */
   --cat-stock: #15803d;
+  /* ── Vert de MARQUE du tableau de bord ────────────────────────────────
+     Un seul jeton pour la courbe, les chiffres cles, les pastilles et les
+     barres : sans lui, la meme nuance serait recopiee a sept endroits et
+     divergerait a la premiere retouche. */
+  --brand: #059669;
+  --brand-soft: #ecfdf5;
   /* Même mono que le dashboard SellExpert. */
   --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Cascadia Mono', 'Roboto Mono', Menlo, Consolas, monospace;
 }
@@ -3322,6 +3328,9 @@ input[type='checkbox'] {
   --cat-clip: #a3e635;
   --cat-genai: #6ee7b7;
   --cat-stock: #22c55e;
+  /* Eclairci pour rester lisible sur fond noir. */
+  --brand: #34d399;
+  --brand-soft: #10281f;
 }
 /* Bascule clair/sombre : même habillage que « Console », pour qu'elles forment
    un groupe cohérent côte à côte. */
@@ -3585,4 +3594,55 @@ input[type='checkbox'] {
   .cat-legend {
     display: none;
   }
+}
+
+/* ── Accent vert du tableau de bord ─────────────────────────────────────────
+   La référence met en vert ce qui porte l'information : la courbe, les chiffres
+   de synthèse, l'état actif et les jauges. Le reste — les grands nombres des
+   cartes — reste neutre, sinon plus rien ne ressort. */
+
+/* Chiffres de synthèse sous le graphique (total, moyenne, pic). */
+.metric .mv {
+  color: var(--brand);
+}
+/* Segment de période actif. */
+.seg button.on {
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+/* Pastille d'engagement et badge de tendance. */
+.pill-badge {
+  color: var(--brand);
+  background: var(--brand-soft);
+}
+.pill-badge .dot {
+  background: var(--brand);
+}
+.trend.up {
+  color: var(--brand);
+  background: var(--brand-soft);
+}
+/* Jauges de progression. */
+.bar > div {
+  background: var(--brand);
+}
+/* Entrée de navigation active. */
+.nav-item.active {
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+/* Le lien d'une ligne de compte s'allume au survol. */
+.funnel-row:hover .go {
+  color: var(--brand);
+}
+/* Première carte de statistiques : c'est l'indicateur principal. Un filet suffit
+   à l'établir comme tel — le teinter entièrement le mettrait en concurrence avec
+   la courbe, qui reste le sujet de la page. */
+.stat-grid > .card:first-child {
+  border-top: 2px solid var(--brand);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--brand) 5%, transparent), transparent 62%), var(--panel);
+}
+.stat-grid > .card:first-child .icon {
+  color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 12%, transparent);
 }
