@@ -39,6 +39,7 @@ const ICONS: Record<string, string> = {
   scissors: 'M6 9a3 3 0 100-6 3 3 0 000 6zM6 21a3 3 0 100-6 3 3 0 000 6zM20 4L8.12 15.88M14.47 14.48L20 20M8.12 9.12L12 13',
   twitch: 'M4 4h16v10l-4 4h-3l-3 3v-3H4zM10 8v4M15 8v4',
   // Categories : etiquette.
+  heart: 'M20.8 4.6a5.5 5.5 0 00-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 00-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 000-7.8z',
   tag: 'M20.6 13.4l-7.2 7.2a2 2 0 01-2.8 0l-7.2-7.2a2 2 0 01-.6-1.4V5a2 2 0 012-2h7a2 2 0 011.4.6l7.4 7.4a2 2 0 010 2.8zM7.5 7.5h.01',
   // Bascule de thème : on affiche l'icône de la destination (lune en clair =
   // « passer en sombre »), convention la plus répandue.
@@ -980,7 +981,7 @@ function Dashboard({ scope }: { scope: string }): JSX.Element {
 
             <div className="card">
               <div className="stat-head">
-                <div className="icon"><Icon name="spark" /></div>
+                <div className="icon"><Icon name="heart" /></div>
                 <span className="pill-badge"><span className="dot" /> {engGlobal}</span>
               </div>
               <div className="label" style={{ marginTop: 8 }}>Likes</div>
