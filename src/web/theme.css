@@ -14,8 +14,9 @@
   --bad-border: #f0c9c9;
   --bg: #ffffff;
   --panel: #ffffff;
-  --panel-2: #fafafa;
-  --border: #e7e7ea;
+  /* Clair : un soupcon seulement — teinter des cartes blanches les salirait. */
+  --panel-2: #f7faf8;
+  --border: #e3eae6;
   --text: #18181b;
   --muted: #71717a;
   --muted-2: #a1a1aa;
@@ -3307,10 +3308,13 @@ input[type='checkbox'] {
   --ink: #e4e4e7;
   --bad-soft: #2a1417;
   --bad-border: #5c2b30;
-  --bg: #0a0a0b;
-  --panel: #131316;
-  --panel-2: #1c1c20;
-  --border: #2c2c33;
+  /* Surfaces TEINTEES : la reference ne pose pas des gris neutres mais des verts
+     tres sombres. Meme luminosite que les zinc d origine — le contraste du texte
+     est donc inchange — mais la teinte est decalee vers --brand. */
+  --bg: #070c0a;
+  --panel: #0d1512;
+  --panel-2: #131d19;
+  --border: #24312b;
   --text: #f4f4f5;
   --muted: #a1a1aa;
   --muted-2: #71717a;
