@@ -3752,3 +3752,24 @@ input[type='checkbox'] {
     transition: none;
   }
 }
+
+/* ── Derniers ajustements du tableau de bord ────────────────────────────────
+   Ces règles ferment le fichier : elles l'emportent sur celles posées plus haut
+   pour les mêmes sélecteurs. */
+
+/* Jauge de part : dégradé plutôt qu'aplat. Il part du vert plein à gauche et
+   s'allège vers la droite, ce qui donne à la barre un sens de lecture — l'œil
+   suit sa longueur au lieu de la lire comme un bloc posé. */
+.share-bar > div {
+  background: linear-gradient(90deg, var(--brand) 0%, color-mix(in srgb, var(--brand) 45%, transparent) 100%);
+}
+/* Points du graphique : au vert de la courbe qu'ils marquent. */
+.chart-dot {
+  background: var(--brand);
+}
+/* Chiffres de synthèse sous le graphique : en blanc. Ce sont des mesures
+   brutes, comme les grands nombres des cartes — le vert est réservé à ce qui
+   signale une tendance ou un état. */
+.metric .mv {
+  color: var(--text);
+}
