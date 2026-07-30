@@ -2672,9 +2672,10 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
   const renderBlock = (s: AutopilotSlot, opts?: { hideAvatar?: boolean }): JSX.Element => {
     const generating = day === 0 && !!activeGen && `${s.user}-${s.ordinal}` === nextKey
     const { cat, sujet } = splitLabel(s)
-    // Un créneau sans type n'est pas encore décidé : on le dit, plutôt que
-    // d'afficher la niche du compte comme si le choix était fait.
-    const libre = !s.type && !s.done && !s.failed
+    // Un créneau sans type n'est PAS indécis : le pilote y produira une vidéo de
+    // niche, facturée. L'annoncer « à définir » laisserait croire que rien ne
+    // partira, alors que c'est l'inverse — d'où l'affichage de sa niche.
+    const libre = false
     const statut = s.done ? 'publiée'
       : s.failed ? 'échec'
         : generating ? 'création…'
