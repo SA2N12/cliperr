@@ -2227,7 +2227,11 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
       <div className="sp-foot">
         <button className="btn danger-ghost" disabled={busy} onClick={() => void removeSlot()} style={{ marginRight: 'auto' }} title="Retire cette vidéo (baisse la cadence du compte)"><MIcon name="delete" size={15} /> Supprimer</button>
         {(slot.pinned || slot.type) && <button className="btn" disabled={busy} onClick={() => void apply(true)}>Réinitialiser</button>}
-        <button className="btn primary" disabled={busy || (type === 'stock' && !subject.trim())} onClick={() => void apply(false)}>
+        {/* Un créneau « stock » SANS clip choisi est un cas parfaitement valide :
+            c'est le mode de tirage automatique juste au-dessus qui décide alors
+            quoi publier — ou de ne rien publier. L'ancienne garde imposait un
+            choix explicite et rendait ce réglage impossible à enregistrer. */}
+        <button className="btn primary" disabled={busy} onClick={() => void apply(false)}>
           {busy ? 'Enregistrement…' : 'Enregistrer'}
         </button>
       </div>
