@@ -3711,3 +3711,25 @@ input[type='checkbox'] {
 :root[data-theme='dark'] .stat-grid > .card:first-child {
   background: linear-gradient(180deg, color-mix(in srgb, var(--brand) 11%, var(--panel)) 0%, var(--panel) 62%);
 }
+
+/* ── KPI : icônes vertes et carrées, badges sans arrondi ────────────────────
+   Ces règles ferment le fichier : elles doivent l'emporter sur `.stat-grid
+   .icon` et sur la mise en avant de la première carte, déclarées plus haut. */
+.stat-grid .icon {
+  border-radius: 0;
+  background: color-mix(in srgb, var(--brand) 12%, transparent);
+  color: var(--brand);
+}
+/* Le filet vert de la première carte disparaît : maintenant que les quatre
+   icônes sont vertes, il n'a plus rien à distinguer — seul le dégradé, plus
+   discret, la garde comme indicateur principal. */
+.stat-grid > .card:first-child {
+  border-top: 1px solid var(--border);
+}
+/* Badges de tendance et d'engagement : angles droits, comme le reste. Limité
+   aux cartes de statistiques — `.pill-badge` sert aussi dans le pilote auto, où
+   rien n'a été demandé. */
+.stat-grid .trend,
+.stat-grid .pill-badge {
+  border-radius: 0;
+}
