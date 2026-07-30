@@ -3468,3 +3468,46 @@ input[type='checkbox'] {
     grid-template-columns: 1fr;
   }
 }
+
+/* Apparition : MÊME courbe et même cadence que les cartes du tableau de bord
+   (rise 0.5s, cascade de 60 ms). Une animation propre à cette page se
+   remarquerait comme une fausse note en naviguant d'un onglet à l'autre. */
+.cat-card {
+  animation: rise 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
+  transition:
+    transform 0.16s ease,
+    border-color 0.16s ease;
+}
+.cat-card:nth-child(2) {
+  animation-delay: 60ms;
+}
+.cat-card:nth-child(3) {
+  animation-delay: 120ms;
+}
+.cat-card:nth-child(n + 4) {
+  animation-delay: 180ms;
+}
+.cat-card:hover {
+  border-color: var(--muted-2);
+}
+/* Le passage « suit le global » → « personnalisé » se fait en fondu : sans
+   transition, le vert claque d'un coup et on doute d'avoir changé le bon champ. */
+.cat-f .cat-lbl,
+.cat-f select,
+.cat-f input {
+  transition:
+    color 0.18s ease,
+    border-color 0.18s ease;
+}
+.cat-dot {
+  animation: pop-in 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .cat-card,
+  .cat-dot {
+    animation: none !important;
+  }
+  .cat-card:hover {
+    transform: none;
+  }
+}
