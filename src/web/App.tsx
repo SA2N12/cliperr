@@ -1949,7 +1949,7 @@ const CRON_LABELS: Record<string, string> = {
   '0 */3 * * *': 'toutes les 3 h'
 }
 
-type AutopilotSlot = { user: string; handle: string | null; avatarUrl: string | null; niche: string; ordinal: number; etaHm: number; eta: string; done: boolean; pinned?: boolean; type?: string; subject?: string; hasSeries?: boolean; credits?: number; failed?: boolean; error?: string; music?: string; emptyStock?: boolean }
+type AutopilotSlot = { user: string; handle: string | null; avatarUrl: string | null; niche: string; ordinal: number; etaHm: number; eta: string; done: boolean; pinned?: boolean; type?: string; subject?: string; hasSeries?: boolean; credits?: number; failed?: boolean; error?: string; music?: string; stockPick?: string; emptyStock?: boolean }
 /** Nom lisible d'un morceau (retire le préfixe technique + l'extension du fichier). */
 function trackLabel(f: string): string {
   return f.replace(/^[a-z]+-\d+-/i, '').replace(/^\d+-/, '').replace(/\.[^.]+$/, '')
@@ -1980,6 +1980,8 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
   const [type, setType] = useState(slot.type ?? 'auto')
   const [subject, setSubject] = useState(slot.subject ?? '')
   const [music, setMusic] = useState(slot.music ?? 'auto')
+  // Mode de tirage quand AUCUN clip n'est choisi (type « stock » uniquement).
+  const [stockPick, setStockPick] = useState(slot.stockPick ?? 'recent')
   const [tracks, setTracks] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -2041,6 +2043,7 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
           hm: Number.isFinite(h) && Number.isFinite(m) ? h + m / 60 : null,
           type: type === 'auto' ? null : type,
           subject: ['clip', 'carousel', 'stock'].includes(type) ? subject : null,
+          stockPick: type === 'stock' ? stockPick : null,
           music
           // NB : pas de `day` ici — le différé (`from`) est posé UNIQUEMENT à la
           // création d'un bloc depuis « Demain » (bouton +) et survit à cet
@@ -2114,10 +2117,32 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
                   <option value={subject}>Clip n°{subject} — plus en stock</option>
                 )}
               </select>
+              {/* Mode de tirage : n'a de sens QUE sans clip choisi — avec un choix
+                  explicite, c'est ce clip qui part, il n'y a rien à tirer. */}
+              {!subject && (
+                <>
+                  <label className="muted small" style={{ display: 'block', marginTop: 12, marginBottom: 4, fontWeight: 500 }}>
+                    Sans clip choisi, publier
+                  </label>
+                  <select className="input-full" value={stockPick} onChange={(e) => setStockPick(e.target.value)}>
+                    <option value="recent">Le plus récent</option>
+                    <option value="oldest">Le plus ancien — écoule le stock</option>
+                    <option value="random">Au hasard</option>
+                  </select>
+                </>
+              )}
               <div className="sp-note">
                 {stockClips.length === 0
                   ? 'Aucun clip en stock : la page Clips → onglet En stock est vide.'
-                  : 'Publie ce clip tel quel, sans génération (0 crédit). Sans choix, le pilote prend le plus récent — jamais un clip 🔒 protégé (eux ne partent que choisis ici). Une fois publié, le créneau redevient automatique.'}
+                  : subject
+                    ? 'Publie ce clip précis, sans génération (0 crédit). Une fois publié, le créneau repart sur le stock du moment.'
+                    : (
+                      <>
+                        Publie un clip tel quel, sans génération (0 crédit) — jamais un clip 🔒 protégé (eux ne partent que choisis ici).
+                        {stockPick === 'random' && ' Le tirage est figé pour la journée : le bloc affiche à l’avance le clip qui partira ce soir.'}
+                        {stockPick === 'oldest' && ' Utile pour vider le stock dans l’ordre d’arrivée plutôt que de laisser vieillir les plus anciens.'}
+                      </>
+                    )}
               </div>
             </>
           )}
