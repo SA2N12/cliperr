@@ -955,7 +955,7 @@ function Dashboard({ scope }: { scope: string }): JSX.Element {
               </div>
             ))}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 16, marginTop: 12, flex: 1, minHeight: 0 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 16, marginTop: 8, flex: 1, minHeight: 0 }}>
             <div className="card"><div className="skel" style={{ width: '100%', height: '100%' }} /></div>
             <div className="card"><div className="skel" style={{ width: '100%', height: '100%' }} /></div>
           </div>
@@ -1044,7 +1044,7 @@ function Dashboard({ scope }: { scope: string }): JSX.Element {
                 <strong>Répartition des vues</strong>
                 <span className="small muted">Eng. <b style={{ color: 'var(--accent-strong)' }}>{engGlobal}</b></span>
               </div>
-              <p className="muted small" style={{ margin: '0 0 2px' }}>Par compte · clique pour le détail</p>
+              <p className="muted small" style={{ margin: '0 0 4px' }}>Par compte · clique pour le détail</p>
               <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
                 {profiles.map((p, i) => (
                   <div
