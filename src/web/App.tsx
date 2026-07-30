@@ -2128,6 +2128,7 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
                     <option value="recent">Le plus récent</option>
                     <option value="oldest">Le plus ancien — écoule le stock</option>
                     <option value="random">Au hasard</option>
+                    <option value="none">Ne rien publier — laisser le créneau vide</option>
                   </select>
                 </>
               )}
@@ -2141,6 +2142,7 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
                         Publie un clip tel quel, sans génération (0 crédit) — jamais un clip 🔒 protégé (eux ne partent que choisis ici).
                         {stockPick === 'random' && ' Le tirage est figé pour la journée : le bloc affiche à l’avance le clip qui partira ce soir.'}
                         {stockPick === 'oldest' && ' Utile pour vider le stock dans l’ordre d’arrivée plutôt que de laisser vieillir les plus anciens.'}
+                        {stockPick === 'none' && ' Le créneau est sauté : aucune publication, aucune génération de remplacement. Il reste actif et repartira dès que tu choisiras un clip ou un autre mode.'}
                       </>
                     )}
               </div>

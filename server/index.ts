@@ -755,10 +755,10 @@ function availableStockClips(): import('../src/shared/types').ClipDTO[] {
  *  clips publiables — un clip protégé ne part jamais tout seul. */
 /** Modes de tirage AUTOMATIQUE d'un créneau « stock » (quand aucun clip n'est
  *  choisi explicitement). `recent` = comportement historique. */
-export type StockPick = 'recent' | 'oldest' | 'random'
+export type StockPick = 'recent' | 'oldest' | 'random' | 'none'
 function asStockPick(v: unknown): StockPick {
   const t = String(v ?? '')
-  return t === 'oldest' || t === 'random' ? t : 'recent'
+  return t === 'oldest' || t === 'random' || t === 'none' ? t : 'recent'
 }
 /** Hachage stable d'une chaîne → entier positif. Sert à rendre le tirage
  *  « au hasard » REPRODUCTIBLE sur une même journée : sans ça, l'aperçu du
@@ -784,6 +784,9 @@ function pickStockClip(
       .find((c) => c.id === subjectId && c.filePath && c.publishStatus !== 'published' && c.reviewStatus !== 'rejected')
     if (chosen) return chosen
   }
+  // « Ne rien publier » : le créneau reste vide. On renvoie null, ce qui le fait
+  // sauter par la même voie qu'un stock épuisé — pas de seconde mécanique.
+  if (mode === 'none') return null
   // Déjà trié du plus récent au plus ancien.
   const stock = availableStockClips()
   if (!stock.length) return null
@@ -2776,7 +2779,7 @@ app.get('/api/autopilot/plan', wrap(async (req, res) => {
       let label: string
       if (ov?.type === 'custom' && (ov.subject ?? '').trim()) label = `Sujet : ${(ov.subject ?? '').trim()}`
       else if (ov?.type === 'carousel' || ov?.type === 'slideshow') label = `Carrousel : ${(ov.subject ?? '').trim() || nicheForProfile(user)}`
-      else if (ov?.type === 'stock') { const sc = pickStockClip(Number(ov.subject), asStockPick(ov.stockPick), `${user}:${ordinal}:${dayKey()}`); label = sc ? `En stock : ${sc.title ?? `clip n°${sc.id}`}` : 'Aucun clip en stock' }
+      else if (ov?.type === 'stock') { const sc = pickStockClip(Number(ov.subject), asStockPick(ov.stockPick), `${user}:${ordinal}:${dayKey()}`); label = sc ? `En stock : ${sc.title ?? `clip n°${sc.id}`}` : asStockPick(ov.stockPick) === 'none' ? 'Rien — créneau laissé vide' : 'Aucun clip en stock' }
       else if (ov?.type === 'clip') label = `Clip : ${(ov.subject ?? '').trim().replace(/^https?:\/\/(www\.)?/, '').slice(0, 50) || 'choix auto (IA)'}`
       else if (ov?.type === 'serie' && confSerie) label = `Série : ${confSerie.title}`
       else label = nicheForProfile(user)
@@ -2835,7 +2838,8 @@ app.get('/api/autopilot/plan', wrap(async (req, res) => {
     let emptyStock = false
     if (ov?.type === 'custom' && (ov.subject ?? '').trim()) label = `Sujet : ${(ov.subject ?? '').trim()}`
     else if (ov?.type === 'carousel' || ov?.type === 'slideshow') label = `Carrousel : ${(ov.subject ?? '').trim() || nicheForProfile(sc.user)}`
-    else if (ov?.type === 'stock') { const stk = pickStockClip(Number(ov.subject), asStockPick(ov.stockPick), `${sc.user}:${sc.ordinal}:${dayKey()}`); if (stk) label = `En stock : ${stk.title ?? `clip n°${stk.id}`}`; else { label = 'Aucun clip en stock'; emptyStock = true } }
+    else if (ov?.type === 'stock') { const stk = pickStockClip(Number(ov.subject), asStockPick(ov.stockPick), `${sc.user}:${sc.ordinal}:${dayKey()}`); if (stk) label = `En stock : ${stk.title ?? `clip n°${stk.id}`}`; else if (asStockPick(ov.stockPick) === 'none') label = 'Rien — créneau laissé vide' // choix délibéré : pas d'alerte ambre, contrairement au stock épuisé
+    else { label = 'Aucun clip en stock'; emptyStock = true } }
     else if (ov?.type === 'clip') label = `Clip : ${(ov.subject ?? '').trim().replace(/^https?:\/\/(www\.)?/, '').slice(0, 50) || 'choix auto (IA)'}`
     else if (ov?.type === 'serie' && confSerie) label = `Série : ${confSerie.title} — Ép. ${confSerie.episode}`
     else label = nicheForProfile(sc.user)
@@ -3080,7 +3084,7 @@ app.post('/api/autopilot/slot', wrap((req, res) => {
       const sp = String(b.stockPick ?? '')
       // 'recent' est le défaut : on ne l'écrit pas, un créneau sans réglage
       // doit rester indistinguable d'un créneau réglé sur le défaut.
-      if (sp === 'oldest' || sp === 'random') o.stockPick = sp
+      if (sp === 'oldest' || sp === 'random' || sp === 'none') o.stockPick = sp
       else delete o.stockPick
     }
     if (b.music !== undefined) {
