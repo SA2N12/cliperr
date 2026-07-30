@@ -60,7 +60,10 @@ const ALL_SCOPE = '__all__'
 const CAT_OF: Record<string, string> = {
   niche: 'niche', serie: 'niche', custom: 'niche',
   carousel: 'carousel', slideshow: 'carousel',
-  clip: 'clip', stock: 'clip'
+  // Le stock a sa PROPRE teinte : republier un clip déjà produit ne coûte rien
+  // et ne mobilise aucune génération — c'est une nature de créneau différente
+  // d'un découpage à faire, même si le résultat est un clip dans les deux cas.
+  clip: 'clip', stock: 'stock'
 }
 const catKey = (type?: string | null): string => CAT_OF[String(type ?? '')] ?? 'niche'
 const catColor = (type?: string | null): string => `var(--cat-${catKey(type)})`
@@ -68,7 +71,8 @@ const catColor = (type?: string | null): string => `var(--cat-${catKey(type)})`
 const CAT_LEGENDE: { key: string; label: string }[] = [
   { key: 'niche', label: 'Niche' },
   { key: 'carousel', label: 'Carrousel' },
-  { key: 'clip', label: 'Clip' }
+  { key: 'clip', label: 'Clip' },
+  { key: 'stock', label: 'En stock' }
 ]
 /**
  * Icône Google (Material Symbols). La police est chargée en sous-ensemble dans

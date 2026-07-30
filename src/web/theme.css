@@ -2999,6 +2999,10 @@ input[type='checkbox'] {
   --cat-carousel: #0d9488;
   --cat-clip: #65a30d;
   --cat-genai: #34d399;
+  /* Stock : un clip DEJA produit, republie sans rien couter. Vert franc, plus
+     sature que l emeraude des niches — la distinction tient donc a la teinte ET
+     a la luminosite, pas au seul angle de couleur. */
+  --cat-stock: #15803d;
   /* Même mono que le dashboard SellExpert. */
   --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Cascadia Mono', 'Roboto Mono', Menlo, Consolas, monospace;
 }
@@ -3317,6 +3321,7 @@ input[type='checkbox'] {
   --cat-carousel: #2dd4bf;
   --cat-clip: #a3e635;
   --cat-genai: #6ee7b7;
+  --cat-stock: #22c55e;
 }
 /* Bascule clair/sombre : même habillage que « Console », pour qu'elles forment
    un groupe cohérent côte à côte. */
