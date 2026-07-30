@@ -2989,6 +2989,16 @@ input[type='checkbox'] {
   --ap-green-deep: #065f46;
   --ap-green-soft: #ecfdf5;
   --ap-green-border: #a7f3d0;
+  /* ── Repere couleur des CATEGORIES ──────────────────────────────────────
+     Quatre nuances de vert, assez ecartees pour se distinguer a 12 px dans un
+     bloc du planning, assez proches pour rester une famille. Les carrousels
+     tiennent leur propre teinte : ils vivent sous « Niches » mais forment une
+     chaine de generation distincte, et les confondre dans le planning ferait
+     perdre l information la plus utile — ce qui va partir en photos. */
+  --cat-niche: #10b981;
+  --cat-carousel: #0d9488;
+  --cat-clip: #65a30d;
+  --cat-genai: #34d399;
   /* Même mono que le dashboard SellExpert. */
   --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Cascadia Mono', 'Roboto Mono', Menlo, Consolas, monospace;
 }
@@ -3303,6 +3313,10 @@ input[type='checkbox'] {
   --ap-green-deep: #6ee7b7;
   --ap-green-soft: #10281f;
   --ap-green-border: #1f5f47;
+  --cat-niche: #34d399;
+  --cat-carousel: #2dd4bf;
+  --cat-clip: #a3e635;
+  --cat-genai: #6ee7b7;
 }
 /* Bascule clair/sombre : même habillage que « Console », pour qu'elles forment
    un groupe cohérent côte à côte. */
@@ -3509,5 +3523,61 @@ input[type='checkbox'] {
   }
   .cat-card:hover {
     transform: none;
+  }
+}
+
+/* ── Repère couleur des catégories ──────────────────────────────────────────
+   `--cat` est posée sur la carte par le rendu ; tout ce qui suit s'y accroche,
+   de sorte qu'ajouter une catégorie ne demande qu'une teinte de plus. */
+.cat-card {
+  /* Filet de couleur en tête de carte : lisible même quand la carte est
+     partiellement sortie de l'écran. */
+  border-top: 2px solid var(--cat, var(--border));
+}
+.cat-ico {
+  background: color-mix(in srgb, var(--cat) 14%, transparent);
+  color: var(--cat);
+}
+/* Le repère « personnalisé » adopte la teinte de sa catégorie plutôt qu'un vert
+   unique : sur la page comme dans le planning, une couleur = une catégorie. */
+.cat-f.on .cat-lbl {
+  color: var(--cat);
+}
+.cat-dot {
+  background: var(--cat);
+}
+.cat-f.on select,
+.cat-f.on input {
+  border-color: color-mix(in srgb, var(--cat) 55%, var(--border));
+}
+.cat-count.on {
+  color: var(--cat);
+}
+
+/* Légende du planning : rappelle ce que signifient les liserés des blocs. */
+.cat-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-right: 2px;
+  font-size: 11.5px;
+  color: var(--muted-2);
+}
+.cat-legend-i {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+.cat-legend-d {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+}
+/* Écran étroit : la légende est le premier élément sacrifiable de la barre —
+   les blocs restent lisibles par leur libellé. */
+@media (max-width: 900px) {
+  .cat-legend {
+    display: none;
   }
 }

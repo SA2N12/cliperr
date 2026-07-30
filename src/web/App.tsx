@@ -48,6 +48,28 @@ const ICONS: Record<string, string> = {
 
 // Valeur spéciale du sélecteur en haut à droite : « Tous les comptes » (vue globale).
 const ALL_SCOPE = '__all__'
+
+// ── Repère couleur des catégories ──────────────────────────────────────────
+// Une même teinte désigne une catégorie PARTOUT : dans les blocs du planning et
+// sur la page Catégories. C'est ce qui permet de lire un planning d'un coup
+// d'œil sans déchiffrer chaque libellé tronqué.
+// Les types internes du planning s'y rattachent : une série ou un sujet imposé
+// restent des vidéos de niche. Les carrousels gardent leur teinte propre — ils
+// vivent sous « Niches » mais produisent des photos, et c'est justement ce qu'on
+// veut distinguer d'un regard. Un clip en stock est un clip déjà découpé.
+const CAT_OF: Record<string, string> = {
+  niche: 'niche', serie: 'niche', custom: 'niche',
+  carousel: 'carousel', slideshow: 'carousel',
+  clip: 'clip', stock: 'clip'
+}
+const catKey = (type?: string | null): string => CAT_OF[String(type ?? '')] ?? 'niche'
+const catColor = (type?: string | null): string => `var(--cat-${catKey(type)})`
+/** Légende du planning : l'ordre suit celui de la page Catégories. */
+const CAT_LEGENDE: { key: string; label: string }[] = [
+  { key: 'niche', label: 'Niche' },
+  { key: 'carousel', label: 'Carrousel' },
+  { key: 'clip', label: 'Clip' }
+]
 /**
  * Icône Google (Material Symbols). La police est chargée en sous-ensemble dans
  * index.html : n'utiliser QUE des noms listés dans son paramètre `icon_names`.
@@ -2631,8 +2653,25 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
           // comptes, et les 5 lignes doivent tenir sans défilement (cf. .ap-fit).
           padding: '7px 8px',
           borderRadius: 0,
-          background: s.failed ? 'rgba(220,38,38,0.06)' : s.emptyStock ? 'rgba(217,119,6,0.06)' : s.done ? 'var(--ap-green-soft)' : 'var(--panel)',
-          border: s.failed ? '1.5px solid var(--bad)' : s.emptyStock ? '1.5px dashed #d97706' : s.done ? '1.5px solid var(--ap-green-border)' : `1.5px solid ${generating || s.pinned || s.type ? 'var(--ap-green)' : 'var(--border)'}`,
+          // Teinte de la CATÉGORIE, appliquée aux seuls blocs à venir dont le type
+          // est connu. Les états (échec, stock vide, publié) gardent leur code
+          // couleur et priment : on veut repérer un échec avant une catégorie.
+          background: s.failed
+            ? 'rgba(220,38,38,0.06)'
+            : s.emptyStock
+              ? 'rgba(217,119,6,0.06)'
+              : s.done
+                ? 'var(--ap-green-soft)'
+                : s.type
+                  ? `color-mix(in srgb, ${catColor(s.type)} 9%, var(--panel))`
+                  : 'var(--panel)',
+          border: s.failed
+            ? '1.5px solid var(--bad)'
+            : s.emptyStock
+              ? '1.5px dashed #d97706'
+              : s.done
+                ? '1.5px solid var(--ap-green-border)'
+                : `1.5px solid ${s.type ? catColor(s.type) : generating || s.pinned ? 'var(--ap-green)' : 'var(--border)'}`,
           cursor: s.done ? 'default' : 'pointer',
           display: 'flex',
           flexDirection: 'column',
@@ -2792,6 +2831,16 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {/* Légende : sans elle, les teintes des blocs ne sont que de la
+              décoration — rien ne dit ce qu'un liseré vert-jaune signifie. */}
+          <span className="cat-legend">
+            {CAT_LEGENDE.map((c) => (
+              <span key={c.key} className="cat-legend-i">
+                <span className="cat-legend-d" style={{ background: `var(--cat-${c.key})` }} />
+                {c.label}
+              </span>
+            ))}
+          </span>
           {plan.stockCount != null && (
             <span
               className="pill-badge"
@@ -3667,9 +3716,9 @@ function CategoriesPage({ toast }: { toast: (m: string) => void }): JSX.Element 
     )
   }
 
-  const CARTES: { cle: string; cats: string[]; icone: string; titre: string; hint: string; corps: JSX.Element }[] = [
+  const CARTES: { cle: string; cats: string[]; icone: string; titre: string; teinte: string; hint: string; corps: JSX.Element }[] = [
     {
-      cle: 'niche', cats: ['niche', 'carousel'], icone: 'bulb', titre: 'Niches',
+      cle: 'niche', cats: ['niche', 'carousel'], icone: 'bulb', titre: 'Niches', teinte: 'niche',
       hint: 'Le tout-venant du pilote, sur la niche du compte. Les séries et les sujets imposés suivent ces réglages.',
       corps: (
         <>
@@ -3681,7 +3730,7 @@ function CategoriesPage({ toast }: { toast: (m: string) => void }): JSX.Element 
       )
     },
     {
-      cle: 'clip', cats: ['clip'], icone: 'scissors', titre: 'Clips (cut streamer)',
+      cle: 'clip', cats: ['clip'], icone: 'scissors', titre: 'Clips (cut streamer)', teinte: 'clip',
       hint: 'Extraits découpés dans un live ou un reportage. Aucune génération : ces vidéos existent déjà.',
       corps: (
         <>
@@ -3694,7 +3743,7 @@ function CategoriesPage({ toast }: { toast: (m: string) => void }): JSX.Element 
       )
     },
     {
-      cle: 'genai', cats: ['genai'], icone: 'sparkles', titre: 'Génération IA',
+      cle: 'genai', cats: ['genai'], icone: 'sparkles', titre: 'Génération IA', teinte: 'genai',
       hint: 'Les vidéos lancées à la main. Les sélecteurs de la carte d’idée restent prioritaires sur ces valeurs.',
       corps: blocVideo('genai')
     }
@@ -3712,8 +3761,11 @@ function CategoriesPage({ toast }: { toast: (m: string) => void }): JSX.Element 
         </div>
       </div>
       <div className="cat-grid">
+        {/* La teinte de la catégorie passe par une variable locale `--cat` : la
+            CSS s'en sert pour le filet, l'icône et le repère de personnalisation,
+            sans qu'aucune couleur ne soit écrite en dur dans le rendu. */}
         {CARTES.map((c) => (
-          <div className="card cat-card" key={c.cle}>
+          <div className="card cat-card" key={c.cle} style={{ '--cat': `var(--cat-${c.teinte})` } as CSSProperties}>
             <div className="cat-head">
               <span className="cat-ico"><Icon name={c.icone} size={16} /></span>
               <div>
