@@ -2656,81 +2656,58 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
   if (!plan?.enabled) return null
   if (!groupByAccount && day === 0 && slots.length === 0) return null
 
+  /** Nom lisible d'une catégorie, pour l'en-tête d'un bloc. */
+  const CAT_LABEL: Record<string, string> = {
+    niche: 'Niche', serie: 'Série', custom: 'Sujet',
+    carousel: 'Carrousel', slideshow: 'Carrousel', clip: 'Clip', stock: 'En stock'
+  }
+  /** Le serveur compose « Catégorie : sujet ». On sépare les deux pour les
+   *  afficher différemment — la catégorie porte la couleur, le sujet le sens. */
+  const splitLabel = (s: AutopilotSlot): { cat: string; sujet: string } => {
+    const i = s.niche.indexOf(' : ')
+    if (i > 0) return { cat: s.niche.slice(0, i), sujet: s.niche.slice(i + 3) }
+    return { cat: s.type ? (CAT_LABEL[s.type] ?? 'Niche') : 'Niche', sujet: s.niche }
+  }
+
   const renderBlock = (s: AutopilotSlot, opts?: { hideAvatar?: boolean }): JSX.Element => {
     const generating = day === 0 && !!activeGen && `${s.user}-${s.ordinal}` === nextKey
+    const { cat, sujet } = splitLabel(s)
+    // Un créneau sans type n'est pas encore décidé : on le dit, plutôt que
+    // d'afficher la niche du compte comme si le choix était fait.
+    const libre = !s.type && !s.done && !s.failed
+    const statut = s.done ? 'publiée'
+      : s.failed ? 'échec'
+        : generating ? 'création…'
+          : s.emptyStock ? 'sans clip'
+            : libre ? 'à définir' : 'à venir'
+    const teinte = catColor(s.type)
     return (
       <button
         key={`${s.user}-${s.ordinal}-${s.done ? 'pub' : 'up'}`}
-        className={`ap-slot${s.done ? ' done' : ''}${generating ? ' gen' : ''}`}
+        className={`ap-slot${s.done ? ' done' : ''}${generating ? ' gen' : ''}${s.failed ? ' bad' : ''}${s.emptyStock ? ' empty' : ''}${libre ? ' free' : ''}`}
         onClick={() => { if (!s.done) { setCfgUser(null); setEditSlot(s) } }}
         title={s.failed ? `Échec : ${s.error ?? ''} — clique pour changer / retenter` : s.done ? s.niche : `${s.niche} — clique pour personnaliser (heure, type)`}
-        style={{
-          width: opts?.hideAvatar ? 104 : 116,
-          // Compact : c'est la hauteur de ce bloc qui commande celle des lignes de
-          // comptes, et les 5 lignes doivent tenir sans défilement (cf. .ap-fit).
-          padding: '7px 8px',
-          borderRadius: 0,
-          // Teinte de la CATÉGORIE, appliquée aux seuls blocs à venir dont le type
-          // est connu. Les états (échec, stock vide, publié) gardent leur code
-          // couleur et priment : on veut repérer un échec avant une catégorie.
-          background: s.failed
-            ? 'rgba(220,38,38,0.06)'
-            : s.emptyStock
-              ? 'rgba(217,119,6,0.06)'
-              : s.done
-                ? 'var(--ap-green-soft)'
-                : s.type
-                  ? `color-mix(in srgb, ${catColor(s.type)} 9%, var(--panel))`
-                  : 'var(--panel)',
-          border: s.failed
-            ? '1.5px solid var(--bad)'
-            : s.emptyStock
-              ? '1.5px dashed #d97706'
-              : s.done
-                ? '1.5px solid var(--ap-green-border)'
-                : `1.5px solid ${s.type ? catColor(s.type) : generating || s.pinned ? 'var(--ap-green)' : 'var(--border)'}`,
-          cursor: s.done ? 'default' : 'pointer',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: 3,
-          fontFamily: 'inherit'
-        }}
+        style={{ ['--slot' as string]: teinte } as CSSProperties}
       >
-        <div className={`ap-time-tag${s.failed ? ' failed' : s.done ? ' done' : ''}`}>
-          {s.eta}
-          {s.failed && <MIcon name="error" size={13} />}
-          {!s.done && !s.failed && (s.pinned || s.type) && <MIcon name="push_pin" size={13} />}
-          {!s.done && !s.failed && s.music && s.music !== 'auto' && (
-            <MIcon name={s.music === 'none' ? 'music_off' : 'music_note'} size={13} />
-          )}
+        <div className="ap-slot-top">
+          <span className="ap-slot-h">{s.eta}</span>
+          <span className="ap-slot-ic">
+            {s.failed && <MIcon name="error" size={12} />}
+            {!s.done && !s.failed && (s.pinned || s.type) && <MIcon name="push_pin" size={12} />}
+            {!s.done && !s.failed && s.music && s.music !== 'auto' && (
+              <MIcon name={s.music === 'none' ? 'music_off' : 'music_note'} size={12} />
+            )}
+            {s.done && <MIcon name="check_circle" size={12} />}
+          </span>
         </div>
-        {!opts?.hideAvatar && <Avatar url={s.avatarUrl} name={s.user} size={30} />}
-        {!opts?.hideAvatar && (
-          <div className="muted small" style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {s.handle ? '@' + s.handle : s.user}
-          </div>
-        )}
-        <div className="small" style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: s.done || s.failed ? 700 : 500, color: s.failed ? 'var(--bad)' : s.emptyStock ? '#b45309' : s.done ? 'var(--ap-green-strong)' : generating ? 'var(--ap-green-strong)' : 'var(--muted)' }}>
-          {s.done ? <><MIcon name="check_circle" size={13} /> Publiée</>
-            : s.failed ? <><MIcon name="error" size={13} /> Échec</>
-              : s.emptyStock ? <><MIcon name="warning" size={13} /> Aucun clip</>
-                : generating ? <><MIcon name="progress_activity" size={13} spin /> création…</>
-                  : s.niche.split(' (')[0]}
+        <div className="ap-slot-lbl">
+          <span className="ap-slot-dot" />
+          {libre ? 'Créneau libre' : <><b>{cat}</b>{sujet && sujet !== cat ? <> · {sujet}</> : null}</>}
         </div>
-        {s.failed && s.error ? (
-          <div title={s.error} style={{ fontSize: 10, color: 'var(--bad)', maxWidth: '100%', whiteSpace: 'normal', lineHeight: 1.2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-            {s.error}
-          </div>
-        ) : s.credits != null ? (
-          <div
-            className="ap-time"
-            title="Coût estimé de cette vidéo (aperçu — aucun débit pour l’instant)"
-            style={{ fontSize: 11, fontWeight: 600, padding: '1px 8px', borderRadius: 999, background: 'var(--panel)', border: '1px solid var(--border)', color: 'var(--muted)' }}
-          >
-            {s.credits} cr
-          </div>
-        ) : null}
+        <div className="ap-slot-bot">
+          {s.credits != null ? <span className="ap-slot-cr">{s.credits} cr</span> : <span />}
+          <span className="ap-slot-st">{statut}</span>
+        </div>
       </button>
     )
   }
@@ -2839,13 +2816,18 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
               </button>
             ))}
           </div>
-          <div className="muted small">
-            {day === 1 ? (
-              <>Planning de demain · {slots.length} vidéo{slots.length > 1 ? 's' : ''} prévue{slots.length > 1 ? 's' : ''} · clique un bloc pour l’ajuster (s’applique demain et les jours suivants)</>
-            ) : (
-              <><b className="ap-time" style={{ color: 'var(--ap-green-strong)' }}>{doneCount}/{slots.length}</b> publiée{slots.length > 1 ? 's' : ''} · clique un bloc « à venir » pour choisir son heure et son type de vidéo</>
-            )}
-          </div>
+          {/* Avancement du jour : la jauge dit d'un regard où en est la journée,
+              le compte chiffré donne le détail. */}
+          {day === 0 && slots.length > 0 ? (
+            <div className="ap-day">
+              <div className="ap-prog wide"><div style={{ width: `${(doneCount / slots.length) * 100}%` }} /></div>
+              <span className="ap-day-n">{doneCount}/{slots.length} publiées</span>
+            </div>
+          ) : (
+            <div className="muted small">
+              Planning de demain · {slots.length} vidéo{slots.length > 1 ? 's' : ''} prévue{slots.length > 1 ? 's' : ''} · clique un bloc pour l’ajuster
+            </div>
+          )}
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           {/* Légende : sans elle, les teintes des blocs ne sont que de la
@@ -2906,6 +2888,10 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
                     {/* Nom en entier (pas d'ellipsis) : la colonne est assez large. */}
                     <div className="small" style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>{a.handle ? '@' + a.handle : u}</div>
                     <div className="muted small" style={{ whiteSpace: 'nowrap' }}>{userSlots.length === 0 ? 'Aucune vidéo prévue' : `${uDone}/${userSlots.length} publiée${uDone > 1 ? 's' : ''}${uCredits > 0 ? ` · ${uCredits} cr` : ''}`}</div>
+                    {/* Avancement du compte : lisible sans compter les blocs publiés. */}
+                    {userSlots.length > 0 && (
+                      <div className="ap-prog"><div style={{ width: `${(uDone / userSlots.length) * 100}%` }} /></div>
+                    )}
                   </div>
                   <button className="btn icon-btn" title="Réglages du compte (cadence, niche, CTA, série)" onClick={() => { setEditSlot(null); setCfgUser(u) }} style={{ width: 30, height: 30, flexShrink: 0 }}>
                     <Icon name="settings" size={14} />

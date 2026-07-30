@@ -3791,3 +3791,144 @@ input[type='checkbox'] {
 .funnel-list::-webkit-scrollbar {
   display: none;
 }
+
+/* ── Blocs du planning, refonte ─────────────────────────────────────────────
+   Trois lignes alignées à GAUCHE au lieu d'un empilement centré : heure, puis
+   catégorie · sujet, puis coût et statut. Le bloc se lit comme une fiche, pas
+   comme une étiquette. `--slot` porte la teinte de la catégorie, posée par le
+   rendu. */
+.ap-slot {
+  width: 176px;
+  padding: 8px 10px;
+  border-radius: 0;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+/* Créneau dont le type est décidé : il prend la couleur de sa catégorie. */
+.ap-slot:not(.free):not(.done):not(.bad):not(.empty) {
+  border-color: var(--slot);
+  background: color-mix(in srgb, var(--slot) 8%, var(--panel));
+}
+.ap-slot.done {
+  border-color: var(--ap-green-border);
+  background: var(--ap-green-soft);
+  cursor: default;
+}
+.ap-slot.bad {
+  border-color: var(--bad);
+  background: color-mix(in srgb, var(--bad) 8%, var(--panel));
+}
+/* Stock épuisé : trait discontinu — c'est un créneau qui ne partira pas, il ne
+   doit pas se lire comme un créneau prêt. */
+.ap-slot.empty {
+  border-style: dashed;
+  border-color: #d97706;
+}
+.ap-slot-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.ap-slot-h {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.02em;
+}
+.ap-slot-ic {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--muted-2);
+  flex-shrink: 0;
+}
+.ap-slot.done .ap-slot-ic {
+  color: var(--ap-green-strong);
+}
+.ap-slot-lbl {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ap-slot-lbl b {
+  font-weight: 500;
+  color: var(--text);
+}
+/* Pastille de catégorie : le repère couleur reste lisible même quand le libellé
+   est tronqué, ce qui arrive dès que le sujet est long. */
+.ap-slot-dot {
+  width: 6px;
+  height: 6px;
+  background: var(--slot);
+  flex-shrink: 0;
+}
+.ap-slot.free .ap-slot-dot,
+.ap-slot.done .ap-slot-dot {
+  background: var(--muted-2);
+}
+.ap-slot-bot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.ap-slot-cr {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  color: var(--muted-2);
+}
+.ap-slot-st {
+  font-size: 10.5px;
+  color: var(--muted-2);
+  white-space: nowrap;
+}
+.ap-slot.done .ap-slot-st {
+  color: var(--ap-green-strong);
+}
+.ap-slot.bad .ap-slot-st {
+  color: var(--bad);
+}
+
+/* Jauges d'avancement : celle d'un compte, et celle de la journée. */
+.ap-prog {
+  height: 3px;
+  margin-top: 5px;
+  max-width: 120px;
+  background: color-mix(in srgb, var(--ap-green) 16%, transparent);
+}
+.ap-prog.wide {
+  max-width: 180px;
+  margin-top: 0;
+}
+.ap-prog > div {
+  height: 100%;
+  background: linear-gradient(90deg, var(--ap-green) 0%, color-mix(in srgb, var(--ap-green) 45%, transparent) 100%);
+  transition: width 0.4s ease;
+}
+.ap-day {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ap-day-n {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--muted);
+}
