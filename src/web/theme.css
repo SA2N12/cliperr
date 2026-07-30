@@ -3779,3 +3779,15 @@ input[type='checkbox'] {
 .topbar .tb-account {
   border-radius: 0;
 }
+
+/* Liste des comptes : le défilement reste possible (molette, trackpad, clavier)
+   mais la barre ne s'affiche jamais. Elle apparaissait pendant le chargement,
+   le temps que les données arrivent et que la hauteur se stabilise — un
+   artefact transitoire, pas une information. Même traitement que la liste des
+   comptes du pilote auto. */
+.funnel-list {
+  scrollbar-width: none;
+}
+.funnel-list::-webkit-scrollbar {
+  display: none;
+}
