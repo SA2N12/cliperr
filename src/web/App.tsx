@@ -3527,59 +3527,103 @@ function Providers({ go }: { go: (p: Page) => void }): JSX.Element {
 // génération manuelle — et non les types internes du planning : une série ou un
 // sujet libre restent des vidéos de niche dont on a imposé l'univers ou le
 // sujet, ils suivent donc les réglages « Niches ».
+type CatGlobals = Record<string, string | number>
+/** Libellés lisibles des valeurs héritées : « Réglage global » seul n'apprend
+ *  rien — on affiche CE QU'IL VAUT, sinon impossible de juger s'il faut le
+ *  surcharger. */
+const CAT_MOTS: Record<string, string> = {
+  seedance: 'Seedance', veo: 'Veo', pixverse: 'Pixverse', wan: 'Wan 2.7',
+  economique: 'Économique', fr: 'Français', en: 'Anglais',
+  center: 'Centré', face: 'Suivi du visage', '1': 'Incrustés', '0': 'Aucun'
+}
 function CategoriesPage({ toast }: { toast: (m: string) => void }): JSX.Element {
   const [cfg, setCfg] = useState<Record<string, Record<string, string | number>>>({})
+  const [globals, setGlobals] = useState<CatGlobals>({})
   const [busy, setBusy] = useState('')
-  useEffect(() => { api.categories().then((r) => setCfg(r.settings ?? {})).catch(() => undefined) }, [])
+  // Copie de référence : sert à savoir si une carte a été touchée (bouton actif)
+  // et à annuler proprement.
+  const [ref, setRef] = useState<Record<string, Record<string, string | number>>>({})
+
+  const charger = useCallback((): void => {
+    api.categories().then((r) => {
+      setCfg(r.settings ?? {})
+      setRef(r.settings ?? {})
+      setGlobals((r as unknown as { globals?: CatGlobals }).globals ?? {})
+    }).catch(() => undefined)
+  }, [])
+  useEffect(() => { charger() }, [charger])
 
   const val = (cat: string, key: string): string => String(cfg[cat]?.[key] ?? '')
   const champ = (cat: string, key: string, v: string): void =>
     setCfg((c) => ({ ...c, [cat]: { ...(c[cat] ?? {}), [key]: v } as Record<string, string | number> }))
+  /** Un champ vide = « suivre le global ». On ne compte donc que les non-vides. */
+  const nbPerso = (cats: string[]): number =>
+    cats.reduce((n, c) => n + Object.values(cfg[c] ?? {}).filter((v) => String(v ?? '') !== '').length, 0)
+  const modifie = (cats: string[]): boolean =>
+    cats.some((c) => JSON.stringify(Object.entries(cfg[c] ?? {}).filter(([, v]) => String(v ?? '') !== '').sort())
+      !== JSON.stringify(Object.entries(ref[c] ?? {}).filter(([, v]) => String(v ?? '') !== '').sort()))
+  const herite = (key: string): string => {
+    const g = globals[key]
+    if (g == null || g === '') return 'global'
+    return CAT_MOTS[String(g)] ?? String(g)
+  }
 
-  /** Enregistre une ou plusieurs catégories (la carte « Niches » en porte deux :
-   *  les vidéos et les carrousels sont deux chaînes de génération distinctes). */
   const enregistrer = async (cats: string[], cle: string): Promise<void> => {
     setBusy(cle)
     try {
-      let dernier: Record<string, Record<string, string | number>> = cfg
+      let dernier = cfg
       for (const c of cats) {
         const r = await api.saveCategory(c, (cfg[c] ?? {}) as Record<string, string | number | null>)
         dernier = r.settings ?? dernier
       }
-      setCfg(dernier)
+      setCfg(dernier); setRef(dernier)
       toast('Réglages enregistrés ✓')
     } catch (e) {
       toast('Erreur : ' + (e as Error).message)
-    } finally {
-      setBusy('')
-    }
+    } finally { setBusy('') }
+  }
+  const reinitialiser = async (cats: string[], cle: string): Promise<void> => {
+    setBusy(cle)
+    try {
+      const vide = { engine: '', quality: '', maxScenes: '', lang: '', subtitles: '', speed: '', slides: '', clipCount: '', reframe: '' }
+      let dernier = cfg
+      for (const c of cats) {
+        const r = await api.saveCategory(c, vide)
+        dernier = r.settings ?? {}
+      }
+      setCfg(dernier); setRef(dernier)
+      toast('Catégorie remise sur les réglages globaux')
+    } catch (e) {
+      toast('Erreur : ' + (e as Error).message)
+    } finally { setBusy('') }
   }
 
-  const select = (cat: string, key: string, label: string, opts: [string, string][]): JSX.Element => (
-    <>
-      <label className="muted small cat-lbl">{label}</label>
-      <select className="input-full" value={val(cat, key)} onChange={(e) => champ(cat, key, e.target.value)}>
-        <option value="">— Réglage global —</option>
-        {opts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-      </select>
-    </>
-  )
-  const nombre = (cat: string, key: string, label: string, min: number, max: number, ph: string, step?: string): JSX.Element => (
-    <div>
-      <label className="muted small cat-lbl">{label}</label>
-      <input
-        className="input-full"
-        type="number"
-        min={min}
-        max={max}
-        step={step}
-        placeholder={ph}
-        value={val(cat, key)}
-        onChange={(e) => champ(cat, key, e.target.value)}
-      />
-    </div>
-  )
-  /** Les réglages communs à toute génération vidéo (niche et génération IA). */
+  const select = (cat: string, key: string, label: string, opts: [string, string][]): JSX.Element => {
+    const perso = val(cat, key) !== ''
+    return (
+      <div className={`cat-f${perso ? ' on' : ''}`}>
+        <label className="cat-lbl">{label}{perso && <span className="cat-dot" title="Personnalisé pour cette catégorie" />}</label>
+        <select className="input-full" value={val(cat, key)} onChange={(e) => champ(cat, key, e.target.value)}>
+          <option value="">Global · {herite(key)}</option>
+          {opts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
+      </div>
+    )
+  }
+  const nombre = (cat: string, key: string, label: string, min: number, max: number, step?: string): JSX.Element => {
+    const perso = val(cat, key) !== ''
+    return (
+      <div className={`cat-f${perso ? ' on' : ''}`}>
+        <label className="cat-lbl">{label}{perso && <span className="cat-dot" title="Personnalisé pour cette catégorie" />}</label>
+        <input
+          className="input-full" type="number" min={min} max={max} step={step}
+          placeholder={String(globals[key] ?? '')}
+          value={val(cat, key)}
+          onChange={(e) => champ(cat, key, e.target.value)}
+        />
+      </div>
+    )
+  }
   const blocVideo = (cat: string): JSX.Element => (
     <>
       {select(cat, 'engine', 'Moteur des scènes parlées', [
@@ -3589,20 +3633,72 @@ function CategoriesPage({ toast }: { toast: (m: string) => void }): JSX.Element 
         ['wan', 'Wan 2.7 — nos voix + synchro labiale']
       ])}
       {select(cat, 'quality', 'Qualité imposée', [
-        ['wan', 'Wan 2.7 (~0,50 $/scène)'],
-        ['seedance', 'Seedance 2.0 (~0,84 $/scène)'],
-        ['veo', 'Veo payant (~1,20 $/scène)']
+        ['wan', 'Wan 2.7 — ~0,50 $/scène'],
+        ['seedance', 'Seedance 2.0 — ~0,84 $/scène'],
+        ['veo', 'Veo payant — ~1,20 $/scène']
       ])}
       <div className="cat-row">
-        {nombre(cat, 'maxScenes', 'Scènes max', 1, 60, 'global')}
-        {nombre(cat, 'speed', 'Débit de parole', 0.5, 2, 'global', '0.05')}
+        {nombre(cat, 'maxScenes', 'Scènes max', 1, 60)}
+        {nombre(cat, 'speed', 'Débit de parole', 0.5, 2, '0.05')}
       </div>
       <div className="cat-row">
-        <div>{select(cat, 'lang', 'Langue', [['fr', 'Français'], ['en', 'Anglais']])}</div>
-        <div>{select(cat, 'subtitles', 'Sous-titres', [['1', 'Incrustés'], ['0', 'Aucun']])}</div>
+        {select(cat, 'lang', 'Langue', [['fr', 'Français'], ['en', 'Anglais']])}
+        {select(cat, 'subtitles', 'Sous-titres', [['1', 'Incrustés'], ['0', 'Aucun']])}
       </div>
     </>
   )
+
+  /** Pied commun : compteur, remise à zéro, enregistrement. */
+  const pied = (cats: string[], cle: string): JSX.Element => {
+    const n = nbPerso(cats)
+    const dirty = modifie(cats)
+    return (
+      <div className="cat-foot">
+        <span className={`cat-count${n ? ' on' : ''}`}>
+          {n === 0 ? 'Tout suit les réglages globaux' : `${n} réglage${n > 1 ? 's' : ''} personnalisé${n > 1 ? 's' : ''}`}
+        </span>
+        {n > 0 && !dirty && (
+          <button className="btn ghost-sm" disabled={busy === cle} onClick={() => void reinitialiser(cats, cle)}>Réinitialiser</button>
+        )}
+        <button className="btn primary" disabled={busy === cle || !dirty} onClick={() => void enregistrer(cats, cle)}>
+          {busy === cle ? 'Enregistrement…' : 'Enregistrer'}
+        </button>
+      </div>
+    )
+  }
+
+  const CARTES: { cle: string; cats: string[]; icone: string; titre: string; hint: string; corps: JSX.Element }[] = [
+    {
+      cle: 'niche', cats: ['niche', 'carousel'], icone: 'bulb', titre: 'Niches',
+      hint: 'Le tout-venant du pilote, sur la niche du compte. Les séries et les sujets imposés suivent ces réglages.',
+      corps: (
+        <>
+          <div className="cat-sub">Vidéos</div>
+          {blocVideo('niche')}
+          <div className="cat-sub">Carrousels</div>
+          <div className="cat-row">{nombre('carousel', 'slides', 'Nombre de diapos', 3, 10)}<div /></div>
+        </>
+      )
+    },
+    {
+      cle: 'clip', cats: ['clip'], icone: 'scissors', titre: 'Clips (cut streamer)',
+      hint: 'Extraits découpés dans un live ou un reportage. Aucune génération : ces vidéos existent déjà.',
+      corps: (
+        <>
+          <div className="cat-row">{nombre('clip', 'clipCount', 'Candidats par source', 1, 10)}<div /></div>
+          <div className="muted small cat-note">
+            Le pilote n’en publie qu’un — les autres restent en stock, prêts pour les créneaux « clip en stock ».
+          </div>
+          {select('clip', 'reframe', 'Cadrage vertical', [['center', 'Centré'], ['face', 'Suivi du visage']])}
+        </>
+      )
+    },
+    {
+      cle: 'genai', cats: ['genai'], icone: 'sparkles', titre: 'Génération IA',
+      hint: 'Les vidéos lancées à la main. Les sélecteurs de la carte d’idée restent prioritaires sur ces valeurs.',
+      corps: blocVideo('genai')
+    }
+  ]
 
   return (
     <>
@@ -3611,59 +3707,24 @@ function CategoriesPage({ toast }: { toast: (m: string) => void }): JSX.Element 
           <h1>Catégories</h1>
           <div className="muted small">
             Ce qui distingue chaque type de production, quel que soit le compte qui la publie.
-            Un champ laissé sur « Réglage global » suit la page Réglages.
+            Chaque champ indique la valeur héritée — le personnaliser ne touche que cette catégorie.
           </div>
         </div>
       </div>
       <div className="cat-grid">
-        {/* ── Niches : deux chaînes de génération sous un même toit ── */}
-        <div className="card cat-card">
-          <div className="cat-title">Niches</div>
-          <div className="muted small cat-hint">
-            Le tout-venant du pilote, sur la niche du compte. Les séries et les sujets imposés suivent ces réglages.
+        {CARTES.map((c) => (
+          <div className="card cat-card" key={c.cle}>
+            <div className="cat-head">
+              <span className="cat-ico"><Icon name={c.icone} size={16} /></span>
+              <div>
+                <div className="cat-title">{c.titre}</div>
+                <div className="muted small cat-hint">{c.hint}</div>
+              </div>
+            </div>
+            <div className="cat-body">{c.corps}</div>
+            {pied(c.cats, c.cle)}
           </div>
-          <div className="cat-sub">Vidéos</div>
-          {blocVideo('niche')}
-          <div className="cat-sub">Carrousels</div>
-          <div className="cat-row">
-            {nombre('carousel', 'slides', 'Nombre de diapos', 3, 10, '6')}
-          </div>
-          <button className="btn primary cat-save" disabled={busy === 'niche'} onClick={() => void enregistrer(['niche', 'carousel'], 'niche')}>
-            {busy === 'niche' ? 'Enregistrement…' : 'Enregistrer'}
-          </button>
-        </div>
-
-        {/* ── Clips de streamers ── */}
-        <div className="card cat-card">
-          <div className="cat-title">Clips (cut streamer)</div>
-          <div className="muted small cat-hint">
-            Extraits découpés dans un live ou un reportage. Pas de génération : ces vidéos existent déjà.
-          </div>
-          <div className="cat-row">
-            {nombre('clip', 'clipCount', 'Candidats par source', 1, 10, '1')}
-          </div>
-          <div className="muted small cat-note">
-            Le pilote n’en publie qu’un — les autres restent en stock. En extraire plusieurs coûte
-            un peu plus de traitement mais remplit le stock d’un coup.
-          </div>
-          {select('clip', 'reframe', 'Cadrage vertical', [['center', 'Centré'], ['face', 'Suivi du visage']])}
-          <button className="btn primary cat-save" disabled={busy === 'clip'} onClick={() => void enregistrer(['clip'], 'clip')}>
-            {busy === 'clip' ? 'Enregistrement…' : 'Enregistrer'}
-          </button>
-        </div>
-
-        {/* ── Génération lancée à la main ── */}
-        <div className="card cat-card">
-          <div className="cat-title">Génération IA</div>
-          <div className="muted small cat-hint">
-            Les vidéos lancées depuis la page Génération IA. Les sélecteurs de la carte d’idée
-            (langue, qualité) restent prioritaires sur ces valeurs.
-          </div>
-          {blocVideo('genai')}
-          <button className="btn primary cat-save" disabled={busy === 'genai'} onClick={() => void enregistrer(['genai'], 'genai')}>
-            {busy === 'genai' ? 'Enregistrement…' : 'Enregistrer'}
-          </button>
-        </div>
+        ))}
       </div>
     </>
   )

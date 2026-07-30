@@ -2721,7 +2721,27 @@ app.post('/api/autopilot/run-now', wrap((_req, res) => {
 // FIXES du planning (dailySchedule) — la même source que le pilote.
 // ── Réglages par catégorie de vidéo ────────────────────────────────────────
 app.get('/api/categories', (_req, res) => {
-  res.json({ categories: CATEGORIES, settings: categorySettings() })
+  // On renvoie AUSSI les valeurs globales effectives : sans elles, « Réglage
+  // global » est une case opaque — l'utilisateur ne peut pas savoir ce qu'il
+  // hérite, ni juger si une personnalisation vaut la peine.
+  const veo = repo.getSetting('veo_paid') === '1'
+  const vitesse = parseFloat(repo.getSetting('speech_speed') || '')
+  const scenes = parseInt(repo.getSetting('repro_max_scenes') || '', 10)
+  res.json({
+    categories: CATEGORIES,
+    settings: categorySettings(),
+    globals: {
+      engine: repo.getSetting('series_video_engine') || 'seedance',
+      quality: veo ? 'veo' : 'economique',
+      maxScenes: Number.isFinite(scenes) && scenes > 0 ? scenes : 8,
+      lang: repo.getSetting('repro_lang') === 'en' ? 'en' : 'fr',
+      subtitles: repo.getSetting('repro_subtitles') !== '0' ? '1' : '0',
+      speed: Number.isFinite(vitesse) && vitesse > 0 ? vitesse : 1.2,
+      slides: 6,
+      clipCount: 1,
+      reframe: repo.getSetting('reframe_focus') || 'center'
+    }
+  })
 })
 app.post('/api/categories', (req, res) => {
   const b = (req.body ?? {}) as { category?: unknown; cfg?: Record<string, unknown> }

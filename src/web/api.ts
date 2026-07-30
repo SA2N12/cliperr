@@ -137,7 +137,8 @@ export const api = {
   }) => post<{ ok: boolean }>('/api/autopilot', cfg),
   runAutopilotNow: () => post<{ ok: boolean }>('/api/autopilot/run-now'),
   // Reglages par CATEGORIE de video (niche, serie, sujet libre, carrousel, clip).
-  categories: () => req<{ categories: string[]; settings: Record<string, Record<string, string | number>> }>('/api/categories'),
+  categories: () =>
+    req<{ categories: string[]; settings: Record<string, Record<string, string | number>>; globals: Record<string, string | number> }>('/api/categories'),
   saveCategory: (category: string, cfg: Record<string, string | number | null>) =>
     post<{ ok: boolean; settings: Record<string, Record<string, string | number>> }>('/api/categories', { category, cfg }),
   saveAccountOrder: (order: string[]) => post<{ ok: boolean }>('/api/autopilot/order', { order }),

@@ -3346,61 +3346,125 @@ input[type='checkbox'] {
 }
 
 /* ── Page « Catégories » ────────────────────────────────────────────────────
-   Une carte par catégorie, en grille auto-ajustée : à trois catégories elles
-   tiennent sur une ligne sur grand écran, et se réempilent seules en dessous. */
+   Une carte par type de production. `align-items: stretch` + un corps en
+   `flex: 1` : les pieds s'alignent sur une même ligne quelle que soit la
+   hauteur du contenu — sans ça, trois cartes de longueurs différentes donnaient
+   un bas de page en escalier. */
 .cat-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
   gap: 14px;
-  align-items: start;
+  align-items: stretch;
 }
 .cat-card {
   display: flex;
   flex-direction: column;
+  padding: 16px 18px 14px;
+}
+.cat-body {
+  flex: 1;
+}
+.cat-head {
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.cat-ico {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-soft);
+  color: var(--ink);
 }
 .cat-title {
   font-size: 15px;
   font-weight: 600;
+  line-height: 1.2;
 }
 .cat-hint {
-  margin-top: 2px;
-  margin-bottom: 6px;
+  margin-top: 3px;
   line-height: 1.35;
 }
+/* Séparateur entre deux chaînes de génération d'une même carte. */
+.cat-sub {
+  margin-top: 15px;
+  margin-bottom: 2px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+}
+.cat-f {
+  margin-top: 11px;
+  min-width: 0;
+}
 .cat-lbl {
-  display: block;
-  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin-bottom: 4px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+/* Champ personnalisé : la pastille et le libellé passent en vert. Le repère doit
+   se lire SANS ouvrir le menu — sinon il faut inspecter chaque champ pour savoir
+   ce qui dévie du global. */
+.cat-f.on .cat-lbl {
+  color: var(--ap-green-strong);
   font-weight: 500;
 }
-/* Deux champs courts côte à côte plutôt qu'une colonne interminable. */
+.cat-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--ap-green);
+  flex-shrink: 0;
+}
+.cat-f.on select,
+.cat-f.on input {
+  border-color: var(--ap-green-border);
+}
 .cat-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
 }
-.cat-save {
+.cat-note {
+  margin-top: 6px;
+  line-height: 1.35;
+}
+.cat-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-top: 16px;
-  align-self: flex-start;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+/* Le compteur occupe la place libre → les boutons restent collés à droite. */
+.cat-count {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--muted-2);
+}
+.cat-count.on {
+  color: var(--ap-green-strong);
+  font-weight: 500;
+}
+.btn.ghost-sm {
+  padding: 5px 10px;
+  font-size: 12.5px;
+  background: transparent;
 }
 @media (max-width: 768px) {
   .cat-grid {
     grid-template-columns: 1fr;
   }
-}
-/* Sous-titre d'une carte de catégorie : sépare deux chaînes de génération
-   (vidéos / carrousels) sans en faire deux cartes distinctes. */
-.cat-sub {
-  margin-top: 16px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-.cat-note {
-  margin-top: 6px;
-  line-height: 1.35;
 }
