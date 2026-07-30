@@ -3344,3 +3344,47 @@ input[type='checkbox'] {
 :root[data-theme='dark'] .btn.primary:hover {
   background: #52525b;
 }
+
+/* ── Page « Catégories » ────────────────────────────────────────────────────
+   Une carte par catégorie, en grille auto-ajustée : à trois catégories elles
+   tiennent sur une ligne sur grand écran, et se réempilent seules en dessous. */
+.cat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+.cat-card {
+  display: flex;
+  flex-direction: column;
+}
+.cat-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+.cat-hint {
+  margin-top: 2px;
+  margin-bottom: 6px;
+  line-height: 1.35;
+}
+.cat-lbl {
+  display: block;
+  margin-top: 12px;
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+/* Deux champs courts côte à côte plutôt qu'une colonne interminable. */
+.cat-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.cat-save {
+  margin-top: 16px;
+  align-self: flex-start;
+}
+@media (max-width: 768px) {
+  .cat-grid {
+    grid-template-columns: 1fr;
+  }
+}

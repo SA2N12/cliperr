@@ -10,7 +10,7 @@ import {
   type SavedIdea
 } from './api'
 
-type Page = 'dashboard' | 'autopilot' | 'analyse' | 'clipping' | 'genai' | 'ideas' | 'history' | 'clips' | 'providers' | 'settings'
+type Page = 'dashboard' | 'autopilot' | 'categories' | 'analyse' | 'clipping' | 'genai' | 'ideas' | 'history' | 'clips' | 'providers' | 'settings'
 
 const ICONS: Record<string, string> = {
   dashboard: 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z',
@@ -38,6 +38,8 @@ const ICONS: Record<string, string> = {
   terminal: 'M4 17l6-5-6-5M12 19h8',
   scissors: 'M6 9a3 3 0 100-6 3 3 0 000 6zM6 21a3 3 0 100-6 3 3 0 000 6zM20 4L8.12 15.88M14.47 14.48L20 20M8.12 9.12L12 13',
   twitch: 'M4 4h16v10l-4 4h-3l-3 3v-3H4zM10 8v4M15 8v4',
+  // Categories : etiquette.
+  tag: 'M20.6 13.4l-7.2 7.2a2 2 0 01-2.8 0l-7.2-7.2a2 2 0 01-.6-1.4V5a2 2 0 012-2h7a2 2 0 011.4.6l7.4 7.4a2 2 0 010 2.8zM7.5 7.5h.01',
   // Bascule de thème : on affiche l'icône de la destination (lune en clair =
   // « passer en sombre »), convention la plus répandue.
   moon: 'M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z',
@@ -418,7 +420,8 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
       { id: 'dashboard', label: 'Tableau de bord', icon: 'dashboard' },
       // Visible quel que soit le compte choisi : la vue filtre alors le planning
       // sur ce compte (l'interrupteur, lui, reste global).
-      { id: 'autopilot', label: 'Pilote auto', icon: 'bolt' }
+      { id: 'autopilot', label: 'Pilote auto', icon: 'bolt' },
+      { id: 'categories', label: 'Catégories', icon: 'tag' }
     ],
     [
       { id: 'clipping', label: 'Clipage', icon: 'scissors' },
@@ -526,6 +529,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
         <TopBar state={pub} />
         {page === 'dashboard' && <Dashboard scope={scope} />}
         {page === 'autopilot' && <Autopilot toast={showToast} ideaVideo={ideaVideo} scope={scope} />}
+        {page === 'categories' && <CategoriesPage toast={showToast} />}
         {page === 'clipping' && <Clipage sources={sources} clips={clips} progress={progress} onRefresh={refresh} toast={showToast} />}
         {page === 'genai' && <GenAI toast={showToast} />}
         {page === 'history' && <History sources={sources} clips={clips} progress={progress} onRefresh={refresh} toast={showToast} goClips={() => setPage('clips')} />}
@@ -3514,6 +3518,132 @@ function Providers({ go }: { go: (p: Page) => void }): JSX.Element {
         })}
       </div>
     </div>
+  )
+}
+
+// ── Page « Catégories » ────────────────────────────────────────────────────
+// Troisième axe de personnalisation, à côté du compte et du créneau : ce qui
+// distingue une vidéo de niche d'un épisode de série, quel que soit le compte.
+// N'y figurent QUE les catégories dont les réglages sont réellement lus par le
+// générateur — un carrousel et un clip ne passent pas par la même chaîne, leur
+// afficher ces champs donnerait des boutons sans effet.
+const CAT_META: { id: string; label: string; hint: string }[] = [
+  { id: 'niche', label: 'Vidéos de niche', hint: 'Le tout-venant du pilote : un sujet tiré de la niche du compte.' },
+  { id: 'serie', label: 'Épisodes de série', hint: 'Personnages récurrents et univers continu — souvent la catégorie qui mérite le plus de moyens.' },
+  { id: 'custom', label: 'Sujet libre', hint: 'Sujet imposé sur un créneau. Sans réglage propre, suit celui des vidéos de niche.' }
+]
+/** Un champ « — Réglage global — » signifie : ne rien imposer, suivre la page
+ *  Réglages. On enregistre alors une chaîne vide, que le serveur efface. */
+function CategoriesPage({ toast }: { toast: (m: string) => void }): JSX.Element {
+  const [cfg, setCfg] = useState<Record<string, Record<string, string | number>>>({})
+  const [busy, setBusy] = useState('')
+  useEffect(() => { api.categories().then((r) => setCfg(r.settings ?? {})).catch(() => undefined) }, [])
+
+  const champ = (cat: string, key: string, val: string | number | null): void => {
+    setCfg((c) => ({ ...c, [cat]: { ...(c[cat] ?? {}), [key]: val ?? '' } as Record<string, string | number> }))
+  }
+  const enregistrer = async (cat: string): Promise<void> => {
+    setBusy(cat)
+    try {
+      const r = await api.saveCategory(cat, (cfg[cat] ?? {}) as Record<string, string | number | null>)
+      setCfg(r.settings ?? {})
+      toast('Réglages de la catégorie enregistrés ✓')
+    } catch (e) {
+      toast('Erreur : ' + (e as Error).message)
+    } finally {
+      setBusy('')
+    }
+  }
+  const val = (cat: string, key: string): string => String(cfg[cat]?.[key] ?? '')
+
+  return (
+    <>
+      <div className="page-head">
+        <div>
+          <h1>Catégories</h1>
+          <div className="muted small">
+            Ce qui distingue chaque type de vidéo, quel que soit le compte qui la publie.
+            Un champ laissé sur « Réglage global » suit la page Réglages.
+          </div>
+        </div>
+      </div>
+      <div className="cat-grid">
+        {CAT_META.map((m) => (
+          <div className="card cat-card" key={m.id}>
+            <div className="cat-title">{m.label}</div>
+            <div className="muted small cat-hint">{m.hint}</div>
+
+            <label className="muted small cat-lbl">Moteur des scènes parlées</label>
+            <select className="input-full" value={val(m.id, 'engine')} onChange={(e) => champ(m.id, 'engine', e.target.value)}>
+              <option value="">— Réglage global —</option>
+              <option value="seedance">Seedance</option>
+              <option value="veo">Veo — voix natives + vraie synchro labiale</option>
+              <option value="pixverse">Pixverse — économique</option>
+              <option value="wan">Wan 2.7 — nos voix + synchro labiale</option>
+            </select>
+
+            <label className="muted small cat-lbl">Qualité imposée</label>
+            <select className="input-full" value={val(m.id, 'quality')} onChange={(e) => champ(m.id, 'quality', e.target.value)}>
+              <option value="">— Réglage global —</option>
+              <option value="wan">Wan 2.7 (~0,50 $/scène)</option>
+              <option value="seedance">Seedance 2.0 (~0,84 $/scène)</option>
+              <option value="veo">Veo payant (~1,20 $/scène)</option>
+            </select>
+
+            <div className="cat-row">
+              <div>
+                <label className="muted small cat-lbl">Scènes max</label>
+                <input
+                  className="input-full"
+                  type="number"
+                  min={1}
+                  max={60}
+                  placeholder="global"
+                  value={val(m.id, 'maxScenes')}
+                  onChange={(e) => champ(m.id, 'maxScenes', e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="muted small cat-lbl">Débit de parole</label>
+                <input
+                  className="input-full"
+                  type="number"
+                  step="0.05"
+                  min={0.5}
+                  max={2}
+                  placeholder="global"
+                  value={val(m.id, 'speed')}
+                  onChange={(e) => champ(m.id, 'speed', e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="cat-row">
+              <div>
+                <label className="muted small cat-lbl">Langue</label>
+                <select className="input-full" value={val(m.id, 'lang')} onChange={(e) => champ(m.id, 'lang', e.target.value)}>
+                  <option value="">— Réglage global —</option>
+                  <option value="fr">Français</option>
+                  <option value="en">Anglais</option>
+                </select>
+              </div>
+              <div>
+                <label className="muted small cat-lbl">Sous-titres</label>
+                <select className="input-full" value={val(m.id, 'subtitles')} onChange={(e) => champ(m.id, 'subtitles', e.target.value)}>
+                  <option value="">— Réglage global —</option>
+                  <option value="1">Incrustés</option>
+                  <option value="0">Aucun</option>
+                </select>
+              </div>
+            </div>
+
+            <button className="btn primary cat-save" disabled={busy === m.id} onClick={() => void enregistrer(m.id)}>
+              {busy === m.id ? 'Enregistrement…' : 'Enregistrer'}
+            </button>
+          </div>
+        ))}
+      </div>
+    </>
   )
 }
 

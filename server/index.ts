@@ -443,12 +443,22 @@ async function runVideoGen(
       : acctVoice || (globalEleven ? repo.getSetting('elevenlabs_default_voice') || '' : repo.getSetting('tts_voice') || 'ash')
     const useEleven = dialogueEleven || (!reproDialogue && !!elevenKey && (globalEleven || providerForVoice(narrationVoice) === 'elevenlabs'))
     // Langue de la vidéo : choix explicite du lancement, sinon dernier choix mémorisé.
-    const genLang: 'fr' | 'en' = opts.lang ?? (idea.reproduce && repo.getSetting('repro_lang') === 'en' ? 'en' : 'fr')
+    // Réglages de la CATÉGORIE (niche / série / sujet libre) : ils s'intercalent
+    // entre le choix explicite de la génération et les réglages globaux.
+    const cat = catCfg(opts.videoType)
+    const genLang: 'fr' | 'en' =
+      opts.lang ??
+      (cat.lang === 'en' || cat.lang === 'fr'
+        ? (cat.lang as 'fr' | 'en')
+        : idea.reproduce && repo.getSetting('repro_lang') === 'en'
+          ? 'en'
+          : 'fr')
     // Débit PAR LANGUE. Le réglage n'agit que sur les voix TTS — donc surtout sur
     // le français : en anglais la voix vient de Veo/Seedance, générée avec l'image
     // et insensible à ce paramètre. Un même chiffre donnait donc un français trop
     // pressé pour un anglais inchangé → deux valeurs distinctes.
     const speedFor = (l: 'fr' | 'en'): number => {
+      if (Number.isFinite(cat.speed) && (cat.speed as number) > 0) return cat.speed as number
       const v = parseFloat(repo.getSetting(l === 'en' ? 'speech_speed_en' : 'speech_speed') || '')
       return Number.isFinite(v) && v > 0 ? v : l === 'en' ? 1.4 : 1.2
     }
@@ -485,13 +495,13 @@ async function runVideoGen(
       // l'inspiration), sinon voix off unique. Les séries forcent déjà dialogue=true.
       dialogue: opts.dialogue || (!!idea.reproduce && !!idea.dialogue),
       // Nos sous-titres sont incrustés (défaut) — désactivables via `repro_subtitles=0`.
-      burnSubtitles: repo.getSetting('repro_subtitles') !== '0',
+      burnSubtitles: cat.subtitles != null && cat.subtitles !== '' ? cat.subtitles !== '0' : repo.getSetting('repro_subtitles') !== '0',
       // Source muette : on reproduit SANS voix (ni Veo parlé, ni TTS).
       mute: !!idea.mute,
       // Au-delà du quota Veo GRATUIT, un moteur PAYANT n'est utilisé que sur
       // demande EXPLICITE de cette génération (sélecteur « Qualité » de la carte
       // d'idée) ; sinon on descend sur les moteurs économiques.
-      paidEngine: opts.quality ?? (repo.getSetting('veo_paid') === '1' ? 'veo' : undefined),
+      paidEngine: (opts.quality ?? (cat.quality || undefined) ?? (repo.getSetting('veo_paid') === '1' ? 'veo' : undefined)) as 'wan' | 'seedance' | 'veo' | undefined,
       // Synchro labiale p-video sur nos voix (~0,16 $/scène) — activable une fois
       // le rendu validé sur les personnages illustrés.
       prunaLipsync: repo.getSetting('pruna_lipsync') === '1',
@@ -502,6 +512,7 @@ async function runVideoGen(
       // une source de 30 répliques regroupée en 8 scènes perd beaucoup — montable
       // maintenant que p-video rend chaque scène ~8× moins chère que Veo.
       reproMaxScenes: (() => {
+        if (Number.isFinite(cat.maxScenes) && (cat.maxScenes as number) > 0) return cat.maxScenes as number
         const v = parseInt(repo.getSetting('repro_max_scenes') || '', 10)
         return Number.isFinite(v) && v > 0 ? v : undefined
       })(),
@@ -514,7 +525,7 @@ async function runVideoGen(
       // JOUÉES + vraie synchro labiale, générées ensemble donc jamais décalées. Si
       // une scène bascule (erreur/quota Veo), le repli prend les voix ElevenLabs
       // distinctes par personnage (naturelles) au lieu du TTS OpenAI robotique.
-      videoEngine: repo.getSetting('series_video_engine') || 'seedance',
+      videoEngine: cat.engine || repo.getSetting('series_video_engine') || 'seedance',
       onProgress: (m) => emitIdeaVideo({ ideaId, status: 'running', message: m })
     })
     if (usage) addSpend(model, usage)
@@ -718,6 +729,44 @@ async function autoPickClipUrl(user: string, niche: string): Promise<string | nu
 //  from: date « YYYY-MM-DD » AVANT laquelle le créneau n'existe pas — posé quand le
 //  bloc est créé depuis l'onglet Demain, pour que le rattrapage ne le lance pas le
 //  soir même alors que son heure du jour est déjà passée)
+// ── Réglages par CATÉGORIE de vidéo ────────────────────────────────────────
+// Troisième axe de personnalisation, à côté du compte et du créneau : ce qui
+// distingue une vidéo de niche d'un épisode de série ou d'un sujet libre, quel
+// que soit le compte qui la publie. Chaque champ laissé vide retombe sur le
+// réglage global de la page Réglages — un seul endroit fait autorité à la fois.
+// (Le besoin était déjà là : `series_video_engine` avait été ajouté au coup par
+//  coup pour donner un moteur différent aux seules séries.)
+export type CategoryCfg = {
+  /** Moteur payant imposé : 'wan' | 'seedance' | 'veo'. */
+  quality?: string
+  /** Moteur des scènes parlées (ex-`series_video_engine`). */
+  engine?: string
+  /** Plafond de scènes. */
+  maxScenes?: number
+  /** 'fr' | 'en'. */
+  lang?: string
+  /** '1' incruste nos sous-titres, '0' non. */
+  subtitles?: string
+  /** Débit de parole (1 = naturel). */
+  speed?: number
+}
+const CATEGORIES = ['niche', 'serie', 'custom', 'carousel', 'clip'] as const
+function categorySettings(): Record<string, CategoryCfg> {
+  try {
+    const o = JSON.parse(repo.getSetting('category_settings') || '{}') as Record<string, CategoryCfg>
+    return o && typeof o === 'object' ? o : {}
+  } catch {
+    return {}
+  }
+}
+/** Réglages de la catégorie d'une génération. `custom` retombe sur `niche` :
+ *  un sujet libre reste une vidéo de niche dont on a juste impose le sujet. */
+function catCfg(type?: string): CategoryCfg {
+  const all = categorySettings()
+  const t = String(type ?? 'niche')
+  return { ...(t === 'custom' ? all.niche : undefined), ...(all[t] ?? {}) }
+}
+
 type SlotOverride = { hm?: number; type?: string; subject?: string; music?: string; from?: string; stockPick?: string }
 function slotOverrides(): Record<string, SlotOverride> {
   try {
@@ -2652,6 +2701,46 @@ app.post('/api/autopilot/run-now', wrap((_req, res) => {
 }))
 // Planning du jour : vidéos DÉJÀ publiées (heure réelle) + À VENIR, aux heures
 // FIXES du planning (dailySchedule) — la même source que le pilote.
+// ── Réglages par catégorie de vidéo ────────────────────────────────────────
+app.get('/api/categories', (_req, res) => {
+  res.json({ categories: CATEGORIES, settings: categorySettings() })
+})
+app.post('/api/categories', (req, res) => {
+  const b = (req.body ?? {}) as { category?: unknown; cfg?: Record<string, unknown> }
+  const cat = String(b.category ?? '')
+  if (!(CATEGORIES as readonly string[]).includes(cat)) return res.status(400).json({ error: 'Catégorie inconnue' })
+  const all = categorySettings()
+  const cur: CategoryCfg = { ...(all[cat] ?? {}) }
+  const c = b.cfg ?? {}
+  // Chaîne vide / null = « suivre le réglage global » : on EFFACE la clé plutôt
+  // que d'enregistrer une valeur vide, sinon on ne distinguerait plus « non
+  // réglé » de « réglé à vide ».
+  const setStr = (k: 'quality' | 'engine' | 'lang' | 'subtitles', autorises?: string[]): void => {
+    if (!(k in c)) return
+    const v = String(c[k] ?? '').trim()
+    if (!v || (autorises && !autorises.includes(v))) delete cur[k]
+    else cur[k] = v
+  }
+  setStr('quality', ['wan', 'seedance', 'veo'])
+  setStr('engine', ['seedance', 'veo', 'pixverse', 'wan'])
+  setStr('lang', ['fr', 'en'])
+  setStr('subtitles', ['0', '1'])
+  if ('maxScenes' in c) {
+    const v = Math.round(Number(c.maxScenes))
+    if (Number.isFinite(v) && v > 0) cur.maxScenes = Math.min(60, v)
+    else delete cur.maxScenes
+  }
+  if ('speed' in c) {
+    const v = Number(c.speed)
+    if (Number.isFinite(v) && v > 0) cur.speed = Math.min(2, Math.max(0.5, v))
+    else delete cur.speed
+  }
+  if (Object.keys(cur).length) all[cat] = cur
+  else delete all[cat]
+  repo.setSetting('category_settings', JSON.stringify(all))
+  res.json({ ok: true, settings: all })
+})
+
 app.get('/api/autopilot/plan', wrap(async (req, res) => {
   const enabled = repo.getSetting('autopilot_enabled') === '1'
   const perDay = Math.max(1, Number(repo.getSetting('autopilot_per_day')) || 1)
