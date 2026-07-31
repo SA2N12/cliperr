@@ -3908,13 +3908,19 @@ input[type='checkbox'] {
 
 /* Jauges d'avancement : celle d'un compte, et celle de la journée. */
 .ap-prog {
-  height: 3px;
+  height: 4px;
   margin-top: 5px;
   max-width: 120px;
-  background: color-mix(in srgb, var(--ap-green) 16%, transparent);
+  /* Piste posee sur le fond de la carte et non transparente : a 16 %
+     d opacite elle etait invisible sur le vert tres sombre. */
+  background: color-mix(in srgb, var(--ap-green) 20%, var(--panel-2));
 }
 .ap-prog.wide {
-  max-width: 180px;
+  /* width et non max-width : dans une ligne flex, un div SANS CONTENU et sans
+     largeur propre s effondre a 0 — le plafond ne plafonnait rien. */
+  width: 168px;
+  max-width: none;
+  flex-shrink: 0;
   margin-top: 0;
 }
 .ap-prog > div {
