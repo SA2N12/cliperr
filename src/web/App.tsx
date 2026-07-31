@@ -2065,7 +2065,7 @@ function Clips({ clips, sources, onRefresh, toast, scope }: { clips: ClipDTO[]; 
         <div className="bar" style={{ marginBottom: 14 }}><div style={{ width: `${upPct}%`, transition: 'width .2s' }} /></div>
       )}
 
-      <div className="tabs" style={{ marginBottom: 16 }}>
+      <div className="tabs" style={{ marginBottom: 10 }}>
         <button className={`tab ${tab === 'stock' ? 'on' : ''}`} onClick={() => setTab('stock')}>
           <Icon name="clips" size={16} /> En stock <span className="tab-count">{stock.length}</span>
         </button>

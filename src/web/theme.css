@@ -4319,7 +4319,7 @@ input[type='checkbox'] {
    le réduire à une ligne aurait fait perdre plus que la place gagnée. */
 .clip-media {
   aspect-ratio: auto;
-  height: 148px;
+  height: 112px;
 }
 .clip-body {
   padding: 8px 10px 0;
@@ -4331,7 +4331,7 @@ input[type='checkbox'] {
   padding: 7px 10px 9px;
 }
 .clip-grid {
-  gap: 12px;
+  gap: 10px;
 }
 .clip-pages {
   margin-top: 12px;
