@@ -4224,5 +4224,7 @@ input[type='checkbox'] {
 .ap-pill {
   font-size: 12px;
   font-weight: 500;
-  padding: 3px 10px;
+  /* 2 px et non 3 : cette pastille a une bordure (2 px de plus) et une police
+     mono dont l interligne est plus haut. A marge egale elle depassait de 3 px. */
+  padding: 2px 10px;
 }
