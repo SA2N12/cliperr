@@ -70,8 +70,9 @@ const catKey = (type?: string | null): string => CAT_OF[String(type ?? '')] ?? '
 const catColor = (type?: string | null): string => `var(--cat-${catKey(type)})`
 /** Légende du planning : l'ordre suit celui de la page Catégories. */
 const CAT_LEGENDE: { key: string; label: string }[] = [
+  // Carrousel partage désormais la teinte de niche : deux entrées de légende de
+  // la même couleur laisseraient croire à une distinction qui n'existe plus.
   { key: 'niche', label: 'Niche' },
-  { key: 'carousel', label: 'Carrousel' },
   { key: 'clip', label: 'Clip' },
   { key: 'stock', label: 'En stock' }
 ]

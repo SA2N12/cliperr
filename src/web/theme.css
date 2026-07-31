@@ -3011,8 +3011,9 @@ input[type='checkbox'] {
      chaine de generation distincte, et les confondre dans le planning ferait
      perdre l information la plus utile — ce qui va partir en photos. */
   --cat-niche: #10b981;
-  --cat-carousel: #0d9488;
-  --cat-clip: #65a30d;
+  /* Carrousel : MEME teinte que niche — ils relevent de la meme categorie. */
+  --cat-carousel: #10b981;
+  --cat-clip: #0d9488;
   --cat-genai: #34d399;
   /* Stock : un clip DEJA produit, republie sans rien couter. Vert franc, plus
      sature que l emeraude des niches — la distinction tient donc a la teinte ET
@@ -3342,8 +3343,8 @@ input[type='checkbox'] {
   --ap-green-soft: #10281f;
   --ap-green-border: #1f5f47;
   --cat-niche: #34d399;
-  --cat-carousel: #2dd4bf;
-  --cat-clip: #a3e635;
+  --cat-carousel: #34d399;
+  --cat-clip: #2dd4bf;
   --cat-genai: #6ee7b7;
   --cat-stock: #22c55e;
   /* Eclairci pour rester lisible sur fond noir. */
