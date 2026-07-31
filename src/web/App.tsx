@@ -4238,6 +4238,10 @@ function CategoriesPage({ toast }: { toast: (m: string) => void }): JSX.Element 
   // Copie de référence : sert à savoir si une carte a été touchée (bouton actif)
   // et à annuler proprement.
   const [ref, setRef] = useState<Record<string, Record<string, string | number>>>({})
+  // Catégorie ouverte. `null` = la grille de choix. Trois formulaires côte à côte
+  // obligeaient à lire chaque champ pour savoir où l'on était ; on choisit
+  // d'abord, on règle ensuite.
+  const [ouvert, setOuvert] = useState<string | null>(null)
 
   const charger = useCallback((): void => {
     api.categories().then((r) => {
@@ -4254,6 +4258,10 @@ function CategoriesPage({ toast }: { toast: (m: string) => void }): JSX.Element 
   /** Un champ vide = « suivre le global ». On ne compte donc que les non-vides. */
   const nbPerso = (cats: string[]): number =>
     cats.reduce((n, c) => n + Object.values(cfg[c] ?? {}).filter((v) => String(v ?? '') !== '').length, 0)
+  /** Même compte, mais sur l'ÉTAT ENREGISTRÉ : une tuile doit décrire ce que le
+   *  pilote applique, pas ce qui est en cours de saisie et pas encore validé. */
+  const nbEnregistre = (cats: string[]): number =>
+    cats.reduce((n, c) => n + Object.values(ref[c] ?? {}).filter((v) => String(v ?? '') !== '').length, 0)
   const modifie = (cats: string[]): boolean =>
     cats.some((c) => JSON.stringify(Object.entries(cfg[c] ?? {}).filter(([, v]) => String(v ?? '') !== '').sort())
       !== JSON.stringify(Object.entries(ref[c] ?? {}).filter(([, v]) => String(v ?? '') !== '').sort()))
@@ -4261,6 +4269,15 @@ function CategoriesPage({ toast }: { toast: (m: string) => void }): JSX.Element 
     const g = globals[key]
     if (g == null || g === '') return 'global'
     return CAT_MOTS[String(g)] ?? String(g)
+  }
+  /** Ce qui SERA appliqué : la personnalisation si elle existe, sinon la valeur
+   *  globale dont la catégorie hérite. Une tuile qui n'annoncerait que les
+   *  surcharges laisserait croire que le reste n'est pas réglé. */
+  const applique = (cat: string, key: string): { txt: string; perso: boolean } => {
+    const v = String(ref[cat]?.[key] ?? '')
+    if (v !== '') return { txt: CAT_MOTS[v] ?? v, perso: true }
+    const h = herite(key)
+    return { txt: h === 'global' ? 'par défaut' : h, perso: false }
   }
 
   const enregistrer = async (cats: string[], cle: string): Promise<void> => {
@@ -4375,40 +4392,101 @@ function CategoriesPage({ toast }: { toast: (m: string) => void }): JSX.Element 
     )
   }
 
-  const CARTES: { cle: string; cats: string[]; icone: string; titre: string; teinte: string; hint: string; corps: JSX.Element }[] = [
+  type Carte = {
+    cle: string; cats: string[]; icone: string; titre: string; teinte: string; hint: string
+    /** Nombre de colonnes du détail : deux sections côte à côte, ou une seule. */
+    sections: 1 | 2
+    /** Ce que la tuile résume, sans avoir à ouvrir. */
+    apercu: [string, { txt: string; perso: boolean }][]
+    corps: JSX.Element
+  }
+  const CARTES: Carte[] = [
     {
       cle: 'niche', cats: ['niche', 'carousel'], icone: 'bulb', titre: 'Niches', teinte: 'niche',
       hint: 'Le tout-venant du pilote, sur la niche du compte. Les séries et les sujets imposés suivent ces réglages.',
+      sections: 2,
+      apercu: [
+        ['Moteur', applique('niche', 'engine')],
+        ['Qualité', applique('niche', 'quality')],
+        ['Langue', applique('niche', 'lang')],
+        ['Diapos', applique('carousel', 'slides')]
+      ],
       corps: (
         <>
-          <div className="cat-sub">Vidéos</div>
-          {blocVideo('niche')}
-          <div className="cat-sub">Carrousels</div>
-          <div className="cat-row">{nombre('carousel', 'slides', 'Nombre de diapos', 3, 10)}<div /></div>
-          {texte('carousel', 'style', 'Style visuel des diapos', 'ex. illustration vectorielle épurée, aplats de couleur, fond uni sombre')}
+          <section className="cat-sec">
+            <div className="cat-sub">Vidéos</div>
+            {blocVideo('niche')}
+          </section>
+          <section className="cat-sec">
+            <div className="cat-sub">Carrousels</div>
+            {nombre('carousel', 'slides', 'Nombre de diapos', 3, 10)}
+            {texte('carousel', 'style', 'Style visuel des diapos', 'ex. illustration vectorielle épurée, aplats de couleur, fond uni sombre')}
+          </section>
         </>
       )
     },
     {
       cle: 'clip', cats: ['clip'], icone: 'scissors', titre: 'Clips (cut streamer)', teinte: 'clip',
       hint: 'Extraits découpés dans un live ou un reportage. Aucune génération : ces vidéos existent déjà.',
+      sections: 1,
+      apercu: [
+        ['Candidats', applique('clip', 'clipCount')],
+        ['Cadrage', applique('clip', 'reframe')]
+      ],
       corps: (
-        <>
-          <div className="cat-row">{nombre('clip', 'clipCount', 'Candidats par source', 1, 10)}<div /></div>
+        <section className="cat-sec">
+          {nombre('clip', 'clipCount', 'Candidats par source', 1, 10)}
           <div className="muted small cat-note">
             Le pilote n’en publie qu’un — les autres restent en stock, prêts pour les créneaux « clip en stock ».
           </div>
           {select('clip', 'reframe', 'Cadrage vertical', [['center', 'Centré'], ['face', 'Suivi du visage']])}
-        </>
+        </section>
       )
     },
     {
       cle: 'genai', cats: ['genai'], icone: 'sparkles', titre: 'Génération IA', teinte: 'genai',
       hint: 'Les vidéos lancées à la main. Les sélecteurs de la carte d’idée restent prioritaires sur ces valeurs.',
-      corps: blocVideo('genai')
+      sections: 1,
+      apercu: [
+        ['Moteur', applique('genai', 'engine')],
+        ['Qualité', applique('genai', 'quality')],
+        ['Langue', applique('genai', 'lang')]
+      ],
+      corps: <section className="cat-sec">{blocVideo('genai')}</section>
     }
   ]
 
+  const carte = CARTES.find((c) => c.cle === ouvert) ?? null
+
+  // ── Détail d'une catégorie ────────────────────────────────────────────────
+  if (carte) {
+    const dirty = modifie(carte.cats)
+    return (
+      <div className="cat-detail" style={{ '--cat': `var(--cat-${carte.teinte})` } as CSSProperties}>
+        <button className="cat-back" onClick={() => setOuvert(null)}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+          Catégories
+        </button>
+        <div className="cat-dhead">
+          <span className="cat-ico lg"><Icon name={carte.icone} size={21} /></span>
+          <div>
+            <h1>{carte.titre}</h1>
+            <div className="muted small">{carte.hint}</div>
+          </div>
+          {/* Le repère de saisie en cours vit dans l'en-tête, pas seulement à
+              côté du bouton : sur un formulaire haut, le pied peut être sorti
+              de l'écran au moment où l'on modifie un champ. */}
+          {dirty && <span className="cat-dirty">Modifications non enregistrées</span>}
+        </div>
+        <div className={`card cat-panel${carte.sections === 2 ? ' large' : ''}`}>
+          <div className="cat-body">{carte.corps}</div>
+          {pied(carte.cats, carte.cle)}
+        </div>
+      </div>
+    )
+  }
+
+  // ── Grille de choix ───────────────────────────────────────────────────────
   return (
     <>
       <div className="page-head">
@@ -4416,7 +4494,7 @@ function CategoriesPage({ toast }: { toast: (m: string) => void }): JSX.Element 
           <h1>Catégories</h1>
           <div className="muted small">
             Ce qui distingue chaque type de production, quel que soit le compte qui la publie.
-            Chaque champ indique la valeur héritée — le personnaliser ne touche que cette catégorie.
+            Ouvre une catégorie pour la régler — chaque champ non personnalisé suit le réglage global.
           </div>
         </div>
       </div>
@@ -4424,19 +4502,45 @@ function CategoriesPage({ toast }: { toast: (m: string) => void }): JSX.Element 
         {/* La teinte de la catégorie passe par une variable locale `--cat` : la
             CSS s'en sert pour le filet, l'icône et le repère de personnalisation,
             sans qu'aucune couleur ne soit écrite en dur dans le rendu. */}
-        {CARTES.map((c) => (
-          <div className="card cat-card" key={c.cle} style={{ '--cat': `var(--cat-${c.teinte})` } as CSSProperties}>
-            <div className="cat-head">
-              <span className="cat-ico"><Icon name={c.icone} size={16} /></span>
-              <div>
-                <div className="cat-title">{c.titre}</div>
-                <div className="muted small cat-hint">{c.hint}</div>
+        {CARTES.map((c) => {
+          const n = nbEnregistre(c.cats)
+          const dirty = modifie(c.cats)
+          return (
+            <button
+              className="card cat-card cat-tile"
+              key={c.cle}
+              style={{ '--cat': `var(--cat-${c.teinte})` } as CSSProperties}
+              onClick={() => setOuvert(c.cle)}
+            >
+              <div className="cat-head">
+                <span className="cat-ico"><Icon name={c.icone} size={16} /></span>
+                <div>
+                  <div className="cat-title">{c.titre}</div>
+                  <div className="muted small cat-hint">{c.hint}</div>
+                </div>
               </div>
-            </div>
-            <div className="cat-body">{c.corps}</div>
-            {pied(c.cats, c.cle)}
-          </div>
-        ))}
+              <div className="cat-apercu">
+                {c.apercu.map(([lbl, v]) => (
+                  <div className={`cat-ap${v.perso ? ' on' : ''}`} key={lbl}>
+                    <span className="cat-ap-l">{lbl}</span>
+                    <span className="cat-ap-v">{v.txt}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="cat-tile-foot">
+                <span className={`cat-count${n ? ' on' : ''}`}>
+                  {dirty
+                    ? 'Modifications non enregistrées'
+                    : n === 0 ? 'Tout suit les réglages globaux' : `${n} réglage${n > 1 ? 's' : ''} personnalisé${n > 1 ? 's' : ''}`}
+                </span>
+                <span className="cat-go">
+                  Personnaliser
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
+                </span>
+              </div>
+            </button>
+          )
+        })}
       </div>
     </>
   )

@@ -4568,3 +4568,167 @@ video:-webkit-full-screen {
 .pal-foot span:last-child {
   margin-left: auto;
 }
+
+/* ── Catégories : tuiles cliquables puis détail ────────────────────────────
+   La carte n'est plus un formulaire, c'est un <button> : reset des styles que
+   le navigateur impose aux boutons, sinon police et alignement changent. */
+.cat-tile {
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+  font-size: inherit;
+  color: var(--text);
+  cursor: pointer;
+  gap: 0;
+}
+.cat-tile:hover {
+  border-color: color-mix(in srgb, var(--cat) 45%, var(--border));
+  transform: translateY(-2px);
+}
+.cat-tile:active {
+  transform: translateY(0);
+}
+.cat-tile:focus-visible {
+  outline: 2px solid var(--cat);
+  outline-offset: 2px;
+}
+/* Résumé : ce que la catégorie applique aujourd'hui, valeurs héritées comprises. */
+.cat-apercu {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 12px 0 4px;
+}
+.cat-ap {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 5px 0;
+  font-size: 13px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+}
+.cat-ap:last-child {
+  border-bottom: 0;
+}
+.cat-ap-l {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.cat-ap-v {
+  margin-left: auto;
+  text-align: right;
+  color: var(--muted-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Une valeur personnalisée prend la teinte de sa catégorie : on repère d'un
+   regard ce qui dévie du global, sans lire les libellés. */
+.cat-ap.on .cat-ap-v {
+  color: var(--cat);
+  font-weight: 550;
+}
+.cat-tile-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 11px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+}
+.cat-go {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted-2);
+  flex-shrink: 0;
+  transition: color 0.16s ease, gap 0.16s ease;
+}
+.cat-tile:hover .cat-go {
+  color: var(--cat);
+  gap: 7px;
+}
+
+/* ── Détail ─────────────────────────────────────────────────────────────── */
+.cat-detail {
+  animation: cat-drill 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes cat-drill {
+  from { opacity: 0; transform: translateX(14px); }
+  to { opacity: 1; transform: none; }
+}
+.cat-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 2px 6px 2px 0;
+  margin-bottom: 10px;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: color 0.16s ease;
+}
+.cat-back:hover {
+  color: var(--text);
+}
+.cat-dhead {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin-bottom: 16px;
+}
+.cat-dhead h1 {
+  margin: 0 0 2px;
+}
+.cat-ico.lg {
+  width: 40px;
+  height: 40px;
+}
+/* Repère de saisie en cours, calé à droite de l'en-tête. */
+.cat-dirty {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 12px;
+  padding: 4px 9px;
+  color: var(--cat);
+  background: color-mix(in srgb, var(--cat) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--cat) 35%, transparent);
+}
+/* Largeur bornée : un champ de formulaire étiré sur 1500 px est illisible.
+   Deux sections → deux colonnes, pour que « Niches » tienne sans défilement. */
+.cat-panel {
+  max-width: 470px;
+  padding: 18px 20px 14px;
+  border-top: 2px solid var(--cat, var(--border));
+}
+.cat-panel.large {
+  max-width: 840px;
+}
+.cat-panel.large .cat-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 26px;
+  align-items: start;
+}
+.cat-sec > .cat-sub:first-child {
+  margin-top: 0;
+}
+@media (max-width: 900px) {
+  .cat-panel.large .cat-body {
+    grid-template-columns: 1fr;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cat-detail {
+    animation: none;
+  }
+  .cat-tile:hover {
+    transform: none;
+  }
+}
