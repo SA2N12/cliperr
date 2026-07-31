@@ -2324,35 +2324,35 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
                   </select>
                   {/* Natures autorisées au tirage. Tout coché = aucune restriction —
                       c'est aussi ce qu'enregistre le serveur, qui refuse de stocker
-                      un filtre qui ne filtre rien. */}
-                  {stockPick !== 'none' && (
-                    <>
-                      <label className="muted small" style={{ display: 'block', marginTop: 12, marginBottom: 4, fontWeight: 500 }}>
-                        Piocher parmi
-                      </label>
-                      <div className="sp-kinds">
-                        {([['niche', 'Niche'], ['ia', 'IA'], ['clip', 'Découpe']] as const).map(([k, lbl]) => {
-                          const coche = stockKinds.length === 0 || stockKinds.includes(k)
-                          return (
-                            <label key={k} className={`sp-kind${coche ? ' on' : ''}`}>
-                              <input
-                                type="checkbox"
-                                checked={coche}
-                                onChange={() => {
-                                  const base = stockKinds.length ? stockKinds : ['niche', 'ia', 'clip']
-                                  const suiv = base.includes(k) ? base.filter((x) => x !== k) : [...base, k]
-                                  // Tout décocher n'a aucun sens : le créneau ne
-                                  // trouverait plus rien. On revient à « tout ».
-                                  setStockKinds(suiv.length ? suiv : [])
-                                }}
-                              />
-                              {lbl}
-                            </label>
-                          )
-                        })}
-                      </div>
-                    </>
-                  )}
+                      un filtre qui ne filtre rien.
+                      Avec « Ne rien publier », le filtre est sans objet : on le GRISE
+                      au lieu de le masquer. Le faire disparaître sans explication
+                      laissait chercher un réglage qu'on croyait avoir vu. */}
+                  <label className="muted small" style={{ display: 'block', marginTop: 12, marginBottom: 4, fontWeight: 500 }}>
+                    Piocher parmi
+                    {stockPick === 'none' && <span className="muted"> — sans objet : ce créneau ne publie rien</span>}
+                  </label>
+                  <div className={`sp-kinds${stockPick === 'none' ? ' off' : ''}`}>
+                    {([['niche', 'Niche'], ['ia', 'IA'], ['clip', 'Découpe']] as const).map(([k, lbl]) => {
+                      const coche = stockKinds.length === 0 || stockKinds.includes(k)
+                      return (
+                        <label key={k} className={`sp-kind${coche ? ' on' : ''}`}>
+                          <input
+                            type="checkbox"
+                            checked={coche}
+                            onChange={() => {
+                              const base = stockKinds.length ? stockKinds : ['niche', 'ia', 'clip']
+                              const suiv = base.includes(k) ? base.filter((x) => x !== k) : [...base, k]
+                              // Tout décocher n'a aucun sens : le créneau ne
+                              // trouverait plus rien. On revient à « tout ».
+                              setStockKinds(suiv.length ? suiv : [])
+                            }}
+                          />
+                          {lbl}
+                        </label>
+                      )
+                    })}
+                  </div>
                 </>
               )}
               <div className="sp-note">

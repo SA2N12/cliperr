@@ -4386,6 +4386,11 @@ video:-webkit-full-screen {
   gap: 6px;
   flex-wrap: wrap;
 }
+/* Créneau « ne rien publier » : le filtre reste lisible mais inopérant. */
+.sp-kinds.off {
+  opacity: 0.4;
+  pointer-events: none;
+}
 .sp-kind {
   display: inline-flex;
   align-items: center;
