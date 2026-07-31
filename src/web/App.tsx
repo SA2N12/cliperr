@@ -2002,7 +2002,22 @@ function Clips({ clips, sources, onRefresh, toast, scope }: { clips: ClipDTO[]; 
   const byDate = (a: ClipDTO, b: ClipDTO): number => b.createdAt - a.createdAt
   const published = mine.filter((c) => c.publishStatus === 'published').sort(byDate)
   const stock = mine.filter((c) => c.publishStatus !== 'published').sort(byDate)
-  const list = tab === 'published' ? published : stock
+  // Onglet Publiés : tri par performance possible. Les vidéos SANS statistique
+  // (au-delà des 20 dernières d'un compte, limite de l'API) partent en fin de
+  // liste plutôt que d'être comptées comme des zéros — on ne sait pas, ce n'est
+  // pas un échec.
+  const list = tab !== 'published'
+    ? stock
+    : tri === 'date'
+      ? published
+      : published.slice().sort((x, y) => {
+          const sx = scoreOf(x)
+          const sy = scoreOf(y)
+          if (!sx && !sy) return y.createdAt - x.createdAt
+          if (!sx) return 1
+          if (!sy) return -1
+          return sy.x - sx.x
+        })
 
   return (
     <>
