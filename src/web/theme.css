@@ -4368,3 +4368,40 @@ video:fullscreen,
 video:-webkit-full-screen {
   object-fit: contain;
 }
+
+/* Étiquette de nature d'un clip : une teinte par type, reprise de celles des
+   catégories pour que le vocabulaire visuel reste le même d'une page à l'autre. */
+.clip-kind.k-niche {
+  background: color-mix(in srgb, var(--cat-niche) 78%, #000);
+  color: #fff;
+}
+.clip-kind.k-ia {
+  background: color-mix(in srgb, var(--cat-genai) 72%, #000);
+  color: #fff;
+}
+
+/* Filtre des natures piochables, dans le volet d'un créneau. */
+.sp-kinds {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.sp-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  font-size: 12.5px;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+.sp-kind.on {
+  border-color: color-mix(in srgb, var(--ap-green) 55%, var(--border));
+  color: var(--text);
+}
+.sp-kind input {
+  margin: 0;
+  cursor: pointer;
+}

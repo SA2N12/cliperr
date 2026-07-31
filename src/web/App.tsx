@@ -1868,7 +1868,8 @@ const STATE_LABEL: Record<ClipDTO['publishStatus'], string> = {
 }
 
 /** Vignette d'un clip : aperçu 9:16, statut et origine en surimpression, actions en pied. */
-function ClipCard({ c, ai, onSetPublishable, perf }: { c: ClipDTO; ai: boolean; onSetPublishable: (id: number, value: boolean) => void; perf?: { views: number; x: number } | null }): JSX.Element {
+const KIND_LABEL: Record<string, string> = { niche: 'Niche', ia: 'IA', clip: 'Découpe' }
+function ClipCard({ c, kind, onSetPublishable, perf }: { c: ClipDTO; kind: 'niche' | 'ia' | 'clip'; onSetPublishable: (id: number, value: boolean) => void; perf?: { views: number; x: number } | null }): JSX.Element {
   const published = c.publishStatus === 'published'
   const account = c.publishedAccount || c.profile
   const when = new Date(c.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })
@@ -1888,7 +1889,7 @@ function ClipCard({ c, ai, onSetPublishable, perf }: { c: ClipDTO; ai: boolean; 
         <span className={`clip-state${published ? ' ok' : c.publishStatus === 'failed' ? ' bad' : ''}`}>
           {STATE_LABEL[c.publishStatus]}
         </span>
-        <span className="clip-kind">{ai ? 'IA' : 'Découpe'}</span>
+        <span className={`clip-kind k-${kind}`}>{KIND_LABEL[kind]}</span>
       </div>
       <div className="clip-body">
         <div className="clip-title" title={c.title ?? undefined}>{c.title || `Clip ${Math.round(c.startSec)}s`}</div>
@@ -2001,7 +2002,13 @@ function Clips({ clips, sources, onRefresh, toast, scope }: { clips: ClipDTO[]; 
   // Origine du clip (IA depuis une idée, ou découpe d'une vidéo source) — affichée
   // sur la vignette, ce qui remplace l'ancienne séparation en deux onglets.
   const aiIds = new Set(sources.filter((s) => (s.url ?? '').startsWith('idea:')).map((s) => s.id))
-  const isAI = (c: ClipDTO): boolean => aiIds.has(c.sourceId) || c.reason === 'Vidéo générée depuis une idée'
+  // Nature d'un clip, d'apres son motif de creation. Les clips CREES AVANT que
+  // le motif ne distingue les niches restent en « IA » : on ne peut pas deviner
+  // apres coup, et une etiquette fausse serait pire qu'une etiquette large.
+  const kindOf = (c: ClipDTO): 'niche' | 'ia' | 'clip' =>
+    c.reason === 'Vidéo de niche' ? 'niche'
+      : (c.reason === 'Vidéo générée depuis une idée' || aiIds.has(c.sourceId)) ? 'ia'
+        : 'clip'
   // Portée : « Tous les comptes » → tout ; sinon uniquement les clips du profil choisi.
   const forProfile = (c: ClipDTO): boolean => scope === ALL_SCOPE || c.profile === scope || c.publishedAccount === scope
   const mine = clips.filter(forProfile)
@@ -2104,7 +2111,7 @@ function Clips({ clips, sources, onRefresh, toast, scope }: { clips: ClipDTO[]; 
         <>
           <div className="clip-grid">
             {pageList.map((c) => (
-              <ClipCard key={c.id} c={c} ai={isAI(c)} onSetPublishable={setPublishable} perf={scoreOf(c)} />
+              <ClipCard key={c.id} c={c} kind={kindOf(c)} onSetPublishable={setPublishable} perf={scoreOf(c)} />
             ))}
           </div>
           {nbPages > 1 && (
@@ -2130,7 +2137,7 @@ const CRON_LABELS: Record<string, string> = {
   '0 */3 * * *': 'toutes les 3 h'
 }
 
-type AutopilotSlot = { user: string; handle: string | null; avatarUrl: string | null; niche: string; ordinal: number; etaHm: number; eta: string; done: boolean; pinned?: boolean; type?: string; subject?: string; hasSeries?: boolean; credits?: number; failed?: boolean; error?: string; music?: string; stockPick?: string; emptyStock?: boolean }
+type AutopilotSlot = { user: string; handle: string | null; avatarUrl: string | null; niche: string; ordinal: number; etaHm: number; eta: string; done: boolean; pinned?: boolean; type?: string; subject?: string; hasSeries?: boolean; credits?: number; failed?: boolean; error?: string; music?: string; stockPick?: string; stockKinds?: string; emptyStock?: boolean }
 /** Nom lisible d'un morceau (retire le préfixe technique + l'extension du fichier). */
 function trackLabel(f: string): string {
   return f.replace(/^[a-z]+-\d+-/i, '').replace(/^\d+-/, '').replace(/\.[^.]+$/, '')
@@ -2163,6 +2170,9 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
   const [music, setMusic] = useState(slot.music ?? 'auto')
   // Mode de tirage quand AUCUN clip n'est choisi (type « stock » uniquement).
   const [stockPick, setStockPick] = useState(slot.stockPick ?? 'recent')
+  // Natures autorisees au tirage. Tableau VIDE = aucune restriction, ce qui
+  // evite d'avoir a distinguer « tout coche » de « rien regle ».
+  const [stockKinds, setStockKinds] = useState<string[]>((slot.stockKinds ?? '').split(',').filter(Boolean))
   const [tracks, setTracks] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -2225,6 +2235,7 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
           type: type === 'auto' ? null : type,
           subject: ['clip', 'carousel', 'stock'].includes(type) ? subject : null,
           stockPick: type === 'stock' ? stockPick : null,
+          stockKinds: type === 'stock' ? stockKinds.join(',') : null,
           music
           // NB : pas de `day` ici — le différé (`from`) est posé UNIQUEMENT à la
           // création d'un bloc depuis « Demain » (bouton +) et survit à cet
@@ -2311,6 +2322,37 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
                     <option value="random">Au hasard</option>
                     <option value="none">Ne rien publier — laisser le créneau vide</option>
                   </select>
+                  {/* Natures autorisées au tirage. Tout coché = aucune restriction —
+                      c'est aussi ce qu'enregistre le serveur, qui refuse de stocker
+                      un filtre qui ne filtre rien. */}
+                  {stockPick !== 'none' && (
+                    <>
+                      <label className="muted small" style={{ display: 'block', marginTop: 12, marginBottom: 4, fontWeight: 500 }}>
+                        Piocher parmi
+                      </label>
+                      <div className="sp-kinds">
+                        {([['niche', 'Niche'], ['ia', 'IA'], ['clip', 'Découpe']] as const).map(([k, lbl]) => {
+                          const coche = stockKinds.length === 0 || stockKinds.includes(k)
+                          return (
+                            <label key={k} className={`sp-kind${coche ? ' on' : ''}`}>
+                              <input
+                                type="checkbox"
+                                checked={coche}
+                                onChange={() => {
+                                  const base = stockKinds.length ? stockKinds : ['niche', 'ia', 'clip']
+                                  const suiv = base.includes(k) ? base.filter((x) => x !== k) : [...base, k]
+                                  // Tout décocher n'a aucun sens : le créneau ne
+                                  // trouverait plus rien. On revient à « tout ».
+                                  setStockKinds(suiv.length ? suiv : [])
+                                }}
+                              />
+                              {lbl}
+                            </label>
+                          )
+                        })}
+                      </div>
+                    </>
+                  )}
                 </>
               )}
               <div className="sp-note">

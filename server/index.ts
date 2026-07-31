@@ -615,7 +615,11 @@ async function runVideoGen(
       title: meta.title,
       description: meta.hook,
       hashtags: meta.hashtags.join(' '),
-      reason: 'Vidéo générée depuis une idée',
+      // Le motif porte la NATURE du clip : c'est lui qui distingue une vidéo de
+      // niche d'une génération libre, ensuite affiché en étiquette et utilisable
+      // comme filtre pour les créneaux « stock ». Sans ça les deux seraient
+      // indiscernables une fois le clip créé.
+      reason: opts.videoType === 'niche' ? 'Vidéo de niche' : 'Vidéo générée depuis une idée',
       profile: targetProfile
     })
     // NB : en autopilot on publie par ID juste après (pas besoin d'approuver
@@ -904,7 +908,7 @@ function catCfg(type?: string): CategoryCfg {
   return all[t] ?? {}
 }
 
-type SlotOverride = { hm?: number; type?: string; subject?: string; music?: string; from?: string; stockPick?: string }
+type SlotOverride = { hm?: number; type?: string; subject?: string; music?: string; from?: string; stockPick?: string; stockKinds?: string }
 function slotOverrides(): Record<string, SlotOverride> {
   try {
     const raw = repo.getSetting('autopilot_slot_overrides')
@@ -926,6 +930,15 @@ function slotOverrides(): Record<string, SlotOverride> {
   }
   return {}
 }
+/** Nature d'un clip, deduite de son motif de creation. 'clip' couvre aussi les
+ *  imports depuis l'ordinateur : dans les deux cas la video existait deja. */
+export type ClipKind = 'niche' | 'ia' | 'clip'
+export function clipKind(c: { reason?: string | null }): ClipKind {
+  const r = c.reason ?? ''
+  if (r === 'Vidéo de niche') return 'niche'
+  if (r === 'Vidéo générée depuis une idée') return 'ia'
+  return 'clip'
+}
 /** Clips « En stock » : non publiés, non rejetés, avec un fichier — les mêmes que
  *  ceux listés dans « Clips → En stock » et dans le sélecteur du volet. */
 function availableStockClips(): import('../src/shared/types').ClipDTO[] {
@@ -942,6 +955,10 @@ function availableStockClips(): import('../src/shared/types').ClipDTO[] {
 /** Modes de tirage AUTOMATIQUE d'un créneau « stock » (quand aucun clip n'est
  *  choisi explicitement). `recent` = comportement historique. */
 export type StockPick = 'recent' | 'oldest' | 'random' | 'none'
+/** Natures retenues par un créneau, depuis sa chaîne enregistrée. */
+function kindsOf(v: unknown): string[] {
+  return String(v ?? '').split(',').map((x) => x.trim()).filter(Boolean)
+}
 function asStockPick(v: unknown): StockPick {
   const t = String(v ?? '')
   return t === 'oldest' || t === 'random' || t === 'none' ? t : 'recent'
@@ -962,7 +979,9 @@ function pickStockClip(
   subjectId: number | undefined,
   mode: StockPick = 'recent',
   /** Graine du tirage aléatoire : compte + créneau + jour. */
-  seed = ''
+  seed = '',
+  /** Natures autorisées ('niche', 'ia', 'clip'). Vide = toutes. */
+  kinds: string[] = []
 ): import('../src/shared/types').ClipDTO | null {
   if (subjectId != null && Number.isFinite(subjectId)) {
     const chosen = repo
@@ -974,7 +993,10 @@ function pickStockClip(
   // sauter par la même voie qu'un stock épuisé — pas de seconde mécanique.
   if (mode === 'none') return null
   // Déjà trié du plus récent au plus ancien.
-  const stock = availableStockClips()
+  // Le filtre par nature ne s'applique QU'AU TIRAGE automatique : un clip choisi
+  // à la main part quel que soit son type, le choix explicite vaut consentement.
+  const tous = availableStockClips()
+  const stock = kinds.length ? tous.filter((c) => kinds.includes(clipKind(c))) : tous
   if (!stock.length) return null
   if (mode === 'oldest') return stock[stock.length - 1]
   if (mode === 'random') return stock[seedHash(seed) % stock.length]
@@ -1212,7 +1234,7 @@ async function runAutopilotTick(force = false): Promise<void> {
     // une vidéo de niche). Il reste affiché « Aucun clip en stock » et se réveillera
     // dès qu'un clip entrera en stock — pas d'échec, pas de génération.
     const ovSel = ovToday[`${s.user}:${s.ordinal}`]
-    if (ovSel?.type === 'stock' && !pickStockClip(Number.isFinite(Number(ovSel.subject)) ? Number(ovSel.subject) : undefined, asStockPick(ovSel.stockPick), `${s.user}:${s.ordinal}:${dayKey()}`)) continue
+    if (ovSel?.type === 'stock' && !pickStockClip(Number.isFinite(Number(ovSel.subject)) ? Number(ovSel.subject) : undefined, asStockPick(ovSel.stockPick), `${s.user}:${s.ordinal}:${dayKey()}`, kindsOf(ovSel.stockKinds))) continue
     picked = { user: s.user, ordinal: s.ordinal }
     break
   }
@@ -1258,7 +1280,7 @@ async function runAutopilotTick(force = false): Promise<void> {
       // niche). Chaque jour il publie le clip choisi s'il est encore dispo, sinon
       // le plus récent en stock. Une fois publié, on retire juste l'id figé pour
       // que le lendemain reparte sur le stock du moment.
-      const clip = pickStockClip(Number.isFinite(Number(subject)) ? Number(subject) : undefined, asStockPick(slotOv.stockPick), `${user}:${ordinal}:${dayKey()}`)
+      const clip = pickStockClip(Number.isFinite(Number(subject)) ? Number(subject) : undefined, asStockPick(slotOv.stockPick), `${user}:${ordinal}:${dayKey()}`, kindsOf(slotOv.stockKinds))
       if (!clip || !clip.filePath) {
         // Plus aucun clip en stock : on NE génère PAS de vidéo de niche à la place.
         // Le créneau est marqué « sans clip » pour la journée (affiché tel quel),
@@ -3141,6 +3163,8 @@ app.get('/api/autopilot/plan', wrap(async (req, res) => {
     subject?: string
     /** Mode de tirage auto d un creneau « stock » (recent | oldest | random). */
     stockPick?: string
+    /** Natures autorisees au tirage ('niche,ia,clip'). */
+    stockKinds?: string
     hasSeries?: boolean
     credits?: number
     failed?: boolean
@@ -3234,7 +3258,7 @@ app.get('/api/autopilot/plan', wrap(async (req, res) => {
       let label: string
       if (ov?.type === 'custom' && (ov.subject ?? '').trim()) label = `Sujet : ${(ov.subject ?? '').trim()}`
       else if (ov?.type === 'carousel' || ov?.type === 'slideshow') label = `Carrousel : ${(ov.subject ?? '').trim() || nicheForProfile(user)}`
-      else if (ov?.type === 'stock') { const sc = pickStockClip(Number(ov.subject), asStockPick(ov.stockPick), `${user}:${ordinal}:${dayKey()}`); label = sc ? `En stock : ${sc.title ?? `clip n°${sc.id}`}` : asStockPick(ov.stockPick) === 'none' ? 'Rien — créneau laissé vide' : 'Aucun clip en stock' }
+      else if (ov?.type === 'stock') { const sc = pickStockClip(Number(ov.subject), asStockPick(ov.stockPick), `${user}:${ordinal}:${dayKey()}`, kindsOf(ov.stockKinds)); label = sc ? `En stock : ${sc.title ?? `clip n°${sc.id}`}` : asStockPick(ov.stockPick) === 'none' ? 'Rien — créneau laissé vide' : 'Aucun clip en stock' }
       else if (ov?.type === 'clip') label = `Clip : ${(ov.subject ?? '').trim().replace(/^https?:\/\/(www\.)?/, '').slice(0, 50) || 'choix auto (IA)'}`
       else if (ov?.type === 'serie' && confSerie) label = `Série : ${confSerie.title}`
       else label = nicheForProfile(user)
@@ -3251,6 +3275,7 @@ app.get('/api/autopilot/plan', wrap(async (req, res) => {
         type: ov?.type,
         subject: ov?.subject,
         stockPick: ov?.stockPick,
+        stockKinds: ov?.stockKinds,
         hasSeries: !!confSerie,
         credits: estimateCredits(ov?.type),
         music: ov?.music,
@@ -3293,7 +3318,7 @@ app.get('/api/autopilot/plan', wrap(async (req, res) => {
     let emptyStock = false
     if (ov?.type === 'custom' && (ov.subject ?? '').trim()) label = `Sujet : ${(ov.subject ?? '').trim()}`
     else if (ov?.type === 'carousel' || ov?.type === 'slideshow') label = `Carrousel : ${(ov.subject ?? '').trim() || nicheForProfile(sc.user)}`
-    else if (ov?.type === 'stock') { const stk = pickStockClip(Number(ov.subject), asStockPick(ov.stockPick), `${sc.user}:${sc.ordinal}:${dayKey()}`); if (stk) label = `En stock : ${stk.title ?? `clip n°${stk.id}`}`; else if (asStockPick(ov.stockPick) === 'none') label = 'Rien — créneau laissé vide' // choix délibéré : pas d'alerte ambre, contrairement au stock épuisé
+    else if (ov?.type === 'stock') { const stk = pickStockClip(Number(ov.subject), asStockPick(ov.stockPick), `${sc.user}:${sc.ordinal}:${dayKey()}`, kindsOf(ov.stockKinds)); if (stk) label = `En stock : ${stk.title ?? `clip n°${stk.id}`}`; else if (asStockPick(ov.stockPick) === 'none') label = 'Rien — créneau laissé vide' // choix délibéré : pas d'alerte ambre, contrairement au stock épuisé
     else { label = 'Aucun clip en stock'; emptyStock = true } }
     else if (ov?.type === 'clip') label = `Clip : ${(ov.subject ?? '').trim().replace(/^https?:\/\/(www\.)?/, '').slice(0, 50) || 'choix auto (IA)'}`
     else if (ov?.type === 'serie' && confSerie) label = `Série : ${confSerie.title} — Ép. ${confSerie.episode}`
@@ -3311,6 +3336,7 @@ app.get('/api/autopilot/plan', wrap(async (req, res) => {
       type: ov?.type,
       subject: ov?.subject,
       stockPick: ov?.stockPick,
+      stockKinds: ov?.stockKinds,
       hasSeries: !!confSerie,
       credits: estimateCredits(ov?.type),
       music: ov?.music,
@@ -3505,7 +3531,7 @@ app.post('/api/autopilot/clip-channels/test', wrap(async (req, res) => {
 
 // Personnalise un créneau du jour (heure et/ou type) — clic sur un bloc du planning.
 app.post('/api/autopilot/slot', wrap((req, res) => {
-  const b = (req.body ?? {}) as { user?: unknown; ordinal?: unknown; hm?: unknown; type?: unknown; subject?: unknown; music?: unknown; reset?: unknown; day?: unknown; stockPick?: unknown }
+  const b = (req.body ?? {}) as { user?: unknown; ordinal?: unknown; hm?: unknown; type?: unknown; subject?: unknown; music?: unknown; reset?: unknown; day?: unknown; stockPick?: unknown; stockKinds?: unknown }
   const user = String(b.user ?? '').trim()
   const ordinal = Math.max(1, Math.round(Number(b.ordinal)) || 1)
   if (!user || !uploadPostProfiles().includes(user)) return res.status(400).json({ error: 'Compte inconnu' })
@@ -3526,6 +3552,7 @@ app.post('/api/autopilot/slot', wrap((req, res) => {
         delete o.type
         delete o.subject
         delete o.stockPick
+        delete o.stockKinds
       } else if (['niche', 'serie', 'clip', 'carousel', 'stock'].includes(t)) {
         o.type = t
       }
@@ -3542,6 +3569,14 @@ app.post('/api/autopilot/slot', wrap((req, res) => {
       if (sp === 'oldest' || sp === 'random' || sp === 'none') o.stockPick = sp
       else delete o.stockPick
     }
+    if (b.stockKinds !== undefined) {
+      // Liste de natures séparées par des virgules. Vide OU complète = aucune
+      // restriction : on n'enregistre pas un filtre qui ne filtre rien.
+      const ok = ['niche', 'ia', 'clip']
+      const v = String(b.stockKinds ?? '').split(',').map((x) => x.trim()).filter((x) => ok.includes(x))
+      if (v.length && v.length < ok.length) o.stockKinds = v.join(',')
+      else delete o.stockKinds
+    }
     if (b.music !== undefined) {
       const mu = String(b.music ?? '').trim()
       if (mu && mu !== 'auto') o.music = mu.slice(0, 120) // nom de fichier précis, ou 'none'
@@ -3551,7 +3586,7 @@ app.post('/api/autopilot/slot', wrap((req, res) => {
     // Sans ça, le modèle vaudrait aussi pour AUJOURD'HUI et le rattrapage lancerait
     // le soir même tout bloc dont l'heure du jour est déjà passée.
     if (Number(b.day) >= 1) o.from = dayKey(1)
-    if (o.hm == null && !o.type && !o.music && !o.from && !o.stockPick) delete map[key]
+    if (o.hm == null && !o.type && !o.music && !o.from && !o.stockPick && !o.stockKinds) delete map[key]
     else map[key] = o
   }
   // Modèle persistant : appliqué chaque jour tant qu'il n'est pas modifié.
