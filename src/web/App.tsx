@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState, type ChangeEvent, type CSSProperties, type MouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import {
   api,
   subscribe,
@@ -323,6 +323,110 @@ function Login({ onOk }: { onOk: () => void }): JSX.Element {
   )
 }
 
+// ── Palette de commandes (Ctrl K) ──────────────────────────────────────────
+// Tout ce que l'interface sait faire, atteignable au clavier sans chercher le
+// bouton : les pages, les actions globales, les comptes.
+type Cmd = { id: string; group: string; label: string; hint?: string; icon: string; run: () => void }
+
+/** Minuscules sans accents : taper « generation » doit trouver « Génération IA ». */
+const sansAccent = (s: string): string => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+
+function Palette({ cmds, onClose }: { cmds: Cmd[]; onClose: () => void }): JSX.Element {
+  const [q, setQ] = useState('')
+  const [sel, setSel] = useState(0)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
+
+  const hits = useMemo(() => {
+    const n = sansAccent(q.trim())
+    if (!n) return cmds
+    // Chaque mot doit apparaitre, dans n'importe quel ordre et n'importe où :
+    // « auto pilote » trouve « Pilote auto » aussi bien que « Pilote auto ».
+    const mots = n.split(/\s+/)
+    return cmds.filter((c) => {
+      const foin = sansAccent(`${c.group} ${c.label} ${c.hint ?? ''}`)
+      return mots.every((m) => foin.includes(m))
+    })
+  }, [cmds, q])
+
+  // La selection repart en tete a chaque frappe : sans ca elle pointerait hors
+  // de la liste des que le filtre se resserre.
+  useEffect(() => { setSel(0) }, [q])
+  useEffect(() => { inputRef.current?.focus() }, [])
+  // Garde l'entree choisie visible quand on descend au clavier.
+  useEffect(() => { listRef.current?.querySelector('.pal-item.on')?.scrollIntoView({ block: 'nearest' }) }, [sel])
+
+  const lancer = (c: Cmd | undefined): void => {
+    if (!c) return
+    // On ferme AVANT d'agir : plusieurs commandes changent de page, la palette
+    // ne doit pas rester au-dessus du resultat.
+    onClose()
+    c.run()
+  }
+
+  const onKey = (e: ReactKeyboardEvent): void => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setSel((i) => (hits.length ? (i + 1) % hits.length : 0)) }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setSel((i) => (hits.length ? (i - 1 + hits.length) % hits.length : 0)) }
+    else if (e.key === 'Enter') { e.preventDefault(); lancer(hits[sel]) }
+    else if (e.key === 'Escape') { e.preventDefault(); onClose() }
+  }
+
+  // Groupes dans l'ordre d'apparition — on n'impose pas d'ordre aux commandes,
+  // c'est celui du tableau qui fait foi. `i` reste l'index dans `hits`, seul
+  // repere valable pour la selection au clavier.
+  const groupes: { nom: string; items: { c: Cmd; i: number }[] }[] = []
+  hits.forEach((c, i) => {
+    let g = groupes.find((x) => x.nom === c.group)
+    if (!g) { g = { nom: c.group, items: [] }; groupes.push(g) }
+    g.items.push({ c, i })
+  })
+
+  return (
+    <div className="pal-back" onMouseDown={onClose}>
+      <div className="card pal" onMouseDown={(e) => e.stopPropagation()} onKeyDown={onKey}>
+        <div className="pal-head">
+          <Icon name="search" size={15} />
+          <input
+            ref={inputRef}
+            className="pal-input"
+            placeholder="Une page, une action, un compte…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
+          <span className="kbd">Échap</span>
+        </div>
+        <div className="pal-list" ref={listRef}>
+          {hits.length === 0 && <div className="pal-vide">Rien ne correspond à « {q.trim()} »</div>}
+          {groupes.map((g) => (
+            <div key={g.nom}>
+              <div className="pal-group">{g.nom}</div>
+              {g.items.map(({ c, i }) => (
+                <button
+                  key={c.id}
+                  className={`pal-item${i === sel ? ' on' : ''}`}
+                  // Le survol deplace la selection : la souris et le clavier
+                  // designent la meme entree, jamais deux differentes.
+                  onMouseMove={() => setSel(i)}
+                  onClick={() => lancer(c)}
+                >
+                  <Icon name={c.icon} size={15} />
+                  <span className="pal-label">{c.label}</span>
+                  {c.hint && <span className="pal-hint">{c.hint}</span>}
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+        <div className="pal-foot">
+          <span><span className="kbd">↑</span><span className="kbd">↓</span> naviguer</span>
+          <span><span className="kbd">Entrée</span> lancer</span>
+          <span>{hits.length} commande{hits.length > 1 ? 's' : ''}</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
   const [page, setPage] = useState<Page>('dashboard')
   const [sources, setSources] = useState<SourceDTO[]>([])
@@ -332,6 +436,11 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
   const [toast, setToast] = useState('')
   // Console « Activité en direct » : ouverte depuis la topbar (à droite de la recherche).
   const [consoleOpen, setConsoleOpen] = useState(false)
+  // Palette de commandes (Ctrl K). `autoOn` sert uniquement à libeller la
+  // commande marche/pause du pilote : on ne le lit qu'à l'ouverture, cet écran
+  // n'a pas besoin de suivre l'état du pilote le reste du temps.
+  const [palOpen, setPalOpen] = useState(false)
+  const [autoOn, setAutoOn] = useState<boolean | null>(null)
   // Mode d'affichage de la sidebar (contrôle en bas de barre, façon Supabase).
   // Préférence d'appareil → localStorage, pas la BDD.
   const [sideMode, setSideMode] = useState<'expanded' | 'collapsed' | 'hover'>(() => {
@@ -363,6 +472,29 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
     setTheme(next)
     localStorage.setItem('theme', next)
   }
+
+  // Ctrl K / ⌘K ouvre et referme la palette. En capture, pour passer devant les
+  // champs de saisie : le raccourci doit marcher même le curseur dans un input.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setPalOpen((v) => !v)
+      }
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [])
+
+  // État du pilote lu à CHAQUE ouverture : il a pu changer depuis la dernière
+  // fois, et une commande « Démarrer » sur un pilote déjà en marche serait un
+  // piège. Tant qu'on ne l'a pas, la commande marche/pause n'est pas proposée.
+  useEffect(() => {
+    if (!palOpen) return
+    let vivant = true
+    api.autopilotState().then((s) => { if (vivant) setAutoOn(s.enabled) }).catch(() => undefined)
+    return () => { vivant = false }
+  }, [palOpen])
   const [progress, setProgress] = useState<Record<number, ProgressEvent>>({})
   const [ideaVideo, setIdeaVideo] = useState<Record<number, { status: 'running' | 'done' | 'error'; message: string }>>({})
   const [pub, setPub] = useState<PublishStateT | null>(null)
@@ -466,8 +598,94 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
     ]
   ]
 
+  // Commandes de la palette. L'ordre du tableau est celui de l'affichage : les
+  // pages d'abord, ce que l'on vient chercher neuf fois sur dix.
+  const cmds: Cmd[] = [
+    ...navGroups.flat().map((n) => ({
+      id: `go:${n.id}`,
+      group: 'Aller à',
+      label: n.label,
+      icon: n.icon,
+      run: () => setPage(n.id)
+    })),
+    {
+      id: 'act:theme',
+      group: 'Actions',
+      label: theme === 'dark' ? 'Passer en thème clair' : 'Passer en thème sombre',
+      icon: theme === 'dark' ? 'sun' : 'moon',
+      run: toggleTheme
+    },
+    {
+      id: 'act:console',
+      group: 'Actions',
+      label: consoleOpen ? 'Fermer la console' : 'Ouvrir la console d’activité',
+      hint: 'journal en direct',
+      icon: 'terminal',
+      run: () => setConsoleOpen((v) => !v)
+    },
+    {
+      id: 'act:run',
+      group: 'Actions',
+      label: 'Lancer un cycle du pilote maintenant',
+      hint: 'génère et publie 1 vidéo',
+      icon: 'bolt',
+      run: () => {
+        api.runAutopilotNow()
+          .then(() => showToast('Cycle lancé — suis la progression en bas à droite'))
+          .catch((e: Error) => showToast('Erreur : ' + e.message))
+      }
+    },
+    // Proposée seulement une fois l'état connu : sans lui, le libellé mentirait
+    // une fois sur deux et la commande ferait l'inverse de ce qu'elle annonce.
+    ...(autoOn === null ? [] : [{
+      id: 'act:auto',
+      group: 'Actions',
+      label: autoOn ? 'Mettre le pilote en pause' : 'Démarrer le pilote',
+      hint: autoOn ? 'en marche' : 'en pause',
+      icon: autoOn ? 'pause' : 'play',
+      run: () => {
+        const next = !autoOn
+        api.saveAutopilot({ enabled: next })
+          .then(() => { setAutoOn(next); showToast(next ? 'Pilote démarré' : 'Pilote en pause') })
+          .catch((e: Error) => showToast('Erreur : ' + e.message))
+      }
+    }]),
+    {
+      id: 'act:refresh',
+      group: 'Actions',
+      label: 'Rafraîchir les clips et les sources',
+      icon: 'refresh',
+      run: () => { void refresh().catch(() => showToast('Rafraîchissement impossible')) }
+    },
+    ...(['expanded', 'collapsed', 'hover'] as const).map((m) => ({
+      id: `act:side:${m}`,
+      group: 'Actions',
+      label: `Menu latéral : ${m === 'expanded' ? 'toujours déployé' : m === 'collapsed' ? 'toujours replié' : 'déployé au survol'}`,
+      icon: 'list',
+      run: () => changeSideMode(m)
+    })),
+    { id: 'act:logout', group: 'Actions', label: 'Se déconnecter', icon: 'logout', run: () => { void api.logout().then(onLogout) } },
+    {
+      id: 'sc:all',
+      group: 'Comptes',
+      label: 'Tous les comptes',
+      hint: isAll ? 'vue actuelle' : undefined,
+      icon: 'globe',
+      run: () => { void changeScope(ALL_SCOPE) }
+    },
+    ...(pub?.profiles ?? []).map((p) => ({
+      id: `sc:${p.username}`,
+      group: 'Comptes',
+      label: p.handle ? `@${p.handle}` : p.username,
+      hint: p.username === scope ? 'vue actuelle' : undefined,
+      icon: 'globe',
+      run: () => { void changeScope(p.username) }
+    }))
+  ]
+
   return (
     <div className="app">
+      {palOpen && <Palette cmds={cmds} onClose={() => setPalOpen(false)} />}
       {/* Barre du haut, pleine largeur : logo · compte TikTok actif …
           recherche · compte du dashboard. */}
       <header className="topbar">
@@ -478,9 +696,9 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
           <ProfilePicker profiles={pub?.profiles ?? []} active={scope} onChange={changeScope} />
         )}
         <div style={{ flex: 1 }} />
-        <div className="tb-search" title="Recherche (bientôt)">
+        <button className="tb-search" title="Palette de commandes — pages, actions, comptes" onClick={() => setPalOpen(true)}>
           <Icon name="search" size={14} /> Rechercher <span className="kbd">Ctrl K</span>
-        </div>
+        </button>
         {/* Console d'activité (style bouton « console » de Supabase) : ouvre un
             volet latéral venant de la droite (rendu hors du header). */}
         <button
