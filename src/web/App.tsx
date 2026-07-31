@@ -2002,6 +2002,9 @@ function Clips({ clips, sources, onRefresh, toast, scope }: { clips: ClipDTO[]; 
   const byDate = (a: ClipDTO, b: ClipDTO): number => b.createdAt - a.createdAt
   const published = mine.filter((c) => c.publishStatus === 'published').sort(byDate)
   const stock = mine.filter((c) => c.publishStatus !== 'published').sort(byDate)
+  const PAR_PAGE = 24
+  const [page, setPage] = useState(1)
+
   // Onglet Publiés : tri par performance possible. Les vidéos SANS statistique
   // (au-delà des 20 dernières d'un compte, limite de l'API) partent en fin de
   // liste plutôt que d'être comptées comme des zéros — on ne sait pas, ce n'est
@@ -2018,6 +2021,18 @@ function Clips({ clips, sources, onRefresh, toast, scope }: { clips: ClipDTO[]; 
           if (!sy) return -1
           return sy.x - sx.x
         })
+
+  // ── Pagination ────────────────────────────────────────────────────────────
+  // Chaque vignette monte un <video>. À 360 publications, l'onglet devenait
+  // impraticable — en test, un navigateur sans accélération graphique s'y
+  // bloquait franchement. On n'en monte plus que 24 à la fois.
+  const nbPages = Math.max(1, Math.ceil(list.length / PAR_PAGE))
+  // `page` est BORNÉ plutôt que remis à 1 dans un effet : rester en page 7 d'une
+  // liste devenue courte afficherait une grille vide le temps d'un rendu.
+  const pageSure = Math.min(page, nbPages)
+  const pageList = list.slice((pageSure - 1) * PAR_PAGE, pageSure * PAR_PAGE)
+  // Changer d'onglet, de tri ou de compte donne une AUTRE liste : on repart du début.
+  useEffect(() => { setPage(1) }, [tab, tri, scope])
 
   return (
     <>
@@ -2080,11 +2095,22 @@ function Clips({ clips, sources, onRefresh, toast, scope }: { clips: ClipDTO[]; 
           </p>
         </div>
       ) : (
-        <div className="clip-grid">
-          {list.map((c) => (
-            <ClipCard key={c.id} c={c} ai={isAI(c)} onSetPublishable={setPublishable} perf={scoreOf(c)} />
-          ))}
-        </div>
+        <>
+          <div className="clip-grid">
+            {pageList.map((c) => (
+              <ClipCard key={c.id} c={c} ai={isAI(c)} onSetPublishable={setPublishable} perf={scoreOf(c)} />
+            ))}
+          </div>
+          {nbPages > 1 && (
+            <div className="clip-pages">
+              <button className="btn" disabled={pageSure <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>← Précédentes</button>
+              <span className="clip-pages-n">
+                Page {pageSure} / {nbPages} · {list.length} clip{list.length > 1 ? 's' : ''}
+              </span>
+              <button className="btn" disabled={pageSure >= nbPages} onClick={() => setPage((p) => Math.min(nbPages, p + 1))}>Suivantes →</button>
+            </div>
+          )}
+        </>
       )}
     </>
   )

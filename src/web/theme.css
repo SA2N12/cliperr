@@ -4292,3 +4292,20 @@ input[type='checkbox'] {
   color: #06231a;
   font-weight: 600;
 }
+
+/* Pagination des clips. */
+.clip-pages {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.clip-pages-n {
+  font-size: 12.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
