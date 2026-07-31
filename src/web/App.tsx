@@ -1900,12 +1900,24 @@ function ClipCard({ c, ai, onSetPublishable, perf }: { c: ClipDTO; ai: boolean; 
         {/* Performance : les vues brutes ET le rapport à la médiane du compte.
             Les vues seules ne disent pas si c'est bon — 5 000 vues est un
             carton sur un compte à 800, un échec sur un compte à 20 000. */}
-        {perf && (
-          <div className={`clip-perf${perf.x >= 1.5 ? ' hot' : perf.x < 0.6 ? ' cold' : ''}`}>
-            <span className="clip-perf-v">{fmtNum(perf.views)} vues</span>
-            <span className="clip-perf-x" title={`${perf.x.toFixed(2)}× la médiane de ce compte`}>
-              ×{perf.x >= 10 ? Math.round(perf.x) : perf.x.toFixed(1)}
-            </span>
+        {/* Performance ET lien vers la publication sur UNE SEULE ligne. Empilés,
+            ils coûtaient 55 px par carte — 110 sur deux rangées, soit tout le
+            débordement de l'onglet Publiés. */}
+        {(perf || (published && c.postUrl)) && (
+          <div className={`clip-perf${perf && perf.x >= 1.5 ? ' hot' : perf && perf.x < 0.6 ? ' cold' : ''}`}>
+            {perf ? (
+              <>
+                <span className="clip-perf-v">{fmtNum(perf.views)} vues</span>
+                <span className="clip-perf-x" title={`${perf.x.toFixed(2)}× la médiane de ce compte`}>
+                  ×{perf.x >= 10 ? Math.round(perf.x) : perf.x.toFixed(1)}
+                </span>
+              </>
+            ) : (
+              <span className="clip-perf-v">Pas de statistique</span>
+            )}
+            {published && c.postUrl && (
+              <a className="clip-post" href={c.postUrl} target="_blank" rel="noreferrer" title="Ouvrir la publication sur TikTok">Voir →</a>
+            )}
           </div>
         )}
       </div>
@@ -1925,13 +1937,7 @@ function ClipCard({ c, ai, onSetPublishable, perf }: { c: ClipDTO; ai: boolean; 
           </button>
           {c.publishable ? <span><b>Publiable</b></span> : <span><MIcon name="block" size={13} /> Protégé</span>}
         </div>
-      ) : (
-        c.postUrl && (
-          <div className="clip-actions">
-            <a className="btn small" href={c.postUrl} target="_blank" rel="noreferrer">Voir le post</a>
-          </div>
-        )
-      )}
+      ) : null}
     </article>
   )
 }
