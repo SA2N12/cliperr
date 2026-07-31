@@ -2002,7 +2002,7 @@ function Clips({ clips, sources, onRefresh, toast, scope }: { clips: ClipDTO[]; 
   const byDate = (a: ClipDTO, b: ClipDTO): number => b.createdAt - a.createdAt
   const published = mine.filter((c) => c.publishStatus === 'published').sort(byDate)
   const stock = mine.filter((c) => c.publishStatus !== 'published').sort(byDate)
-  const PAR_PAGE = 24
+  const PAR_PAGE = 10
   const [page, setPage] = useState(1)
 
   // Onglet Publiés : tri par performance possible. Les vidéos SANS statistique
