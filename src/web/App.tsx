@@ -2168,8 +2168,10 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
   const [type, setType] = useState(slot.type ?? 'auto')
   const [subject, setSubject] = useState(slot.subject ?? '')
   const [music, setMusic] = useState(slot.music ?? 'auto')
-  // Mode de tirage quand AUCUN clip n'est choisi (type « stock » uniquement).
-  const [stockPick, setStockPick] = useState(slot.stockPick ?? 'recent')
+  // Tirage quand AUCUN clip n'est choisi (type « stock » uniquement) : pioche le
+  // plus recent, ou rien. Un creneau portant encore une valeur retiree ('oldest',
+  // 'random') retombe sur 'recent' — exactement ce que fait le serveur.
+  const [stockPick, setStockPick] = useState(slot.stockPick === 'none' ? 'none' : 'recent')
   // Natures autorisees au tirage. Tableau VIDE = aucune restriction, ce qui
   // evite d'avoir a distinguer « tout coche » de « rien regle ».
   const [stockKinds, setStockKinds] = useState<string[]>((slot.stockKinds ?? '').split(',').filter(Boolean))
@@ -2317,9 +2319,7 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
                     Sans clip choisi, publier
                   </label>
                   <select className="input-full" value={stockPick} onChange={(e) => setStockPick(e.target.value)}>
-                    <option value="recent">Le plus récent</option>
-                    <option value="oldest">Le plus ancien — écoule le stock</option>
-                    <option value="random">Au hasard</option>
+                    <option value="recent">Le clip le plus récent</option>
                     <option value="none">Ne rien publier — laisser le créneau vide</option>
                   </select>
                   {/* Natures autorisées au tirage. Tout coché = aucune restriction —
@@ -2363,9 +2363,7 @@ function SlotModal({ slot, quota, onClose, onSaved, toast }: { slot: AutopilotSl
                     : (
                       <>
                         Publie un clip tel quel, sans génération (0 crédit) — jamais un clip 🔒 protégé (eux ne partent que choisis ici).
-                        {stockPick === 'random' && ' Le tirage est figé pour la journée : le bloc affiche à l’avance le clip qui partira ce soir.'}
-                        {stockPick === 'oldest' && ' Utile pour vider le stock dans l’ordre d’arrivée plutôt que de laisser vieillir les plus anciens.'}
-                        {stockPick === 'none' && ' Le créneau est sauté : aucune publication, aucune génération de remplacement. Il reste actif et repartira dès que tu choisiras un clip ou un autre mode.'}
+                        {stockPick === 'none' && ' Le créneau est sauté : aucune publication, aucune génération de remplacement. Il reste actif et repartira dès que tu le remettras sur « le plus récent » ou que tu choisiras un clip.'}
                       </>
                     )}
               </div>
