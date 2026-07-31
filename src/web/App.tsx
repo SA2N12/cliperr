@@ -2796,25 +2796,12 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
     <div className="card ap-plan-card">
       <div className="row" style={{ marginBottom: 0 }}>
         <div>
-          <div style={{ display: 'inline-flex', gap: 3, background: 'var(--panel-2)', borderRadius: 0, padding: 3, marginBottom: 5 }}>
+          {/* Onglets : le jour actif en vert plein, comme la reference. Les styles
+              passent en CSS (.ap-seg) — ils etaient en ligne, ce qui empechait
+              d exprimer l etat actif autrement qu en dupliquant chaque valeur. */}
+          <div className="ap-seg">
             {([[0, 'Aujourd’hui'], [1, 'Demain']] as const).map(([d, lbl]) => (
-              <button
-                key={d}
-                onClick={() => setDay(d)}
-                style={{
-                  cursor: 'pointer',
-                  borderRadius: 0,
-                  padding: '4px 14px',
-                  fontSize: 13,
-                  fontWeight: day === d ? 700 : 500,
-                  background: day === d ? 'var(--panel)' : 'transparent',
-                  border: day === d ? '1px solid var(--border)' : '1px solid transparent',
-                  color: day === d ? 'var(--text)' : 'var(--muted)',
-                  fontFamily: 'inherit'
-                }}
-              >
-                {lbl}
-              </button>
+              <button key={d} className={day === d ? 'on' : ''} onClick={() => setDay(d)}>{lbl}</button>
             ))}
           </div>
           {/* Avancement du jour : la jauge dit d'un regard où en est la journée,

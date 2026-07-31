@@ -3932,3 +3932,79 @@ input[type='checkbox'] {
   font-size: 11.5px;
   color: var(--muted);
 }
+
+/* ── Onglets Aujourd'hui / Demain ───────────────────────────────────────────
+   Jour actif en vert PLEIN sur texte sombre, à la façon de la référence : le
+   contraste est franc, on sait sans hésiter quel jour on regarde. Angles droits
+   conservés. */
+.ap-seg {
+  display: inline-flex;
+  gap: 3px;
+  padding: 3px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+}
+.ap-seg button {
+  padding: 5px 16px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    background 0.14s ease,
+    color 0.14s ease;
+}
+.ap-seg button:hover:not(.on) {
+  color: var(--text);
+}
+.ap-seg button.on {
+  background: var(--ap-green);
+  /* Texte SOMBRE sur le vert plein : du blanc y passerait tout juste le seuil de
+     lisibilité, et l'onglet actif est ce qu'on lit en premier. */
+  color: #06231a;
+  font-weight: 600;
+}
+
+/* ── Bloc du planning, finitions ────────────────────────────────────────────
+   Repris de la carte de la référence : plus d'air, heure plus présente, flèche
+   verte, et le coût dans une pastille teintée plutôt que grise. */
+.ap-slot {
+  width: 186px;
+  padding: 11px 12px;
+  gap: 7px;
+}
+.ap-slot-h {
+  font-size: 15px;
+  font-weight: 600;
+}
+/* La flèche prend la couleur de la catégorie : elle signale « à venir » tout en
+   rappelant de quoi il s'agit. */
+.ap-slot-ic {
+  color: var(--slot);
+}
+.ap-slot.free .ap-slot-ic {
+  color: var(--muted-2);
+}
+.ap-slot-lbl {
+  font-size: 12.5px;
+}
+.ap-slot-cr {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-color: color-mix(in srgb, var(--slot) 40%, var(--border));
+  background: color-mix(in srgb, var(--slot) 9%, transparent);
+  color: color-mix(in srgb, var(--slot) 75%, var(--text));
+}
+.ap-slot.done .ap-slot-cr,
+.ap-slot.bad .ap-slot-cr {
+  border-color: var(--border);
+  background: transparent;
+  color: var(--muted-2);
+}
+.ap-slot-st {
+  font-size: 11px;
+}
