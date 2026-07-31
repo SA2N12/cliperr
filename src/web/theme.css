@@ -4352,3 +4352,19 @@ input[type='checkbox'] {
 .clip-perf {
   padding-bottom: 9px;
 }
+
+/* Plein écran : le recadrage disparaît, le format d'origine est respecté.
+   `object-fit: cover` sert à remplir une vignette de 112 px sans bandes noires ;
+   appliqué à un écran 16:9 il rogne massivement une vidéo 9:16 — on ne voyait
+   plus qu'une bande centrale. `contain` laisse la vidéo entière, avec des bords
+   noirs sur les côtés, comme sur un téléphone. */
+.clip-media video:fullscreen,
+.clip-media video:-webkit-full-screen {
+  object-fit: contain;
+  background: #000;
+}
+/* Vaut aussi pour les autres lecteurs de l'app (historique, volets). */
+video:fullscreen,
+video:-webkit-full-screen {
+  object-fit: contain;
+}
