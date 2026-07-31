@@ -4217,3 +4217,12 @@ input[type='checkbox'] {
   max-width: 62ch;
   line-height: 1.4;
 }
+/* « x vidéos/jour » aligné sur « 140 cr/jour » : mêmes taille, marge et graisse.
+   Elle gardait un gabarit plus lourd hérité de l'époque où elle était seule sur
+   sa ligne — côte à côte, l'écart se voyait. Sa couleur et sa pastille suffisent
+   à la distinguer. */
+.ap-pill {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 3px 10px;
+}
