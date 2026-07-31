@@ -2795,26 +2795,25 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
   return (
     <div className="card ap-plan-card">
       <div className="row" style={{ marginBottom: 0 }}>
-        <div>
-          {/* Onglets : le jour actif en vert plein, comme la reference. Les styles
-              passent en CSS (.ap-seg) — ils etaient en ligne, ce qui empechait
-              d exprimer l etat actif autrement qu en dupliquant chaque valeur. */}
+        {/* Onglets ET avancement sur UNE SEULE ligne, comme la référence : c'est
+            aussi ce qui rend la hauteur aux blocs, devenus plus généreux. Les
+            styles des onglets passent en CSS (.ap-seg) — ils étaient en ligne, ce
+            qui obligeait à dupliquer chaque valeur pour exprimer l'état actif. */}
+        <div className="ap-bar">
           <div className="ap-seg">
             {([[0, 'Aujourd’hui'], [1, 'Demain']] as const).map(([d, lbl]) => (
               <button key={d} className={day === d ? 'on' : ''} onClick={() => setDay(d)}>{lbl}</button>
             ))}
           </div>
-          {/* Avancement du jour : la jauge dit d'un regard où en est la journée,
-              le compte chiffré donne le détail. */}
           {day === 0 && slots.length > 0 ? (
             <div className="ap-day">
               <div className="ap-prog wide"><div style={{ width: `${(doneCount / slots.length) * 100}%` }} /></div>
               <span className="ap-day-n">{doneCount}/{slots.length} publiées</span>
             </div>
           ) : (
-            <div className="muted small">
-              Planning de demain · {slots.length} vidéo{slots.length > 1 ? 's' : ''} prévue{slots.length > 1 ? 's' : ''} · clique un bloc pour l’ajuster
-            </div>
+            <span className="muted small">
+              {slots.length} vidéo{slots.length > 1 ? 's' : ''} prévue{slots.length > 1 ? 's' : ''} demain
+            </span>
           )}
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
