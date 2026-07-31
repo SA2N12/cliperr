@@ -2213,6 +2213,23 @@ app.get('/api/analytics/posts', wrap(async (req, res) => {
   res.json({ posts: await recentPostStats(String(req.query.profile ?? '')) })
 }))
 
+/**
+ * Statistiques de TOUS les comptes, indexées par clip. Sert à noter les vidéos
+ * publiées dans « Clips » : sans regroupement il faudrait un appel par compte
+ * depuis le navigateur, et la page ne saurait pas comparer entre comptes.
+ * Réutilise recentPostStats, donc le même cache de 10 minutes — la page Clips
+ * ne relance pas les appels upload-post déjà faits par la page Analyse.
+ */
+app.get('/api/analytics/posts/all', wrap(async (_req, res) => {
+  const out: Record<number, { views: number; likes: number; comments: number; shares: number; profile: string }> = {}
+  for (const u of uploadPostProfiles()) {
+    for (const p of await recentPostStats(u)) {
+      out[p.clipId] = { views: p.views, likes: p.likes, comments: p.comments, shares: p.shares, profile: u }
+    }
+  }
+  res.json({ stats: out })
+}))
+
 app.get('/api/ideas/saved', wrap((_req, res) => res.json({ ideas: repo.listIdeas() })))
 app.delete('/api/ideas/:id', wrap((req, res) => {
   repo.deleteIdea(Number(req.params.id))

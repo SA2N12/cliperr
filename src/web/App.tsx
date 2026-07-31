@@ -1868,7 +1868,7 @@ const STATE_LABEL: Record<ClipDTO['publishStatus'], string> = {
 }
 
 /** Vignette d'un clip : aperçu 9:16, statut et origine en surimpression, actions en pied. */
-function ClipCard({ c, ai, onSetPublishable }: { c: ClipDTO; ai: boolean; onSetPublishable: (id: number, value: boolean) => void }): JSX.Element {
+function ClipCard({ c, ai, onSetPublishable, perf }: { c: ClipDTO; ai: boolean; onSetPublishable: (id: number, value: boolean) => void; perf?: { views: number; x: number } | null }): JSX.Element {
   const published = c.publishStatus === 'published'
   const account = c.publishedAccount || c.profile
   const when = new Date(c.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })
@@ -1897,6 +1897,17 @@ function ClipCard({ c, ai, onSetPublishable }: { c: ClipDTO; ai: boolean; onSetP
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{account || '—'}</span>
           <span style={{ flexShrink: 0 }}>{when}</span>
         </div>
+        {/* Performance : les vues brutes ET le rapport à la médiane du compte.
+            Les vues seules ne disent pas si c'est bon — 5 000 vues est un
+            carton sur un compte à 800, un échec sur un compte à 20 000. */}
+        {perf && (
+          <div className={`clip-perf${perf.x >= 1.5 ? ' hot' : perf.x < 0.6 ? ' cold' : ''}`}>
+            <span className="clip-perf-v">{fmtNum(perf.views)} vues</span>
+            <span className="clip-perf-x" title={`${perf.x.toFixed(2)}× la médiane de ce compte`}>
+              ×{perf.x >= 10 ? Math.round(perf.x) : perf.x.toFixed(1)}
+            </span>
+          </div>
+        )}
       </div>
       {/* Toggle « Publiable » (clips non publiés) : par défaut ON. Éteint = clip
           protégé, jamais publié par le pilote auto. Toutes les publications passent
@@ -1934,6 +1945,34 @@ function Clips({ clips, sources, onRefresh, toast, scope }: { clips: ClipDTO[]; 
     } catch (e) {
       toast('Erreur : ' + (e as Error).message)
     }
+  }
+
+  // Statistiques par publication (vues, likes…) : elles notent les vidéos
+  // publiées. Chargées une fois — l'appel réutilise le cache de 10 min du
+  // serveur, partagé avec la page Analyse.
+  const [stats, setStats] = useState<Record<number, { views: number; likes: number; comments: number; shares: number; profile: string }>>({})
+  const [tri, setTri] = useState<'date' | 'perf'>('date')
+  useEffect(() => { api.analyticsAll().then((r) => setStats(r.stats ?? {})).catch(() => undefined) }, [])
+  /** Médiane des vues d'un compte, parmi ses publications notées. On compare à la
+   *  MÉDIANE et non à la moyenne : un seul carton fausserait la moyenne et ferait
+   *  passer tout le reste pour un échec. */
+  const medianes = (() => {
+    const parCompte: Record<string, number[]> = {}
+    for (const v of Object.values(stats)) (parCompte[v.profile] ??= []).push(v.views)
+    const out: Record<string, number> = {}
+    for (const [u, arr] of Object.entries(parCompte)) {
+      const t = arr.slice().sort((x, y) => x - y)
+      out[u] = t.length ? (t.length % 2 ? t[(t.length - 1) / 2] : (t[t.length / 2 - 1] + t[t.length / 2]) / 2) : 0
+    }
+    return out
+  })()
+  /** Score = vues rapportées à la médiane du compte. Les vues brutes seules
+   *  avantageraient mécaniquement les vidéos les plus anciennes. */
+  const scoreOf = (c: ClipDTO): { views: number; x: number } | null => {
+    const st = stats[c.id]
+    if (!st) return null
+    const med = medianes[st.profile] || 0
+    return { views: st.views, x: med > 0 ? st.views / med : 1 }
   }
 
   // Import d'une vidéo déjà montée. `null` = aucun envoi en cours ; le bouton
@@ -2003,6 +2042,14 @@ function Clips({ clips, sources, onRefresh, toast, scope }: { clips: ClipDTO[]; 
         <button className={`tab ${tab === 'published' ? 'on' : ''}`} onClick={() => setTab('published')}>
           <Icon name="send" size={16} /> Publiés <span className="tab-count">{published.length}</span>
         </button>
+        {/* Tri par performance : n'apparaît que si des statistiques existent —
+            proposer « Meilleures » sans données ne trierait rien. */}
+        {tab === 'published' && Object.keys(stats).length > 0 && (
+          <div className="clip-tri">
+            <button className={tri === 'date' ? 'on' : ''} onClick={() => setTri('date')}>Récentes</button>
+            <button className={tri === 'perf' ? 'on' : ''} onClick={() => setTri('perf')}>Meilleures</button>
+          </div>
+        )}
       </div>
 
       {list.length === 0 ? (
@@ -2020,7 +2067,7 @@ function Clips({ clips, sources, onRefresh, toast, scope }: { clips: ClipDTO[]; 
       ) : (
         <div className="clip-grid">
           {list.map((c) => (
-            <ClipCard key={c.id} c={c} ai={isAI(c)} onSetPublishable={setPublishable} />
+            <ClipCard key={c.id} c={c} ai={isAI(c)} onSetPublishable={setPublishable} perf={scoreOf(c)} />
           ))}
         </div>
       )}
