@@ -449,12 +449,14 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
       // Visible quel que soit le compte choisi : la vue filtre alors le planning
       // sur ce compte (l'interrupteur, lui, reste global).
       { id: 'autopilot', label: 'Pilote auto', icon: 'bolt' },
-      { id: 'categories', label: 'Catégories', icon: 'tag' },
-      { id: 'niches', label: 'Niches', icon: 'bulb' }
+      { id: 'categories', label: 'Catégories', icon: 'tag' }
     ],
     [
       { id: 'clipping', label: 'Clipage', icon: 'scissors' },
       { id: 'genai', label: 'Génération IA', icon: 'sparkles' },
+      // Les niches alimentent la génération : leur place est dans ce groupe,
+      // pas avec les réglages du pilote.
+      { id: 'niches', label: 'Niches', icon: 'bulb' },
       { id: 'clips', label: 'Clips', icon: 'clips' }
     ],
     [
