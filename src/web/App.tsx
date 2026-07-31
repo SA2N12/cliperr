@@ -4231,6 +4231,10 @@ const CAT_MOTS: Record<string, string> = {
   economique: 'Économique', fr: 'Français', en: 'Anglais',
   center: 'Centré', face: 'Suivi du visage', '1': 'Incrustés', '0': 'Aucun'
 }
+/** Réglages dont la valeur est un NOMBRE et non un code. Sans cette liste, un
+ *  « 1 » passé dans CAT_MOTS ressort en « Incrustés » — le libellé des
+ *  sous-titres, qui partagent le même code. */
+const CAT_NOMBRES = new Set(['maxScenes', 'speed', 'slides', 'clipCount'])
 function CategoriesPage({ toast }: { toast: (m: string) => void }): JSX.Element {
   const [cfg, setCfg] = useState<Record<string, Record<string, string | number>>>({})
   const [globals, setGlobals] = useState<CatGlobals>({})
@@ -4272,12 +4276,17 @@ function CategoriesPage({ toast }: { toast: (m: string) => void }): JSX.Element 
   }
   /** Ce qui SERA appliqué : la personnalisation si elle existe, sinon la valeur
    *  globale dont la catégorie hérite. Une tuile qui n'annoncerait que les
-   *  surcharges laisserait croire que le reste n'est pas réglé. */
+   *  surcharges laisserait croire que le reste n'est pas réglé.
+   *  CAT_MOTS traduit des CODES ('veo', 'fr', '1' = sous-titres incrustés) : le
+   *  faire traverser à un nombre donnait « Candidats = Incrustés ». */
   const applique = (cat: string, key: string): { txt: string; perso: boolean } => {
+    const num = CAT_NOMBRES.has(key)
+    const mot = (v: string): string => (num ? v : CAT_MOTS[v] ?? v)
     const v = String(ref[cat]?.[key] ?? '')
-    if (v !== '') return { txt: CAT_MOTS[v] ?? v, perso: true }
-    const h = herite(key)
-    return { txt: h === 'global' ? 'par défaut' : h, perso: false }
+    if (v !== '') return { txt: mot(v), perso: true }
+    const g = globals[key]
+    if (g == null || g === '') return { txt: 'par défaut', perso: false }
+    return { txt: mot(String(g)), perso: false }
   }
 
   const enregistrer = async (cats: string[], cle: string): Promise<void> => {
