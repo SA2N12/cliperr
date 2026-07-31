@@ -39,9 +39,18 @@ export async function buildCarousel(
    *  repropose les mêmes sujets : « La règle des 2 minutes » est sortie 3 fois. */
   recentTitles?: string[],
   /** Nombre de diapos voulu — défaut SLIDES_DEFAUT. */
-  nbSlides?: number
+  nbSlides?: number,
+  /** Style visuel IMPOSÉ à toutes les diapos (page Catégories). Sans lui, l'IA
+   *  réinvente une ambiance à chaque carrousel — d'où des comptes sans identité
+   *  visible. */
+  style?: string
 ): Promise<{ carousel: Carousel | null; usage: Usage | null }> {
   const SLIDES = Math.min(10, Math.max(3, Math.round(Number(nbSlides) || SLIDES_DEFAUT)))
+  // Style imposé : rappelé À CHAQUE consigne d'imagePrompt plutôt qu'une fois en
+  // préambule — un style mentionné trop loin du champ concerné se dilue.
+  const styleBlock = (style || '').trim()
+    ? ` STYLE VISUEL IMPOSÉ, à respecter STRICTEMENT dans CHAQUE imagePrompt : ${(style || '').trim()}`
+    : ''
   const client = new Anthropic({ apiKey: anthropicKey, maxRetries: 5 })
   const tool = {
     name: 'carrousel',
@@ -83,7 +92,7 @@ Produis ${SLIDES} diapos qui reprennent ce déroulé : diapo 1 = le hook ci-dess
 
 Règles de TEXTE : diapo 1 (hook) 12 mots maximum et vraiment accrocheuse (chiffre précis, affirmation contre-intuitive ou révélation retenue — jamais « Voici… » ni « Le saviez-vous ») ; diapos de contenu 2 phrases courtes, 30 mots maximum. Pas de numérotation. Reste FIDÈLE au contenu de la source.
 Règles d'IMAGE (le générateur refuse sinon) : aucun ENFANT ni mineur, aucune personne réelle identifiable, pas de gore ni de contenu sexuel.
-Chaque imagePrompt est en anglais, très détaillé, cinématographique, vertical, SANS AUCUN TEXTE, et cohérent d'une diapo à l'autre (même ambiance, même palette).
+Chaque imagePrompt est en anglais, très détaillé, vertical, SANS AUCUN TEXTE, et cohérent d'une diapo à l'autre (même ambiance, même palette).${styleBlock}
 
 Légende : 1 à 2 phrases + une question.${cta ? `\nTermine la légende par ce CTA : « ${cta} »` : ''}
 
@@ -131,7 +140,7 @@ Règles de TEXTE (le plus important) :
 ⚠️ SÉCURITÉ (règles de la communauté TikTok — un manquement fait RETIRER le post et pénalise TOUT le compte) : reste FACTUEL et sobre. INTERDIT : détails graphiques (violence, mort, sang, corps), victimes réelles, crimes violents réels, suicide/automutilation, actes dangereux, désinformation présentée comme un fait. Choisis un sujet qui intrigue par le MYSTÈRE (phénomènes inexpliqués, énigmes historiques/scientifiques, curiosités) plutôt que par l'horreur — ça performe aussi bien sans se faire supprimer.
 
 Règles d'IMAGE (le générateur refuse sinon) : aucun ENFANT ni mineur, aucune personne réelle identifiable, pas de gore ni de contenu sexuel. Illustre autrement (objet, décor, document, symbole, main d'adulte).
-Chaque imagePrompt est en anglais, très détaillé, cinématographique, vertical, et NE CONTIENT AUCUN TEXTE (le texte est ajouté après).
+Chaque imagePrompt est en anglais, très détaillé, vertical, et NE CONTIENT AUCUN TEXTE (le texte est ajouté après).${styleBlock}
 Garde une cohérence visuelle forte entre les ${SLIDES} diapos (même ambiance, même palette).
 
 Légende : 1 à 2 phrases qui donnent envie, puis une question qui appelle un commentaire.${cta ? `\nTermine la légende par ce CTA : « ${cta} »` : ''}
@@ -200,6 +209,8 @@ export interface CarouselGenOptions {
   recentTitles?: string[]
   /** Nombre de diapos (catégorie « Niches »). */
   slides?: number
+  /** Style visuel imposé (catégorie « Niches »). */
+  style?: string
   onProgress?: (m: string) => void
 }
 
@@ -220,7 +231,8 @@ export async function generateCarousel(
     opts.cta ?? '',
     opts.source,
     opts.recentTitles,
-    opts.slides
+    opts.slides,
+    opts.style
   )
   if (!carousel || !carousel.slides.length) throw new Error('Carrousel vide — réessaie')
 

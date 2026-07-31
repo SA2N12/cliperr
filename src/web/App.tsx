@@ -3836,6 +3836,18 @@ function CategoriesPage({ toast }: { toast: (m: string) => void }): JSX.Element 
       </div>
     )
   }
+  /** Champ libre : un style visuel est une description, pas un choix dans une
+   *  liste. Le repère « personnalisé » vaut aussi ici — il montre ce qui dévie du
+   *  global sans avoir à lire chaque champ. */
+  const texte = (cat: string, key: string, label: string, ph: string): JSX.Element => {
+    const perso = val(cat, key) !== ''
+    return (
+      <div className={`cat-f${perso ? ' on' : ''}`}>
+        <label className="cat-lbl">{label}{perso && <span className="cat-dot" title="Personnalisé pour cette catégorie" />}</label>
+        <textarea className="input-full cat-ta" rows={3} placeholder={ph} value={val(cat, key)} onChange={(e) => champ(cat, key, e.target.value)} />
+      </div>
+    )
+  }
   const nombre = (cat: string, key: string, label: string, min: number, max: number, step?: string): JSX.Element => {
     const perso = val(cat, key) !== ''
     return (
@@ -3871,6 +3883,7 @@ function CategoriesPage({ toast }: { toast: (m: string) => void }): JSX.Element 
         {select(cat, 'lang', 'Langue', [['fr', 'Français'], ['en', 'Anglais']])}
         {select(cat, 'subtitles', 'Sous-titres', [['1', 'Incrustés'], ['0', 'Aucun']])}
       </div>
+      {texte(cat, 'style', 'Style visuel des images', 'ex. photographie cinématographique, lumière chaude et rasante, grain argentique, palette ocre — tenu sur toutes les scènes')}
     </>
   )
 
@@ -3903,6 +3916,7 @@ function CategoriesPage({ toast }: { toast: (m: string) => void }): JSX.Element 
           {blocVideo('niche')}
           <div className="cat-sub">Carrousels</div>
           <div className="cat-row">{nombre('carousel', 'slides', 'Nombre de diapos', 3, 10)}<div /></div>
+          {texte('carousel', 'style', 'Style visuel des diapos', 'ex. illustration vectorielle épurée, aplats de couleur, fond uni sombre')}
         </>
       )
     },

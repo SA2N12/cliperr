@@ -537,7 +537,10 @@ async function runVideoGen(
       musicTrack,
       // Style des images : priorité à l'appelant (univers de série), sinon celui
       // porté par l'idée (mode inspiration : style repris de la vidéo source).
-      imageStyle: opts.imageStyle ?? idea.imageStyle,
+      // Priorité : style explicite de l'appel → style de la CATÉGORIE → style
+      // déduit de la source à l'inspiration. Le réglage doit l'emporter sur une
+      // déduction automatique, sinon il ne servirait à rien en mode Inspiration.
+      imageStyle: opts.imageStyle ?? (cat.style || undefined) ?? idea.imageStyle,
       geminiKey: getEncrypted('gemini_key'),
       // Série : planche de personnages fournie. Reproduction : image réelle de la
       // source (bien plus fidèle qu'une description textuelle des personnages).
@@ -874,6 +877,8 @@ export type CategoryCfg = {
   clipCount?: number
   /** Clips : cadrage vertical ('center' | 'face'). */
   reframe?: string
+  /** Style visuel imposé aux images générées (vidéos et carrousels). */
+  style?: string
 }
 // Les catégories suivent ce que l'utilisateur PRODUIT, pas les types internes :
 // les niches (vidéos et carrousels), les clips de streamers, et la génération
@@ -1377,8 +1382,9 @@ async function runAutopilotTick(force = false): Promise<void> {
         deepinfraKey: getEncrypted('deepinfra_key'),
         niche: topic,
         cta: ctaMapForProfile(user).niche ?? '',
-        // Nombre de diapos : réglable par la catégorie « Niches » (défaut 6).
+        // Nombre de diapos et style visuel : catégorie « Niches ».
         slides: catCfg('carousel').slides,
+        style: catCfg('carousel').style,
         // Anti-répétition, comme pour les vidéos : sans l'historique du compte,
         // l'IA repropose ses sujets favoris (« La règle des 2 minutes » ×3).
         recentTitles: repo
@@ -2918,7 +2924,8 @@ app.get('/api/categories', (_req, res) => {
       speed: Number.isFinite(vitesse) && vitesse > 0 ? vitesse : 1.2,
       slides: 6,
       clipCount: 1,
-      reframe: repo.getSetting('reframe_focus') || 'center'
+      reframe: repo.getSetting('reframe_focus') || 'center',
+      style: ''
     }
   })
 })
@@ -2963,6 +2970,11 @@ app.post('/api/categories', (req, res) => {
     else delete cur.clipCount
   }
   setStr('reframe', ['center', 'face'])
+  if ('style' in c) {
+    const v = String(c.style ?? '').trim().slice(0, 600)
+    if (v) cur.style = v
+    else delete cur.style
+  }
   if (Object.keys(cur).length) all[cat] = cur
   else delete all[cat]
   repo.setSetting('category_settings', JSON.stringify(all))
