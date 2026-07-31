@@ -1936,6 +1936,23 @@ function Clips({ clips, sources, onRefresh, toast, scope }: { clips: ClipDTO[]; 
     }
   }
 
+  // Import d'une vidéo déjà montée. `null` = aucun envoi en cours ; le bouton
+  // reste bloqué pendant, sinon deux envois simultanés se disputeraient la barre.
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [upPct, setUpPct] = useState<number | null>(null)
+  const importer = async (f: File): Promise<void> => {
+    setUpPct(0)
+    try {
+      await api.uploadClip(f, {}, (r) => setUpPct(Math.round(r * 100)))
+      toast('Vidéo importée — elle est en stock')
+      await onRefresh()
+    } catch (e) {
+      toast('Erreur : ' + (e as Error).message)
+    } finally {
+      setUpPct(null)
+    }
+  }
+
   // Origine du clip (IA depuis une idée, ou découpe d'une vidéo source) — affichée
   // sur la vignette, ce qui remplace l'ancienne séparation en deux onglets.
   const aiIds = new Set(sources.filter((s) => (s.url ?? '').startsWith('idea:')).map((s) => s.id))
@@ -1955,7 +1972,29 @@ function Clips({ clips, sources, onRefresh, toast, scope }: { clips: ClipDTO[]; 
           <h1>Clips</h1>
           <p>Tes clips à valider et publier.</p>
         </div>
+        {/* Import direct : la vidéo est DÉJÀ montée, elle ne passe par aucun
+            découpage — contrairement à la page Clipage, qui reçoit une source à
+            tailler. Réservé à l'onglet « En stock » : importer depuis l'onglet
+            des vidéos publiées n'aurait pas de sens. */}
+        {tab === 'stock' && (
+          <>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="video/*"
+              style={{ display: 'none' }}
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) void importer(f); e.target.value = '' }}
+            />
+            <button className="btn primary" disabled={upPct !== null} onClick={() => fileRef.current?.click()}>
+              {upPct !== null ? `Envoi… ${upPct}%` : <><MIcon name="upload" size={16} /> Importer une vidéo</>}
+            </button>
+          </>
+        )}
       </div>
+
+      {upPct !== null && (
+        <div className="bar" style={{ marginBottom: 14 }}><div style={{ width: `${upPct}%`, transition: 'width .2s' }} /></div>
+      )}
 
       <div className="tabs" style={{ marginBottom: 16 }}>
         <button className={`tab ${tab === 'stock' ? 'on' : ''}`} onClick={() => setTab('stock')}>

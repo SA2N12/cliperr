@@ -1664,6 +1664,48 @@ app.post('/api/sources/upload', upload.single('file'), wrap((req, res) => {
 }))
 
 // Clips
+/**
+ * Verse une vidéo DÉJÀ MONTÉE dans « Clips → En stock ». Distinct de
+ * /api/sources/upload, qui dépose une source à DÉCOUPER : ici le fichier est le
+ * clip final, il ne doit traverser aucun pipeline.
+ * Le clip arrive publiable et non publié — comme un clip découpé, prêt pour un
+ * créneau « clip en stock » ou une publication manuelle.
+ */
+app.post('/api/clips/upload', upload.single('file'), wrap(async (req, res) => {
+  const f = (req as Request & { file?: Express.Multer.File }).file
+  if (!f) return res.status(400).json({ error: 'Fichier manquant' })
+  // Titre : celui saisi, sinon le nom du fichier sans extension ni horodatage.
+  const brut = String(req.body?.title ?? '').trim()
+  const titre = (brut || f.originalname.replace(/.[^.]+$/, '').replace(/[_-]+/g, ' ')).slice(0, 200)
+  const hashtags = String(req.body?.hashtags ?? '').trim().slice(0, 400)
+  const description = String(req.body?.description ?? '').trim().slice(0, 1000)
+  const profile = String(req.body?.profile ?? '').trim() || activeProfile()
+  // Durée réelle : sans elle le clip s'afficherait « 0s » et les estimations de
+  // coût comme les aperçus seraient faux.
+  let durationSec = 0
+  try {
+    durationSec = await probeDuration(await getContext(), f.path)
+  } catch {
+    /* ffprobe indisponible → 0, le fichier reste lisible */
+  }
+  const source = repo.createSource(f.path)
+  repo.updateSource(source.id, { status: 'done', title: titre, durationSec, filePath: f.path })
+  const clip = repo.createClip({
+    sourceId: source.id,
+    startSec: 0,
+    endSec: durationSec,
+    filePath: f.path,
+    title: titre,
+    description,
+    hashtags,
+    reason: 'Importé depuis l’ordinateur',
+    profile
+  })
+  // Approuvé d'office : l'utilisateur a choisi ce fichier, il n'y a pas de
+  // sélection automatique à valider.
+  repo.setClipReview(clip.id, 'approved')
+  res.json({ ok: true, clip: repo.listClips(source.id)[0] ?? null })
+}))
 app.get('/api/clips', wrap((req, res) => {
   const sid = req.query.sourceId ? Number(req.query.sourceId) : undefined
   res.json(repo.listClips(sid))

@@ -67,6 +67,27 @@ export const api = {
       xhr.onerror = () => reject(new Error('Upload échoué'))
       xhr.send(fd)
     }),
+  /** Verse une video DEJA MONTEE dans « Clips → En stock » (sans decoupage). */
+  uploadClip: (file: File, meta: { title?: string }, onProgress?: (ratio: number) => void) =>
+    new Promise<{ ok: boolean }>((resolve, reject) => {
+      const fd = new FormData()
+      fd.append('file', file)
+      if (meta.title) fd.append('title', meta.title)
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', '/api/clips/upload')
+      xhr.withCredentials = true
+      xhr.upload.onprogress = (e) => e.lengthComputable && onProgress?.(e.loaded / e.total)
+      xhr.onload = () => {
+        try {
+          const j = JSON.parse(xhr.responseText || '{}')
+          xhr.status >= 200 && xhr.status < 300 ? resolve(j) : reject(new Error(j?.error || `HTTP ${xhr.status}`))
+        } catch (e) {
+          reject(e)
+        }
+      }
+      xhr.onerror = () => reject(new Error('Envoi échoué'))
+      xhr.send(fd)
+    }),
   listClips: (sourceId?: number) =>
     req<ClipDTO[]>(`/api/clips${sourceId ? `?sourceId=${sourceId}` : ''}`),
   reviewClip: (id: number, status: ClipDTO['reviewStatus']) => post(`/api/clips/${id}/review`, { status }),
