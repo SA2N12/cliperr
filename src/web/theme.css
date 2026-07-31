@@ -3974,8 +3974,10 @@ input[type='checkbox'] {
    verte, et le coût dans une pastille teintée plutôt que grise. */
 .ap-slot {
   width: 186px;
-  padding: 11px 12px;
-  gap: 7px;
+  /* Marge laterale genereuse conservee, espacement vertical resserre : c est
+     lui qui coutait le plus, multiplie par cinq lignes de comptes. */
+  padding: 10px 12px;
+  gap: 5px;
 }
 .ap-slot-h {
   font-size: 15px;
