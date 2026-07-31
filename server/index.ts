@@ -373,6 +373,69 @@ function reloadScheduler(): void {
   }
 }
 
+/** Titre, accroche et hashtags d'une vidéo générée en ANGLAIS.
+ *  L'idée a été écrite en français à sa création ; la langue, elle, se choisit
+ *  au moment de la génération. Sans cette étape, une vidéo anglaise partait avec
+ *  une légende et des hashtags français — incohérent pour l'audience visée, et
+ *  pénalisant pour la portée : TikTok se sert de la langue de la légende.
+ *  Les hashtags sont ADAPTÉS et non traduits mot à mot (#mardisoir n'a pas
+ *  d'équivalent littéral utile en anglais). */
+async function translateMeta(
+  key: string,
+  model: string,
+  meta: { title: string; hook: string; hashtags: string[] }
+): Promise<{ title: string; hook: string; hashtags: string[] } | null> {
+  try {
+    const client = new Anthropic({ apiKey: key, maxRetries: 3 })
+    const r = await client.messages.create({
+      model,
+      max_tokens: 700,
+      tools: [
+        {
+          name: 'traduction',
+          description: 'Version anglaise des métadonnées TikTok.',
+          input_schema: {
+            type: 'object',
+            properties: {
+              title: { type: 'string', description: 'Titre en anglais naturel, même accroche, même longueur environ.' },
+              hook: { type: 'string', description: 'Accroche en anglais, ton identique, pensée pour retenir dès la 1re seconde.' },
+              hashtags: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'Hashtags ANGLOPHONES équivalents (adaptés à la culture, pas traduits littéralement), avec le #, même nombre.'
+              }
+            },
+            required: ['title', 'hook', 'hashtags']
+          }
+        }
+      ],
+      tool_choice: { type: 'tool', name: 'traduction' },
+      messages: [
+        {
+          role: 'user',
+          content: `Adapte ces métadonnées TikTok du français vers l'ANGLAIS, pour une audience anglophone.
+
+Titre : ${meta.title}
+Accroche : ${meta.hook}
+Hashtags : ${meta.hashtags.join(' ')}
+
+Garde le ton et l'impact. N'invente pas de contenu nouveau.`
+        }
+      ]
+    })
+    const use = r.content.find((c) => c.type === 'tool_use')
+    if (!use || use.type !== 'tool_use') return null
+    const o = use.input as { title?: string; hook?: string; hashtags?: unknown }
+    const tags = Array.isArray(o.hashtags) ? o.hashtags.map(String).filter(Boolean) : []
+    if (!o.title?.trim() || !o.hook?.trim()) return null
+    return { title: o.title.trim(), hook: o.hook.trim(), hashtags: tags.length ? tags : meta.hashtags }
+  } catch {
+    // Traduction indisponible : on garde le français plutôt que d'échouer la
+    // génération — la vidéo elle-même est déjà produite à ce stade.
+    return null
+  }
+}
+
 // ── Génération de vidéo « faceless » depuis une idée (une à la fois) ──
 let videoChain: Promise<void> = Promise.resolve()
 async function runVideoGen(
@@ -530,16 +593,25 @@ async function runVideoGen(
       onProgress: (m) => emitIdeaVideo({ ideaId, status: 'running', message: m })
     })
     if (usage) addSpend(model, usage)
+    // Vidéo en anglais : la légende doit l'être aussi. L'idée a été écrite en
+    // français, la langue ne se décide qu'ici.
+    let meta = { title: idea.title, hook: idea.hook, hashtags: idea.hashtags }
+    if (genLang === 'en' && anthropicKey) {
+      emitIdeaVideo({ ideaId, status: 'running', message: 'Adaptation du titre et des hashtags en anglais…' })
+      const en = await translateMeta(anthropicKey, model, meta)
+      if (en) meta = en
+      else emitLog('Génération IA : traduction des métadonnées indisponible — titre et hashtags restent en français.')
+    }
     const source = repo.createSource(`idea:${ideaId}`)
-    repo.updateSource(source.id, { status: 'done', title: idea.title, durationSec, filePath })
+    repo.updateSource(source.id, { status: 'done', title: meta.title, durationSec, filePath })
     const clip = repo.createClip({
       sourceId: source.id,
       startSec: 0,
       endSec: durationSec,
       filePath,
-      title: idea.title,
-      description: idea.hook,
-      hashtags: idea.hashtags.join(' '),
+      title: meta.title,
+      description: meta.hook,
+      hashtags: meta.hashtags.join(' '),
       reason: 'Vidéo générée depuis une idée',
       profile: targetProfile
     })
