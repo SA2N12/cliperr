@@ -4309,3 +4309,31 @@ input[type='checkbox'] {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+
+/* ── Vignettes compactes : 12 clips + pagination sans défilement ─────────────
+   L'aperçu perd son format 9:16. L'arithmétique ne laissait pas le choix : deux
+   rangées dans la hauteur disponible imposent ~242 px par carte, dont ~150 pour
+   l'aperçu — impossible de tenir un portrait à 227 px de large. Le `object-fit:
+   cover` déjà en place recadre au centre, là où se trouve le sujet.
+   Le titre reste sur deux lignes : c'est lui qui permet de reconnaître un clip,
+   le réduire à une ligne aurait fait perdre plus que la place gagnée. */
+.clip-media {
+  aspect-ratio: auto;
+  height: 148px;
+}
+.clip-body {
+  padding: 8px 10px 0;
+}
+.clip-title {
+  font-size: 13px;
+}
+.clip-pub {
+  padding: 7px 10px 9px;
+}
+.clip-grid {
+  gap: 12px;
+}
+.clip-pages {
+  margin-top: 12px;
+  padding-top: 10px;
+}
