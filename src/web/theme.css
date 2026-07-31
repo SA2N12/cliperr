@@ -4182,3 +4182,16 @@ input[type='checkbox'] {
     grid-template-columns: 1fr;
   }
 }
+/* Production directe depuis une fiche : langue, qualité, bouton. */
+.nic-gen {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.nic-gen .btn {
+  grid-column: 1 / -1;
+  justify-content: center;
+}

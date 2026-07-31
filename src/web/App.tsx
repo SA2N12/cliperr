@@ -3593,6 +3593,10 @@ function NichesPage({ toast }: { toast: (m: string) => void }): JSX.Element {
   const [busy, setBusy] = useState('')
   /** Brouillons locaux : on n'écrit au serveur qu'à l'enregistrement explicite. */
   const [draft, setDraft] = useState<Record<string, { name: string; brief: string; tags: string }>>({})
+  // Langue et qualite par fiche : deux niches n ont pas les memes besoins, et
+  // le choix ne doit pas survivre d une fiche a l autre.
+  const [lang, setLang] = useState<Record<string, string>>({})
+  const [qual, setQual] = useState<Record<string, string>>({})
 
   const charger = useCallback((): void => {
     api.niches().then((r) => {
@@ -3643,6 +3647,21 @@ function NichesPage({ toast }: { toast: (m: string) => void }): JSX.Element {
       await api.deleteNiche(id)
       toast('Niche supprimée')
       charger()
+    } catch (e) {
+      toast('Erreur : ' + (e as Error).message)
+    } finally { setBusy('') }
+  }
+  /** Lance une vidéo depuis la fiche. L'idée intermédiaire est écrite côté
+   *  serveur : la page n'a pas à connaître son identifiant pour obtenir une
+   *  vidéo. Le suivi passe par le widget de génération, comme partout ailleurs. */
+  const produire = async (id: string): Promise<void> => {
+    setBusy(id)
+    try {
+      const r = await api.nicheVideo(id, {
+        lang: (lang[id] as 'fr' | 'en') ?? 'fr',
+        quality: qual[id] || undefined
+      })
+      toast(`Vidéo lancée — « ${String(r.title).slice(0, 46)} »`)
     } catch (e) {
       toast('Erreur : ' + (e as Error).message)
     } finally { setBusy('') }
@@ -3702,6 +3721,26 @@ function NichesPage({ toast }: { toast: (m: string) => void }): JSX.Element {
                 placeholder="#histoirevraie #science"
                 onChange={(e) => champ(n.id, 'tags', e.target.value)}
               />
+              {/* Production directe : une vidéo écrite depuis CE brief, qui arrive
+                  dans « Clips → En stock » sans être publiée — comme une vidéo
+                  lancée depuis Génération IA ou un clip découpé. Langue et
+                  qualité se choisissent ici, jamais implicitement : la qualité,
+                  c'est de l'argent. */}
+              <div className="nic-gen">
+                <select className="input-full" value={lang[n.id] ?? 'fr'} onChange={(e) => setLang((l) => ({ ...l, [n.id]: e.target.value }))}>
+                  <option value="fr">Français</option>
+                  <option value="en">Anglais</option>
+                </select>
+                <select className="input-full" value={qual[n.id] ?? ''} onChange={(e) => setQual((q) => ({ ...q, [n.id]: e.target.value }))}>
+                  <option value="">⚡ Économique</option>
+                  <option value="wan">🎯 Wan 2.7 — ~0,50 $/scène</option>
+                  <option value="seedance">✨ Seedance 2.0 — ~0,84 $/scène</option>
+                  <option value="veo">💎 Veo payant — ~1,20 $/scène</option>
+                </select>
+                <button className="btn green" disabled={busy === n.id} onClick={() => void produire(n.id)}>
+                  {busy === n.id ? 'Lancement…' : <><Icon name="spark" size={14} /> Générer une vidéo</>}
+                </button>
+              </div>
               <div className="nic-foot">
                 <span className="nic-used">
                   {used.length === 0

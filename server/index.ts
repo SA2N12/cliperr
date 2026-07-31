@@ -2890,6 +2890,35 @@ app.delete('/api/niches/:id', (req, res) => {
   if (touche) repo.setSetting('niche_assign', JSON.stringify(assign))
   res.json({ ok: true })
 })
+/**
+ * Produit UNE vidéo à partir d'une niche : écrit une idée depuis son brief, puis
+ * enchaîne la génération. Le résultat arrive dans « Clips → En stock », non
+ * publié — comme une vidéo lancée depuis Génération IA ou un clip découpé.
+ * L'enchaînement est fait ICI et non côté client : ce dernier n'a pas à
+ * connaître l'identifiant de l'idée intermédiaire pour obtenir une vidéo.
+ */
+app.post('/api/niches/:id/video', wrap(async (req, res) => {
+  const apiKey = getApiKey()
+  if (!apiKey) return res.status(400).json({ error: 'Configure d’abord ta clé API Claude dans les Réglages.' })
+  if (!getEncrypted('openai_key')) return res.status(400).json({ error: 'Configure ta clé OpenAI dans les Réglages.' })
+  const fiche = nicheLibrary()[String(req.params.id)]
+  if (!fiche) return res.status(404).json({ error: 'Niche inconnue' })
+  const sujet = (fiche.brief || '').trim() || fiche.name
+  const model = scriptModel()
+  const { ideas, usage } = await generateViralIdeas({ apiKey, model, niche: sujet, count: 1, trends: await getTrendsCached() })
+  if (usage) addSpend(model, usage)
+  if (!ideas.length) return res.status(502).json({ error: 'Aucune idée générée — réessaie.' })
+  const saved = repo.createIdea(sujet, ideas[0])
+  const lang = req.body?.lang === 'en' ? 'en' as const : undefined
+  const q = req.body?.quality
+  const quality = q === 'wan' || q === 'seedance' || q === 'veo' ? q : undefined
+  // videoType 'niche' : la vidéo suit les réglages de la catégorie Niches
+  // (moteur, scènes, style visuel) — c'est bien une vidéo de niche.
+  videoChain = videoChain
+    .then(() => runVideoGen(saved.id, { lang, quality, videoType: 'niche' }))
+    .then(() => undefined, () => undefined)
+  res.json({ ok: true, ideaId: saved.id, title: saved.title })
+}))
 app.post('/api/niches/assign', (req, res) => {
   const b = (req.body ?? {}) as { user?: unknown; nicheId?: unknown }
   const user = String(b.user ?? '').trim()
