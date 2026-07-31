@@ -3827,10 +3827,6 @@ function NichesPage({ toast }: { toast: (m: string) => void }): JSX.Element {
       <div className="page-head">
         <div>
           <h1>Niches</h1>
-          <div className="muted small">
-            Des fiches réutilisables — sujet, angle et hashtags — qu’on assigne aux comptes.
-            Un compte sans fiche garde la niche saisie dans ses réglages.
-          </div>
         </div>
         <button className="btn primary" disabled={busy === 'new'} onClick={() => void creer()}>
           {busy === 'new' ? 'Création…' : '+ Nouvelle niche'}
