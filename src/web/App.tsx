@@ -3651,6 +3651,16 @@ function NichesPage({ toast }: { toast: (m: string) => void }): JSX.Element {
       toast('Erreur : ' + (e as Error).message)
     } finally { setBusy('') }
   }
+  const importer = async (): Promise<void> => {
+    setBusy('import')
+    try {
+      const r = await api.importNiches()
+      toast(r.crees ? `${r.crees} niche${r.crees > 1 ? 's' : ''} importée${r.crees > 1 ? 's' : ''}` : 'Rien à importer')
+      charger()
+    } catch (e) {
+      toast('Erreur : ' + (e as Error).message)
+    } finally { setBusy('') }
+  }
   /** Lance une vidéo depuis la fiche. L'idée intermédiaire est écrite côté
    *  serveur : la page n'a pas à connaître son identifiant pour obtenir une
    *  vidéo. Le suivi passe par le widget de génération, comme partout ailleurs. */
@@ -3693,6 +3703,32 @@ function NichesPage({ toast }: { toast: (m: string) => void }): JSX.Element {
           {busy === 'new' ? 'Création…' : '+ Nouvelle niche'}
         </button>
       </div>
+
+      {/* Bibliothèque vide : sans cet écran, la page n'affiche que la carte
+          « Comptes » et rien n'indique qu'il faut d'abord créer une fiche pour
+          pouvoir produire une vidéo. */}
+      {niches.length === 0 && (
+        <div className="card nic-empty">
+          <div className="cat-title">Aucune niche pour l’instant</div>
+          <p className="muted small">
+            Une niche est une fiche réutilisable — sujet, angle, hashtags. Une fois créée, elle
+            permet de <b>générer une vidéo</b> qui arrive dans « Clips&nbsp;→&nbsp;En stock », et
+            de s’assigner à un ou plusieurs comptes.
+          </p>
+          <div className="nic-empty-a">
+            <button className="btn primary" disabled={busy === 'new'} onClick={() => void creer()}>
+              {busy === 'new' ? 'Création…' : 'Créer ma première niche'}
+            </button>
+            <button className="btn" disabled={busy === 'import'} onClick={() => void importer()}>
+              {busy === 'import' ? 'Import…' : 'Importer celles de mes comptes'}
+            </button>
+          </div>
+          <div className="muted small nic-empty-h">
+            L’import reprend les niches déjà saisies sur tes {comptes.length} comptes et les
+            regroupe : deux comptes sur le même sujet partagent une seule fiche.
+          </div>
+        </div>
+      )}
 
       <div className="nic-grid">
         {niches.map((n) => {

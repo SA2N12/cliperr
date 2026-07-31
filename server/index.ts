@@ -2891,6 +2891,44 @@ app.delete('/api/niches/:id', (req, res) => {
   res.json({ ok: true })
 })
 /**
+ * Reprend les niches déjà saisies sur les comptes et en fait des fiches, puis
+ * assigne chaque compte à la sienne. Sans ça, la bibliothèque démarre vide alors
+ * que cinq niches bien écrites existent déjà — et rien n'indique qu'il faut
+ * d'abord créer une fiche pour pouvoir produire.
+ * Les textes identiques sont REGROUPÉS : deux comptes sur la même niche
+ * partagent une seule fiche, c'est tout l'intérêt de la bibliothèque.
+ */
+app.post('/api/niches/import', (_req, res) => {
+  const lib = nicheLibrary()
+  const assign = nicheAssign()
+  const parTexte = new Map<string, string>()
+  for (const n of Object.values(lib)) parTexte.set((n.brief || n.name).trim().toLowerCase(), n.id)
+  let crees = 0
+  let assignes = 0
+  for (const user of uploadPostProfiles()) {
+    if (assign[user] && lib[assign[user]]) continue // déjà rattaché à une fiche
+    const texte = nicheForProfile(user).trim()
+    if (!texte) continue
+    const cle = texte.toLowerCase()
+    let id = parTexte.get(cle)
+    if (!id) {
+      id = `n${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`
+      // Nom court tiré du début du texte : le brief entier ferait un titre illisible.
+      // On coupe sur un séparateur pour ne pas trancher au milieu d'un mot.
+      const nom = texte.length > 42 ? texte.slice(0, 42).replace(/[\s,;:—-]+\S*$/, '') + '…' : texte
+      lib[id] = { id, name: nom, brief: texte, hashtags: [], createdAt: Date.now() + crees }
+      parTexte.set(cle, id)
+      crees++
+    }
+    assign[user] = id
+    assignes++
+  }
+  repo.setSetting('niche_library', JSON.stringify(lib))
+  repo.setSetting('niche_assign', JSON.stringify(assign))
+  res.json({ ok: true, crees, assignes })
+})
+
+/**
  * Produit UNE vidéo à partir d'une niche : écrit une idée depuis son brief, puis
  * enchaîne la génération. Le résultat arrive dans « Clips → En stock », non
  * publié — comme une vidéo lancée depuis Génération IA ou un clip découpé.

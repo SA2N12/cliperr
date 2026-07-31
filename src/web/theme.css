@@ -4195,3 +4195,25 @@ input[type='checkbox'] {
   grid-column: 1 / -1;
   justify-content: center;
 }
+/* État vide de la page Niches : il porte l'explication ET les deux chemins
+   possibles, plutôt que de laisser un bouton isolé en haut à droite. */
+.nic-empty {
+  margin-bottom: 14px;
+  animation: rise 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
+}
+.nic-empty p {
+  margin: 6px 0 0;
+  max-width: 62ch;
+  line-height: 1.5;
+}
+.nic-empty-a {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+.nic-empty-h {
+  margin-top: 10px;
+  max-width: 62ch;
+  line-height: 1.4;
+}

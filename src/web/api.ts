@@ -148,6 +148,8 @@ export const api = {
     post<{ ok: boolean; niche: { id: string; name: string; brief: string; hashtags?: string[]; createdAt: number } }>('/api/niches', n),
   deleteNiche: (id: string) => req<{ ok: boolean }>(`/api/niches/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   assignNiche: (user: string, nicheId: string) => post<{ ok: boolean; effective: string }>('/api/niches/assign', { user, nicheId }),
+  // Reprend les niches deja saisies sur les comptes et en fait des fiches.
+  importNiches: () => post<{ ok: boolean; crees: number; assignes: number }>('/api/niches/import'),
   // Genere une video depuis une niche : idee + video enchainees cote serveur.
   nicheVideo: (id: string, opts?: { lang?: 'fr' | 'en'; quality?: string }) =>
     post<{ ok: boolean; ideaId: number; title: string }>(`/api/niches/${encodeURIComponent(id)}/video`, opts ?? {}),
