@@ -4498,14 +4498,10 @@ function CategoriesPage({ toast }: { toast: (m: string) => void }): JSX.Element 
   // ── Grille de choix ───────────────────────────────────────────────────────
   return (
     <>
+      {/* Sans sous-titre : les tuiles disent déjà ce que fait chaque catégorie
+          et ce qu'elle applique. */}
       <div className="page-head">
-        <div>
-          <h1>Catégories</h1>
-          <div className="muted small">
-            Ce qui distingue chaque type de production, quel que soit le compte qui la publie.
-            Ouvre une catégorie pour la régler — chaque champ non personnalisé suit le réglage global.
-          </div>
-        </div>
+        <div><h1>Catégories</h1></div>
       </div>
       <div className="cat-grid">
         {/* La teinte de la catégorie passe par une variable locale `--cat` : la
