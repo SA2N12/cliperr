@@ -4023,3 +4023,12 @@ input[type='checkbox'] {
   gap: 16px;
   min-width: 0;
 }
+
+/* Pastilles de la barre du planning : angles droits, comme tout le reste.
+   Portée à `.pill-badge` et `.ap-pill` seulement — plusieurs autres éléments
+   du fichier restent en `border-radius: 999px` (interrupteurs, pastilles de
+   comptage ailleurs) et n'ont pas été demandés. */
+.pill-badge,
+.ap-pill {
+  border-radius: 0;
+}
