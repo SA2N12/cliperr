@@ -141,6 +141,13 @@ export const api = {
     req<{ categories: string[]; settings: Record<string, Record<string, string | number>>; globals: Record<string, string | number> }>('/api/categories'),
   saveCategory: (category: string, cfg: Record<string, string | number | null>) =>
     post<{ ok: boolean; settings: Record<string, Record<string, string | number>> }>('/api/categories', { category, cfg }),
+  // Bibliotheque de niches : fiches reutilisables assignees aux comptes.
+  niches: () =>
+    req<{ niches: { id: string; name: string; brief: string; hashtags?: string[]; createdAt: number }[]; comptes: { user: string; nicheId: string | null; libre: string; effective: string }[] }>('/api/niches'),
+  saveNiche: (n: { id?: string; name: string; brief: string; hashtags?: string[] }) =>
+    post<{ ok: boolean; niche: { id: string; name: string; brief: string; hashtags?: string[]; createdAt: number } }>('/api/niches', n),
+  deleteNiche: (id: string) => req<{ ok: boolean }>(`/api/niches/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  assignNiche: (user: string, nicheId: string) => post<{ ok: boolean; effective: string }>('/api/niches/assign', { user, nicheId }),
   saveAccountOrder: (order: string[]) => post<{ ok: boolean }>('/api/autopilot/order', { order }),
   autopilotPlan: (day?: number) =>
     req<{

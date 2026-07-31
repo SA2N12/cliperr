@@ -4077,3 +4077,108 @@ input[type='checkbox'] {
   padding: 8px 12px;
   gap: 4px;
 }
+
+/* ── Page « Niches » ────────────────────────────────────────────────────────
+   Une carte par fiche, plus une carte d'assignation. Même grille que la page
+   Catégories : les deux pages se répondent, elles règlent le même genre de
+   chose à deux niveaux. */
+.nic-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 14px;
+  align-items: stretch;
+}
+.nic-card {
+  display: flex;
+  flex-direction: column;
+  padding: 16px 18px 14px;
+  animation: rise 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
+}
+.nic-card:nth-child(2) {
+  animation-delay: 60ms;
+}
+.nic-card:nth-child(3) {
+  animation-delay: 120ms;
+}
+.nic-card:nth-child(n + 4) {
+  animation-delay: 180ms;
+}
+/* Le nom se saisit sans décor : c'est un titre qu'on modifie, pas un formulaire.
+   La bordure n'apparaît qu'au survol et au focus. */
+.nic-name {
+  font-size: 15px;
+  font-weight: 600;
+  padding: 4px 6px;
+  margin: -4px -6px 2px;
+  border-color: transparent;
+  background: transparent;
+}
+.nic-name:hover {
+  border-color: var(--border);
+}
+.nic-lbl {
+  display: block;
+  margin-top: 12px;
+  margin-bottom: 4px;
+}
+.nic-brief {
+  resize: vertical;
+  min-height: 96px;
+  line-height: 1.45;
+}
+.nic-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+/* Les comptes qui utilisent la fiche occupent la place libre → les boutons
+   restent à droite. */
+.nic-used {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 11.5px;
+  color: var(--muted-2);
+}
+.nic-chip {
+  padding: 1px 7px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.nic-assign .nic-row {
+  display: grid;
+  grid-template-columns: 1fr 168px;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-top: 1px solid var(--border);
+}
+.nic-row-u {
+  min-width: 0;
+}
+.nic-row-n {
+  font-size: 13px;
+  font-weight: 500;
+}
+/* La niche EFFECTIVE, tronquée : elle peut être longue, et c'est la seule façon
+   de voir ce qui tourne réellement sur un compte resté en texte libre. */
+.nic-row-e {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 768px) {
+  .nic-grid {
+    grid-template-columns: 1fr;
+  }
+  .nic-assign .nic-row {
+    grid-template-columns: 1fr;
+  }
+}

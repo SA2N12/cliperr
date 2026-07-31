@@ -693,8 +693,54 @@ function autopilotNiches(): Record<string, string> {
   }
   return {}
 }
-/** Niche configurée pour un compte, avec repli sur une niche par défaut (assignée par ordre). */
+// ── Bibliothèque de niches ─────────────────────────────────────────────────
+// La niche était un texte libre par compte, réécrit à chaque fois qu'on voulait
+// l'ajuster et impossible à réutiliser d'un compte à l'autre. Elle devient une
+// FICHE nommée, réutilisable, qu'on assigne aux comptes.
+// Le texte libre reste pris en charge : un compte sans fiche assignée continue
+// de fonctionner exactement comme avant.
+export type Niche = {
+  id: string
+  /** Nom court, pour la reconnaître dans les listes. */
+  name: string
+  /** Ce qui est réellement transmis à l'IA : sujet, angle, ton. */
+  brief: string
+  /** Hashtags de base, ajoutés à ceux que l'IA propose. */
+  hashtags?: string[]
+  createdAt: number
+}
+function nicheLibrary(): Record<string, Niche> {
+  try {
+    const o = JSON.parse(repo.getSetting('niche_library') || '{}') as Record<string, Niche>
+    return o && typeof o === 'object' ? o : {}
+  } catch {
+    return {}
+  }
+}
+/** Fiche assignée à chaque compte : { [username]: nicheId }. */
+function nicheAssign(): Record<string, string> {
+  try {
+    const o = JSON.parse(repo.getSetting('niche_assign') || '{}') as Record<string, string>
+    return o && typeof o === 'object' ? o : {}
+  } catch {
+    return {}
+  }
+}
+/** Fiche d'un compte, si une lui est assignée ET qu'elle existe encore. */
+function nicheOf(user: string): Niche | null {
+  const id = nicheAssign()[user]
+  if (!id) return null
+  return nicheLibrary()[id] ?? null
+}
+/** Niche configurée pour un compte. Priorité : fiche assignée → texte libre →
+ *  niche par défaut (attribuée par ordre). */
 function nicheForProfile(user: string): string {
+  const fiche = nicheOf(user)
+  if (fiche) {
+    // Le brief porte le sens ; le nom seul serait trop maigre pour un prompt.
+    const b = (fiche.brief || '').trim()
+    return b || fiche.name
+  }
   const map = autopilotNiches()
   const explicit = (map[user] || '').trim()
   if (explicit) return explicit
@@ -2791,6 +2837,67 @@ app.post('/api/autopilot/run-now', wrap((_req, res) => {
 }))
 // Planning du jour : vidéos DÉJÀ publiées (heure réelle) + À VENIR, aux heures
 // FIXES du planning (dailySchedule) — la même source que le pilote.
+// ── Bibliothèque de niches ─────────────────────────────────────────────────
+app.get('/api/niches', (_req, res) => {
+  const lib = nicheLibrary()
+  const assign = nicheAssign()
+  // On renvoie AUSSI les comptes et leur niche effective : la page doit pouvoir
+  // montrer qui utilise quoi, y compris les comptes encore en texte libre.
+  const comptes = uploadPostProfiles().map((u) => ({
+    user: u,
+    nicheId: assign[u] && lib[assign[u]] ? assign[u] : null,
+    libre: (autopilotNiches()[u] || '').trim(),
+    effective: nicheForProfile(u)
+  }))
+  res.json({ niches: Object.values(lib).sort((a, b) => a.createdAt - b.createdAt), comptes })
+})
+app.post('/api/niches', (req, res) => {
+  const b = (req.body ?? {}) as { id?: unknown; name?: unknown; brief?: unknown; hashtags?: unknown }
+  const name = String(b.name ?? '').trim().slice(0, 80)
+  if (!name) return res.status(400).json({ error: 'Donne un nom à la niche' })
+  const lib = nicheLibrary()
+  const id = String(b.id ?? '').trim() || `n${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`
+  const tags = Array.isArray(b.hashtags)
+    ? b.hashtags.map((t) => String(t).trim()).filter(Boolean).map((t) => (t.startsWith('#') ? t : '#' + t)).slice(0, 15)
+    : lib[id]?.hashtags ?? []
+  lib[id] = {
+    id,
+    name,
+    brief: String(b.brief ?? '').trim().slice(0, 1200),
+    hashtags: tags,
+    createdAt: lib[id]?.createdAt ?? Date.now()
+  }
+  repo.setSetting('niche_library', JSON.stringify(lib))
+  res.json({ ok: true, niche: lib[id] })
+})
+app.delete('/api/niches/:id', (req, res) => {
+  const id = String(req.params.id)
+  const lib = nicheLibrary()
+  if (!lib[id]) return res.status(404).json({ error: 'Niche inconnue' })
+  delete lib[id]
+  repo.setSetting('niche_library', JSON.stringify(lib))
+  // Les comptes qui l'utilisaient retombent sur leur texte libre : on nettoie
+  // l'assignation plutôt que de laisser un identifiant mort.
+  const assign = nicheAssign()
+  let touche = false
+  for (const [u, v] of Object.entries(assign)) if (v === id) { delete assign[u]; touche = true }
+  if (touche) repo.setSetting('niche_assign', JSON.stringify(assign))
+  res.json({ ok: true })
+})
+app.post('/api/niches/assign', (req, res) => {
+  const b = (req.body ?? {}) as { user?: unknown; nicheId?: unknown }
+  const user = String(b.user ?? '').trim()
+  if (!user || !uploadPostProfiles().includes(user)) return res.status(400).json({ error: 'Compte inconnu' })
+  const id = String(b.nicheId ?? '').trim()
+  const assign = nicheAssign()
+  // Chaîne vide = « revenir au texte libre du compte ».
+  if (!id) delete assign[user]
+  else if (nicheLibrary()[id]) assign[user] = id
+  else return res.status(400).json({ error: 'Niche inconnue' })
+  repo.setSetting('niche_assign', JSON.stringify(assign))
+  res.json({ ok: true, effective: nicheForProfile(user) })
+})
+
 // ── Réglages par catégorie de vidéo ────────────────────────────────────────
 app.get('/api/categories', (_req, res) => {
   // On renvoie AUSSI les valeurs globales effectives : sans elles, « Réglage

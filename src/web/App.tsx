@@ -10,7 +10,7 @@ import {
   type SavedIdea
 } from './api'
 
-type Page = 'dashboard' | 'autopilot' | 'categories' | 'analyse' | 'clipping' | 'genai' | 'ideas' | 'history' | 'clips' | 'providers' | 'settings'
+type Page = 'dashboard' | 'autopilot' | 'categories' | 'niches' | 'analyse' | 'clipping' | 'genai' | 'ideas' | 'history' | 'clips' | 'providers' | 'settings'
 
 const ICONS: Record<string, string> = {
   dashboard: 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z',
@@ -449,7 +449,8 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
       // Visible quel que soit le compte choisi : la vue filtre alors le planning
       // sur ce compte (l'interrupteur, lui, reste global).
       { id: 'autopilot', label: 'Pilote auto', icon: 'bolt' },
-      { id: 'categories', label: 'Catégories', icon: 'tag' }
+      { id: 'categories', label: 'Catégories', icon: 'tag' },
+      { id: 'niches', label: 'Niches', icon: 'bulb' }
     ],
     [
       { id: 'clipping', label: 'Clipage', icon: 'scissors' },
@@ -558,6 +559,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
         {page === 'dashboard' && <Dashboard scope={scope} />}
         {page === 'autopilot' && <Autopilot toast={showToast} ideaVideo={ideaVideo} scope={scope} />}
         {page === 'categories' && <CategoriesPage toast={showToast} />}
+        {page === 'niches' && <NichesPage toast={showToast} />}
         {page === 'clipping' && <Clipage sources={sources} clips={clips} progress={progress} onRefresh={refresh} toast={showToast} />}
         {page === 'genai' && <GenAI toast={showToast} />}
         {page === 'history' && <History sources={sources} clips={clips} progress={progress} onRefresh={refresh} toast={showToast} goClips={() => setPage('clips')} />}
@@ -3572,6 +3574,174 @@ function Providers({ go }: { go: (p: Page) => void }): JSX.Element {
         })}
       </div>
     </div>
+  )
+}
+
+// ── Page « Niches » ────────────────────────────────────────────────────────
+// La niche était un texte libre par compte : réécrit à chaque ajustement,
+// impossible à réutiliser ailleurs, et invisible sans ouvrir le volet du compte.
+// Elle devient une FICHE nommée qu'on assigne. Un compte sans fiche continue de
+// tourner sur son texte libre — rien ne casse.
+type NicheT = { id: string; name: string; brief: string; hashtags?: string[]; createdAt: number }
+type CompteT = { user: string; nicheId: string | null; libre: string; effective: string }
+
+function NichesPage({ toast }: { toast: (m: string) => void }): JSX.Element {
+  const [niches, setNiches] = useState<NicheT[]>([])
+  const [comptes, setComptes] = useState<CompteT[]>([])
+  const [busy, setBusy] = useState('')
+  /** Brouillons locaux : on n'écrit au serveur qu'à l'enregistrement explicite. */
+  const [draft, setDraft] = useState<Record<string, { name: string; brief: string; tags: string }>>({})
+
+  const charger = useCallback((): void => {
+    api.niches().then((r) => {
+      setNiches(r.niches ?? [])
+      setComptes(r.comptes ?? [])
+      const d: Record<string, { name: string; brief: string; tags: string }> = {}
+      for (const n of r.niches ?? []) d[n.id] = { name: n.name, brief: n.brief, tags: (n.hashtags ?? []).join(' ') }
+      setDraft(d)
+    }).catch(() => undefined)
+  }, [])
+  useEffect(() => { charger() }, [charger])
+
+  const champ = (id: string, k: 'name' | 'brief' | 'tags', v: string): void =>
+    setDraft((d) => ({ ...d, [id]: { ...(d[id] ?? { name: '', brief: '', tags: '' }), [k]: v } }))
+
+  const creer = async (): Promise<void> => {
+    setBusy('new')
+    try {
+      const r = await api.saveNiche({ name: 'Nouvelle niche', brief: '' })
+      toast('Niche créée')
+      charger()
+      // Focus implicite : la nouvelle carte apparaît en fin de liste, prête à
+      // être renommée — inutile de la faire remonter, l'ordre reste stable.
+      void r
+    } catch (e) {
+      toast('Erreur : ' + (e as Error).message)
+    } finally { setBusy('') }
+  }
+  const enregistrer = async (id: string): Promise<void> => {
+    const d = draft[id]
+    if (!d?.name.trim()) { toast('Donne un nom à la niche'); return }
+    setBusy(id)
+    try {
+      await api.saveNiche({ id, name: d.name, brief: d.brief, hashtags: d.tags.split(/[\s,]+/).filter(Boolean) })
+      toast('Niche enregistrée ✓')
+      charger()
+    } catch (e) {
+      toast('Erreur : ' + (e as Error).message)
+    } finally { setBusy('') }
+  }
+  const supprimer = async (id: string, nom: string, used: CompteT[]): Promise<void> => {
+    const avert = used.length
+      ? `« ${nom} » est utilisée par ${used.length} compte${used.length > 1 ? 's' : ''} (${used.map((c) => c.user).join(', ')}). Ils reviendront à leur niche par défaut. Supprimer ?`
+      : `Supprimer « ${nom} » ?`
+    if (!window.confirm(avert)) return
+    setBusy(id)
+    try {
+      await api.deleteNiche(id)
+      toast('Niche supprimée')
+      charger()
+    } catch (e) {
+      toast('Erreur : ' + (e as Error).message)
+    } finally { setBusy('') }
+  }
+  const assigner = async (user: string, nicheId: string): Promise<void> => {
+    setBusy(user)
+    try {
+      await api.assignNiche(user, nicheId)
+      toast('Compte réassigné ✓')
+      charger()
+    } catch (e) {
+      toast('Erreur : ' + (e as Error).message)
+    } finally { setBusy('') }
+  }
+
+  const usedBy = (id: string): CompteT[] => comptes.filter((c) => c.nicheId === id)
+
+  return (
+    <>
+      <div className="page-head">
+        <div>
+          <h1>Niches</h1>
+          <div className="muted small">
+            Des fiches réutilisables — sujet, angle et hashtags — qu’on assigne aux comptes.
+            Un compte sans fiche garde la niche saisie dans ses réglages.
+          </div>
+        </div>
+        <button className="btn primary" disabled={busy === 'new'} onClick={() => void creer()}>
+          {busy === 'new' ? 'Création…' : '+ Nouvelle niche'}
+        </button>
+      </div>
+
+      <div className="nic-grid">
+        {niches.map((n) => {
+          const d = draft[n.id] ?? { name: n.name, brief: n.brief, tags: '' }
+          const used = usedBy(n.id)
+          return (
+            <div className="card nic-card" key={n.id}>
+              <input
+                className="input-full nic-name"
+                value={d.name}
+                placeholder="Nom de la niche"
+                onChange={(e) => champ(n.id, 'name', e.target.value)}
+              />
+              <label className="muted small nic-lbl">Sujet, angle et ton — c’est ce texte qui est transmis à l’IA</label>
+              <textarea
+                className="input-full nic-brief"
+                rows={5}
+                value={d.brief}
+                placeholder="ex. Histoires vraies méconnues de la science, racontées comme une enquête. Ton posé, chute qui surprend. Pas de sensationnalisme."
+                onChange={(e) => champ(n.id, 'brief', e.target.value)}
+              />
+              <label className="muted small nic-lbl">Hashtags de base</label>
+              <input
+                className="input-full"
+                value={d.tags}
+                placeholder="#histoirevraie #science"
+                onChange={(e) => champ(n.id, 'tags', e.target.value)}
+              />
+              <div className="nic-foot">
+                <span className="nic-used">
+                  {used.length === 0
+                    ? 'Aucun compte'
+                    : used.map((c) => <span key={c.user} className="nic-chip">{c.user}</span>)}
+                </span>
+                <button className="btn ghost-sm" disabled={busy === n.id} onClick={() => void supprimer(n.id, n.name, used)}>Supprimer</button>
+                <button className="btn primary" disabled={busy === n.id} onClick={() => void enregistrer(n.id)}>
+                  {busy === n.id ? '…' : 'Enregistrer'}
+                </button>
+              </div>
+            </div>
+          )
+        })}
+
+        {/* Assignation : une ligne par compte, avec la niche réellement appliquée.
+            Sans cette colonne, on ne saurait pas ce qui tourne sur les comptes
+            restés en texte libre. */}
+        <div className="card nic-card nic-assign">
+          <div className="cat-title">Comptes</div>
+          <div className="muted small cat-hint">Quelle fiche chaque compte utilise. « Niche du compte » = le texte saisi dans ses réglages.</div>
+          {comptes.length === 0 && <div className="muted small nic-lbl">Aucun compte configuré.</div>}
+          {comptes.map((c) => (
+            <div className="nic-row" key={c.user}>
+              <div className="nic-row-u">
+                <div className="nic-row-n">{c.user}</div>
+                <div className="muted small nic-row-e" title={c.effective}>{c.effective}</div>
+              </div>
+              <select
+                className="input-full"
+                value={c.nicheId ?? ''}
+                disabled={busy === c.user}
+                onChange={(e) => void assigner(c.user, e.target.value)}
+              >
+                <option value="">Niche du compte{c.libre ? ` — « ${c.libre.slice(0, 28)} »` : ''}</option>
+                {niches.map((n) => <option key={n.id} value={n.id}>{n.name}</option>)}
+              </select>
+            </div>
+          ))}
+        </div>
+      </div>
+    </>
   )
 }
 
