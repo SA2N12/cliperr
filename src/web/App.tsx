@@ -2316,6 +2316,9 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
   const [ctas, setCtas] = useState<{ niche?: string; serie?: string; custom?: string; clip?: string }>({})
   const [music, setMusic] = useState<string[]>([])
   const [tracks, setTracks] = useState<string[]>([])
+  // Fiches de la bibliotheque + celle assignee a ce compte (page Niches).
+  const [ficheList, setFicheList] = useState<{ id: string; name: string }[]>([])
+  const [ficheId, setFicheId] = useState('')
   const [voice, setVoice] = useState('')
   const [voicePlaying, setVoicePlaying] = useState(false)
   const [elevenVoices, setElevenVoices] = useState<{ id: string; label: string }[]>([])
@@ -2370,6 +2373,11 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
       setSerie(p.series)
     }).catch(() => undefined)
     api.musicList().then((r) => setTracks(r.tracks)).catch(() => undefined)
+    // Fiches de la bibliothèque + celle assignée à CE compte (page Niches).
+    api.niches().then((r) => {
+      setFicheList((r.niches ?? []).map((n) => ({ id: n.id, name: n.name })))
+      setFicheId((r.comptes ?? []).find((c) => c.user === user)?.nicheId ?? '')
+    }).catch(() => undefined)
     api.ttsVoices().then((r) => {
       setHasEleven(r.elevenlabs)
       setElevenVoices(r.voices.filter((v) => v.provider === 'elevenlabs').map((v) => ({ id: v.id, label: v.label })))
@@ -2468,8 +2476,32 @@ function AccountConfigModal({ user, onClose, onSaved, toast }: { user: string; o
         <div className="sp-body">
         {tab === 'niche' && (
           <>
-            <label className="muted small" style={{ display: 'block', marginBottom: 4 }}>Niche / thème des vidéos classiques</label>
-            <input className="input-full" value={niche} placeholder="ex. mystères non résolus, sport, psychologie…" onChange={(e) => setNiche(e.target.value)} />
+            {/* Fiche de la bibliothèque (page Niches), sinon texte libre. La
+                fiche PRIME : quand elle est choisie, le champ libre ne sert plus
+                à rien et l'afficher modifiable laisserait croire le contraire. */}
+            {ficheList.length > 0 && (
+              <>
+                <label className="muted small" style={{ display: 'block', marginBottom: 4 }}>Niche du compte</label>
+                <select
+                  className="input-full"
+                  value={ficheId}
+                  onChange={(e) => { setFicheId(e.target.value); void api.assignNiche(user, e.target.value).catch(() => toast('Assignation impossible')) }}
+                  style={{ marginBottom: 10 }}
+                >
+                  <option value="">Texte libre ci-dessous</option>
+                  {ficheList.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+                </select>
+              </>
+            )}
+            <label className="muted small" style={{ display: 'block', marginBottom: 4 }}>
+              {ficheId ? 'Texte libre (ignoré tant qu’une fiche est choisie)' : 'Niche / thème des vidéos classiques'}
+            </label>
+            <input className="input-full" value={niche} disabled={!!ficheId} placeholder="ex. mystères non résolus, sport, psychologie…" onChange={(e) => setNiche(e.target.value)} />
+            {ficheId && (
+              <div className="sp-note">
+                Ce compte suit la fiche « {ficheList.find((f) => f.id === ficheId)?.name} ». Modifie-la sur la page Niches — elle sert peut-être à d’autres comptes.
+              </div>
+            )}
 
             {/* Voix off du compte : une voix différente par compte diversifie le "son"
                 (utile contre la détection de contenu IA) et casse l'effet monotone. */}
@@ -3792,31 +3824,6 @@ function NichesPage({ toast }: { toast: (m: string) => void }): JSX.Element {
           )
         })}
 
-        {/* Assignation : une ligne par compte, avec la niche réellement appliquée.
-            Sans cette colonne, on ne saurait pas ce qui tourne sur les comptes
-            restés en texte libre. */}
-        <div className="card nic-card nic-assign">
-          <div className="cat-title">Comptes</div>
-          <div className="muted small cat-hint">Quelle fiche chaque compte utilise. « Niche du compte » = le texte saisi dans ses réglages.</div>
-          {comptes.length === 0 && <div className="muted small nic-lbl">Aucun compte configuré.</div>}
-          {comptes.map((c) => (
-            <div className="nic-row" key={c.user}>
-              <div className="nic-row-u">
-                <div className="nic-row-n">{c.user}</div>
-                <div className="muted small nic-row-e" title={c.effective}>{c.effective}</div>
-              </div>
-              <select
-                className="input-full"
-                value={c.nicheId ?? ''}
-                disabled={busy === c.user}
-                onChange={(e) => void assigner(c.user, e.target.value)}
-              >
-                <option value="">Niche du compte{c.libre ? ` — « ${c.libre.slice(0, 28)} »` : ''}</option>
-                {niches.map((n) => <option key={n.id} value={n.id}>{n.name}</option>)}
-              </select>
-            </div>
-          ))}
-        </div>
       </div>
     </>
   )
