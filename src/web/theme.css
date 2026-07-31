@@ -4033,3 +4033,47 @@ input[type='checkbox'] {
 .ap-pill {
   border-radius: 0;
 }
+
+/* Jauges de progression : angles droits, comme le reste de l'interface.
+   Portée globale — `.bar` sert à la génération, à l'analyse et aux envois, et
+   ces trois-là doivent se ressembler. */
+.bar {
+  border-radius: 0;
+}
+.bar > div {
+  border-radius: 0;
+}
+
+/* Bandeau de génération : hauteur FIXE, réservée même à vide. Son apparition
+   volait sa place à la liste des comptes, qui se mettait à défiler — et la carte
+   entière sautait au démarrage d'une génération. Mieux vaut 26 px parfois vides
+   qu'une mise en page qui bouge sous les yeux. */
+.ap-gen {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 26px;
+  flex-shrink: 0;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+.ap-gen .bar {
+  width: 190px;
+  flex-shrink: 0;
+  height: 4px;
+}
+.ap-gen-m {
+  font-size: 11.5px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+/* Blocs resserrés d'autant : la place du bandeau doit venir de quelque part, et
+   c'est l'espacement vertical qui coûte le moins à la lisibilité. */
+.ap-slot {
+  padding: 8px 12px;
+  gap: 4px;
+}

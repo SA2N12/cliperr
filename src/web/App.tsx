@@ -2614,7 +2614,9 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
     return () => window.clearInterval(t)
   }, [load])
 
-  // Génération en cours (pilote) : la dernière entrée « running » des événements SSE.
+  // Génération en cours, D'OÙ QU'ELLE VIENNE (pilote ou page Génération IA) :
+  // la dernière entrée « running » des événements SSE. Sert uniquement à la barre
+  // de progression en bas de carte — elle ne désigne aucun créneau précis.
   const running = Object.values(ideaVideo).filter((v) => v.status === 'running')
   const activeGen = running.length ? running[running.length - 1] : null
   // Recharge le planning quand une génération démarre ou se termine (états à jour).
@@ -2671,7 +2673,11 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
   }
 
   const renderBlock = (s: AutopilotSlot, opts?: { hideAvatar?: boolean }): JSX.Element => {
-    const generating = day === 0 && !!activeGen && `${s.user}-${s.ordinal}` === nextKey
+    // PLUS d'etat « creation » sur un creneau : rien ne dit que la generation en
+    // cours est celle du pilote — une video lancee a la main depuis Generation IA
+    // marquait le prochain creneau du planning, qui n y etait pour rien. Seule la
+    // barre en bas de carte signale une generation, sans pretendre savoir laquelle.
+    const generating = false
     const { cat, sujet } = splitLabel(s)
     // Un créneau sans type n'est PAS indécis : le pilote y produira une vidéo de
     // niche, facturée. L'annoncer « à définir » laisserait croire que rien ne
@@ -2909,10 +2915,18 @@ function TodayPlan({ ideaVideo, toast, scope, groupByAccount, onConfigSaved }: {
       {!groupByAccount && slots.length === 0 && (
         <div className="muted small" style={{ marginTop: 14 }}>Aucune vidéo prévue {day === 1 ? 'demain' : "aujourd'hui"}.</div>
       )}
-      {day === 0 && activeGen && (
-        <div style={{ marginTop: 12 }}>
-          <div className="bar"><div style={{ width: `${genPct(activeGen.message)}%`, transition: 'width 0.4s ease', background: 'var(--ap-green)' }} /></div>
-          <div className="muted small" style={{ marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activeGen.message}</div>
+      {/* Bandeau de génération : sa place est RÉSERVÉE en permanence, même à vide.
+          Sinon son apparition volait 26 px à la liste des comptes, qui se mettait
+          alors à défiler — et toute la carte sautait au démarrage d'une
+          génération. Une ligne compacte : jauge et message côte à côte. */}
+      {day === 0 && (
+        <div className="ap-gen">
+          {activeGen && (
+            <>
+              <div className="bar"><div style={{ width: `${genPct(activeGen.message)}%`, transition: 'width 0.4s ease', background: 'var(--ap-green)' }} /></div>
+              <span className="ap-gen-m">{activeGen.message}</span>
+            </>
+          )}
         </div>
       )}
       {editSlot && (
