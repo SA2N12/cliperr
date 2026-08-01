@@ -3171,16 +3171,18 @@ app.post('/api/subtitles/preview', async (req, res) => {
     // Fond dégradé sombre → clair : c'est là qu'on juge si le contour tient. Le
     // texte est incrusté en 1080×1920 puis réduit, comme dans la vraie vidéo —
     // incruster sur une image déjà réduite grossirait la police relativement.
+    // Fond : deux pixels empilés puis étirés en 1080×1920 — un dégradé vertical
+    // sombre → clair, où l'on juge si le contour tient sur les deux moitiés.
+    // (`gradients` tire un angle AU HASARD et le fait tourner malgré x0/y0/x1/y1
+    //  et speed=0 : le décor changeait à chaque rendu, rendant deux réglages
+    //  impossibles à comparer. Ici le résultat est identique à l'octet près.)
     await run(ctx.bin.ffmpeg, [
       '-y', '-loglevel', 'error',
-      // Direction et vitesse FIXÉES : sans x0/y0/x1/y1 ni speed=0, `gradients`
-      // tire un angle au hasard et le fait tourner. Le fond changeait alors à
-      // chaque rendu, et on ne savait plus si une différence venait du réglage
-      // qu'on venait de toucher ou du décor.
-      '-f', 'lavfi', '-i',
-      'gradients=s=1080x1920:c0=0x0e1a14:c1=0xc9cfbc:nb_colors=2:x0=0:y0=0:x1=0:y1=1920:speed=0:d=4',
-      '-vf', `subtitles=${ass},scale=324:576`,
-      '-ss', '1.5', '-frames:v', '1', png
+      '-f', 'lavfi', '-i', 'color=c=0x0e1a14:s=2x1:r=25:d=4',
+      '-f', 'lavfi', '-i', 'color=c=0xc9cfbc:s=2x1:r=25:d=4',
+      '-filter_complex',
+      `[0:v][1:v]vstack=inputs=2,scale=1080:1920:flags=bicubic,subtitles=${ass},scale=324:576[o]`,
+      '-map', '[o]', '-ss', '1.5', '-frames:v', '1', png
     ])
     res.setHeader('Content-Type', 'image/png')
     res.setHeader('Cache-Control', 'no-store')
