@@ -4705,8 +4705,18 @@ video:-webkit-full-screen {
    qu'une grille qui se remplit d'elle-même range autant de champs par ligne que
    la place le permet. */
 .cat-panel {
-  padding: 18px 20px 14px;
+  /* Serré à dessein : formulaire et aperçu font la même hauteur à 4 px près,
+     rogner une seule colonne ne gagnerait rien — c'est le châssis commun qui
+     fait tenir la page sans défilement. */
+  padding: 14px 18px 12px;
   border-top: 2px solid var(--cat, var(--border));
+}
+.cat-panel .cat-foot {
+  margin-top: 10px;
+  padding-top: 10px;
+}
+.cat-detail .cat-dhead {
+  margin-bottom: 12px;
 }
 .cat-body {
   display: grid;
