@@ -4382,14 +4382,25 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
       </div>
     )
   }
-  const blocVideo = (cat: string): JSX.Element => (
-    <>
+  /** Moteur des scènes parlées. Il n'agit QUE sur les vidéos aux scènes animées :
+   *  les épisodes de série et les reproductions. Une vidéo ordinaire est faite
+   *  d'images fixes, sa voix vient du TTS et le moteur vidéo ne tourne jamais
+   *  (video-gen.ts : la branche Veo exige `animateScenes`). Le laisser dans le
+   *  bloc « Vidéos » laissait croire qu'il gouvernait toute la catégorie. */
+  const blocMoteur = (cat: string, quoi: string, note: string): JSX.Element => (
+    <section className="cat-sec">
+      <div className="cat-sub">{quoi}</div>
       {select(cat, 'engine', 'Moteur des scènes parlées', [
         ['seedance', 'Seedance'],
         ['veo', 'Veo — voix natives + vraie synchro labiale'],
         ['pixverse', 'Pixverse — économique'],
         ['wan', 'Wan 2.7 — nos voix + synchro labiale']
       ])}
+      <div className="muted small cat-note">{note}</div>
+    </section>
+  )
+  const blocVideo = (cat: string): JSX.Element => (
+    <>
       {select(cat, 'quality', 'Qualité imposée', [
         ['wan', 'Wan 2.7 — ~0,50 $/scène'],
         ['seedance', 'Seedance 2.0 — ~0,84 $/scène'],
@@ -4434,10 +4445,12 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
     {
       cle: 'niche', cats: ['niche', 'carousel'], icone: 'bulb', titre: 'Niches', teinte: 'niche',
       hint: 'Le tout-venant du pilote, sur la niche du compte. Les séries et les sujets imposés suivent ces réglages.',
+      // L'aperçu montre ce qui gouverne une vidéo ORDINAIRE : le moteur n'y a pas
+      // sa place, il ne concerne que les épisodes de série.
       apercu: [
-        ['Moteur', applique('niche', 'engine')],
         ['Qualité', applique('niche', 'quality')],
         ['Langue', applique('niche', 'lang')],
+        ['Scènes max', applique('niche', 'maxScenes')],
         ['Diapos', applique('carousel', 'slides')]
       ],
       corps: (
@@ -4446,6 +4459,8 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
             <div className="cat-sub">Vidéos</div>
             {blocVideo('niche')}
           </section>
+          {blocMoteur('niche', 'Séries',
+            'N’agit que sur les épisodes de série, dont les scènes sont animées. Une vidéo de niche ordinaire est faite d’images fixes : sa voix vient du TTS, jamais du moteur vidéo.')}
           <section className="cat-sec">
             <div className="cat-sub">Carrousels</div>
             {nombre('carousel', 'slides', 'Nombre de diapos', 3, 10)}
@@ -4475,11 +4490,20 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
       cle: 'genai', cats: ['genai'], icone: 'sparkles', titre: 'Génération IA', teinte: 'genai',
       hint: 'Les vidéos lancées à la main. Les sélecteurs de la carte d’idée restent prioritaires sur ces valeurs.',
       apercu: [
-        ['Moteur', applique('genai', 'engine')],
         ['Qualité', applique('genai', 'quality')],
-        ['Langue', applique('genai', 'lang')]
+        ['Langue', applique('genai', 'lang')],
+        ['Scènes max', applique('genai', 'maxScenes')]
       ],
-      corps: <section className="cat-sec">{blocVideo('genai')}</section>
+      corps: (
+        <>
+          <section className="cat-sec">
+            <div className="cat-sub">Vidéos</div>
+            {blocVideo('genai')}
+          </section>
+          {blocMoteur('genai', 'Reproductions',
+            'N’agit que sur les vidéos reproduites depuis une source, seules à avoir des scènes animées. Une idée lancée normalement n’utilise pas de moteur vidéo.')}
+        </>
+      )
     }
   ]
 
