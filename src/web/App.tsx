@@ -4416,7 +4416,9 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
     return (
       <div className="cat-foot">
         <span className={`cat-count${n ? ' on' : ''}`}>
-          {n === 0 ? 'Tout suit les réglages globaux' : `${n} réglage${n > 1 ? 's' : ''} personnalisé${n > 1 ? 's' : ''}`}
+          {n === 0
+            ? (compte ? 'Suit « Tous les comptes »' : 'Tout suit les réglages globaux')
+            : `${n} réglage${n > 1 ? 's' : ''} personnalisé${n > 1 ? 's' : ''}`}
         </span>
         {n > 0 && !dirty && (
           <button className="btn ghost-sm" disabled={busy === cle} onClick={() => void reinitialiser(cats, cle)}>Réinitialiser</button>
@@ -4500,7 +4502,10 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
     return (
       <>
         <div className="page-head"><div><h1>Catégories</h1></div></div>
-        <div className="cat-grid">
+        {/* `comptes` : chaque tuile prend la hauteur de son contenu. Les tuiles de
+            compte portent moins de texte que « Tous les comptes », les étirer à sa
+            hauteur creusait un vide au milieu. */}
+        <div className="cat-grid comptes">
           <button
             className="card cat-card cat-tile cat-acc"
             style={{ '--cat': 'var(--brand)' } as CSSProperties}
@@ -4636,7 +4641,12 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
                 <span className={`cat-count${n ? ' on' : ''}`}>
                   {dirty
                     ? 'Modifications non enregistrées'
-                    : n === 0 ? 'Tout suit les réglages globaux' : `${n} réglage${n > 1 ? 's' : ''} personnalisé${n > 1 ? 's' : ''}`}
+                    : n === 0
+                      // Sur un compte, ce qui n'est pas réglé suit la couche tous
+                      // comptes — pas directement les globaux. Nommer la mauvaise
+                      // source enverrait la changer au mauvais endroit.
+                      ? (compte ? 'Suit « Tous les comptes »' : 'Tout suit les réglages globaux')
+                      : `${n} réglage${n > 1 ? 's' : ''} personnalisé${n > 1 ? 's' : ''}`}
                 </span>
                 <span className="cat-go">
                   Personnaliser
