@@ -4801,9 +4801,11 @@ video:-webkit-full-screen {
    L'aperçu est au format 9:16 : le poser sous le formulaire faisait déborder
    le panneau de l'écran. En colonne, la hauteur totale reste celle du plus
    grand des deux au lieu de leur somme. */
+/* 210 px et non 270 : au format 9:16 chaque pixel de largeur en coûte 1,8 en
+   hauteur, et le panneau dépassait le bas de l'écran. */
 .cat-panel-in.avec-apercu {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 270px;
+  grid-template-columns: minmax(0, 1fr) 210px;
   gap: 0 26px;
   align-items: start;
 }

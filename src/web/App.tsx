@@ -4231,9 +4231,15 @@ const CAT_MOTS: Record<string, string> = {
   economique: 'Économique', fr: 'Français', en: 'Anglais',
   center: 'Centré', face: 'Suivi du visage', '1': 'Incrustés', '0': 'Aucun'
 }
+/** Libellés PROPRES À UNE CLÉ, prioritaires sur CAT_MOTS. Plusieurs réglages
+ *  partagent les codes '0'/'1' : sans cette table, la casse des sous-titres
+ *  s'affichait « Incrustés », le libellé de l'incrustation. */
+const CAT_MOTS_CLE: Record<string, Record<string, string>> = {
+  subUpper: { '1': 'MAJUSCULES', '0': 'Normale' },
+  subtitles: { '1': 'Incrustés', '0': 'Aucun' }
+}
 /** Réglages dont la valeur est un NOMBRE et non un code. Sans cette liste, un
- *  « 1 » passé dans CAT_MOTS ressort en « Incrustés » — le libellé des
- *  sous-titres, qui partagent le même code. */
+ *  « 1 » passé dans CAT_MOTS ressort en « Incrustés ». */
 const CAT_NOMBRES = new Set(['maxScenes', 'speed', 'slides', 'clipCount', 'subSize', 'subOutline', 'subGroup', 'subBottom'])
 /** Champs du style de sous-titres, dans l'ordre envoyé à l'aperçu. */
 const SUB_CLES = ['subFont', 'subSize', 'subColor', 'subHilite', 'subOutline', 'subGroup', 'subBottom', 'subUpper']
@@ -4300,7 +4306,8 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
   /** Traduction d'une valeur. CAT_MOTS traduit des CODES ('veo', 'fr', '1' =
    *  sous-titres incrustés) : le faire traverser à un nombre donnait
    *  « Candidats = Incrustés ». */
-  const mot = (key: string, v: string): string => (CAT_NOMBRES.has(key) ? v : CAT_MOTS[v] ?? v)
+  const mot = (key: string, v: string): string =>
+    CAT_NOMBRES.has(key) ? v : CAT_MOTS_CLE[key]?.[v] ?? CAT_MOTS[v] ?? v
   /** Ce dont hérite un champ non personnalisé, et d'OÙ. Sur un compte, la couche
    *  tous comptes s'intercale avant les globaux — dire « Global » alors que la
    *  valeur vient d'un réglage tous comptes enverrait chercher au mauvais
@@ -4375,7 +4382,7 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
       // occupe deux colonnes de la grille.
       <div className={`cat-f wide${perso ? ' on' : ''}`}>
         <label className="cat-lbl">{label}{perso && <span className="cat-dot" title="Personnalisé pour cette catégorie" />}</label>
-        <textarea className="input-full cat-ta" rows={3} placeholder={ph} value={val(cat, key)} onChange={(e) => champ(cat, key, e.target.value)} />
+        <textarea className="input-full cat-ta" rows={2} placeholder={ph} value={val(cat, key)} onChange={(e) => champ(cat, key, e.target.value)} />
       </div>
     )
   }
