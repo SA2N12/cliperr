@@ -161,10 +161,19 @@ export const api = {
   }) => post<{ ok: boolean }>('/api/autopilot', cfg),
   runAutopilotNow: () => post<{ ok: boolean }>('/api/autopilot/run-now'),
   // Reglages par CATEGORIE de video (niche, serie, sujet libre, carrousel, clip).
-  categories: () =>
-    req<{ categories: string[]; settings: Record<string, Record<string, string | number>>; globals: Record<string, string | number> }>('/api/categories'),
-  saveCategory: (category: string, cfg: Record<string, string | number | null>) =>
-    post<{ ok: boolean; settings: Record<string, Record<string, string | number>> }>('/api/categories', { category, cfg }),
+  // `user` vide = la couche « tous les comptes ». `inherited` est ce dont la vue
+  // herite AVANT les globaux : vide sur la vue tous comptes, la couche tous
+  // comptes quand on regarde un compte precis.
+  categories: (user?: string) =>
+    req<{
+      categories: string[]
+      settings: Record<string, Record<string, string | number>>
+      inherited: Record<string, Record<string, string | number>>
+      parCompte: Record<string, number>
+      globals: Record<string, string | number>
+    }>(`/api/categories${user ? `?user=${encodeURIComponent(user)}` : ''}`),
+  saveCategory: (category: string, cfg: Record<string, string | number | null>, user?: string) =>
+    post<{ ok: boolean; settings: Record<string, Record<string, string | number>> }>('/api/categories', { category, cfg, user: user ?? '' }),
   // Bibliotheque de niches : fiches reutilisables assignees aux comptes.
   niches: () =>
     req<{ niches: { id: string; name: string; brief: string; hashtags?: string[]; createdAt: number }[]; comptes: { user: string; nicheId: string | null; libre: string; effective: string }[] }>('/api/niches'),

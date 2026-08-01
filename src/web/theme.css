@@ -4741,6 +4741,50 @@ video:-webkit-full-screen {
     grid-column: 1 / -1;
   }
 }
+/* Tuile de compte : pas d'aperçu de réglages, donc pas de zone extensible.
+   L'en-tête et le pied se touchent, la carte reste basse. */
+.cat-acc .cat-head {
+  padding-bottom: 11px;
+  align-items: center;
+}
+.cat-acc .cat-tile-foot {
+  margin-top: 11px;
+}
+
+/* Fil d'Ariane : trois niveaux (compte → catégorie → réglages), sans lui deux
+   écrans de tuiles se ressemblent trop pour qu'on sache où l'on est. */
+.cat-fil {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: var(--muted-2);
+}
+.cat-fil button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 2px 0;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  transition: color 0.16s ease;
+}
+.cat-fil button:hover {
+  color: var(--text);
+}
+.cat-fil-sep {
+  color: var(--muted-2);
+  opacity: 0.6;
+}
+.cat-fil-ici {
+  color: var(--text);
+}
 @media (prefers-reduced-motion: reduce) {
   .cat-detail {
     animation: none;

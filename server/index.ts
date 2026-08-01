@@ -221,7 +221,7 @@ async function runForSource(sourceId: number, clipCount: number, profileOverride
   const apiKey = getApiKey()
   const model = MODEL_MAP[repo.getSetting(FLAG_MODEL) ?? 'haiku'] ?? MODEL_MAP.haiku
   // Cadrage : la catégorie « Clips » prime sur le réglage global.
-  const reframeFocus = ((catCfg('clip').reframe || repo.getSetting(FLAG_REFRAME)) as ReframeFocus) || 'center'
+  const reframeFocus = ((catCfg('clip', profileOverride).reframe || repo.getSetting(FLAG_REFRAME)) as ReframeFocus) || 'center'
   const transcribeEnabled = repo.getSetting(FLAG_TRANSCRIBE) === '1'
   const backend = repo.getSetting(FLAG_TRANSCRIBE_BACKEND) || 'groq'
   const groqKey = getEncrypted('groq_key')
@@ -509,7 +509,7 @@ async function runVideoGen(
     // Langue de la vidéo : choix explicite du lancement, sinon dernier choix mémorisé.
     // Réglages de la CATÉGORIE (niche / série / sujet libre) : ils s'intercalent
     // entre le choix explicite de la génération et les réglages globaux.
-    const cat = catCfg(opts.videoType)
+    const cat = catCfg(opts.videoType, opts.profile)
     const genLang: 'fr' | 'en' =
       opts.lang ??
       (cat.lang === 'en' || cat.lang === 'fr'
@@ -897,15 +897,34 @@ function categorySettings(): Record<string, CategoryCfg> {
     return {}
   }
 }
-/** Réglages applicables à une génération, d'après son type interne.
+/** Catégorie d'un type interne de génération.
  *  - pas de type   → lancement MANUEL depuis la page Génération IA
  *  - serie/custom  → vidéos de niche dont on a imposé l'univers ou le sujet */
-function catCfg(type?: string): CategoryCfg {
-  const all = categorySettings()
-  if (type == null || type === '') return all.genai ?? {}
+function catKeyOf(type?: string): string {
+  if (type == null || type === '') return 'genai'
   const t = String(type)
-  if (t === 'serie' || t === 'custom' || t === 'niche') return all.niche ?? {}
-  return all[t] ?? {}
+  if (t === 'serie' || t === 'custom' || t === 'niche') return 'niche'
+  return t
+}
+/** Réglages de catégorie PROPRES À UN COMPTE. Couche facultative : un compte
+ *  sans réglage suit à l'identique la catégorie « tous les comptes ». */
+function categorySettingsByUser(): Record<string, Record<string, CategoryCfg>> {
+  try {
+    const o = JSON.parse(repo.getSetting('category_settings_by_user') || '{}') as Record<string, Record<string, CategoryCfg>>
+    return o && typeof o === 'object' ? o : {}
+  } catch {
+    return {}
+  }
+}
+/** Réglages applicables à une génération. Trois couches, de la plus précise à la
+ *  plus générale : compte+catégorie → catégorie (tous comptes) → réglage global.
+ *  La fusion est champ par champ : régler la langue sur un compte ne lui fait pas
+ *  perdre le moteur choisi pour la catégorie. */
+function catCfg(type?: string, user?: string): CategoryCfg {
+  const k = catKeyOf(type)
+  const base = categorySettings()[k] ?? {}
+  if (!user) return base
+  return { ...base, ...(categorySettingsByUser()[user]?.[k] ?? {}) }
 }
 
 type SlotOverride = { hm?: number; type?: string; subject?: string; music?: string; from?: string; stockPick?: string; stockKinds?: string }
@@ -1349,7 +1368,7 @@ async function runAutopilotTick(force = false): Promise<void> {
         emitLog(`Pilote auto : extraction de clips depuis ${clipUrl} pour « ${user} » (téléchargement + analyse)…`)
         const created = repo.createSource(clipUrl)
         // Nombre de candidats : réglable par la catégorie « Clips » (défaut 1).
-        const nbCand = Math.max(1, Math.round(Number(catCfg('clip').clipCount) || 1))
+        const nbCand = Math.max(1, Math.round(Number(catCfg('clip', user).clipCount) || 1))
         const job = pipelineChain.then(() => runForSource(created.id, nbCand, user))
         pipelineChain = job.then(() => undefined, () => undefined)
         await job
@@ -1389,8 +1408,8 @@ async function runAutopilotTick(force = false): Promise<void> {
         niche: topic,
         cta: ctaMapForProfile(user).niche ?? '',
         // Nombre de diapos et style visuel : catégorie « Niches ».
-        slides: catCfg('carousel').slides,
-        style: catCfg('carousel').style,
+        slides: catCfg('carousel', user).slides,
+        style: catCfg('carousel', user).style,
         // Anti-répétition, comme pour les vidéos : sans l'historique du compte,
         // l'IA repropose ses sujets favoris (« La règle des 2 minutes » ×3).
         recentTitles: repo
@@ -3037,7 +3056,9 @@ app.post('/api/niches/assign', (req, res) => {
 })
 
 // ── Réglages par catégorie de vidéo ────────────────────────────────────────
-app.get('/api/categories', (_req, res) => {
+app.get('/api/categories', (req, res) => {
+  // `user` vide = la couche « tous les comptes », celle dont tous héritent.
+  const user = String((req.query.user as string) ?? '').trim()
   // On renvoie AUSSI les valeurs globales effectives : sans elles, « Réglage
   // global » est une case opaque — l'utilisateur ne peut pas savoir ce qu'il
   // hérite, ni juger si une personnalisation vaut la peine.
@@ -3046,7 +3067,18 @@ app.get('/api/categories', (_req, res) => {
   const scenes = parseInt(repo.getSetting('repro_max_scenes') || '', 10)
   res.json({
     categories: CATEGORIES,
-    settings: categorySettings(),
+    settings: user ? (categorySettingsByUser()[user] ?? {}) : categorySettings(),
+    // Ce dont la vue hérite AVANT les globaux. Pour un compte : la couche tous
+    // comptes. Pour la vue tous comptes : rien, elle hérite des globaux direct.
+    inherited: user ? categorySettings() : {},
+    // Combien de comptes dévient, par catégorie — la vue tous comptes le dit
+    // sans avoir à ouvrir chaque compte pour le découvrir.
+    parCompte: Object.fromEntries(
+      Object.entries(categorySettingsByUser()).map(([u, m]) => [
+        u,
+        Object.values(m).reduce((n, c) => n + Object.keys(c ?? {}).length, 0)
+      ])
+    ),
     globals: {
       engine: repo.getSetting('series_video_engine') || 'seedance',
       quality: veo ? 'veo' : 'economique',
@@ -3062,10 +3094,14 @@ app.get('/api/categories', (_req, res) => {
   })
 })
 app.post('/api/categories', (req, res) => {
-  const b = (req.body ?? {}) as { category?: unknown; cfg?: Record<string, unknown> }
+  const b = (req.body ?? {}) as { category?: unknown; cfg?: Record<string, unknown>; user?: unknown }
   const cat = String(b.category ?? '')
   if (!(CATEGORIES as readonly string[]).includes(cat)) return res.status(400).json({ error: 'Catégorie inconnue' })
-  const all = categorySettings()
+  const user = String(b.user ?? '').trim()
+  const parCompte = categorySettingsByUser()
+  // Une seule mécanique de validation pour les deux couches : `all` désigne la
+  // carte à écrire, le reste du corps ne sait pas laquelle c'est.
+  const all = user ? { ...(parCompte[user] ?? {}) } : categorySettings()
   const cur: CategoryCfg = { ...(all[cat] ?? {}) }
   const c = b.cfg ?? {}
   // Chaîne vide / null = « suivre le réglage global » : on EFFACE la clé plutôt
@@ -3109,7 +3145,15 @@ app.post('/api/categories', (req, res) => {
   }
   if (Object.keys(cur).length) all[cat] = cur
   else delete all[cat]
-  repo.setSetting('category_settings', JSON.stringify(all))
+  if (user) {
+    // Un compte sans plus aucune déviation sort de la carte : on ne garde pas
+    // d'entrée vide, sinon il compterait comme « personnalisé » à la lecture.
+    if (Object.keys(all).length) parCompte[user] = all
+    else delete parCompte[user]
+    repo.setSetting('category_settings_by_user', JSON.stringify(parCompte))
+  } else {
+    repo.setSetting('category_settings', JSON.stringify(all))
+  }
   res.json({ ok: true, settings: all })
 })
 

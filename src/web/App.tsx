@@ -778,7 +778,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
         <TopBar state={pub} />
         {page === 'dashboard' && <Dashboard scope={scope} />}
         {page === 'autopilot' && <Autopilot toast={showToast} ideaVideo={ideaVideo} scope={scope} />}
-        {page === 'categories' && <CategoriesPage toast={showToast} />}
+        {page === 'categories' && <CategoriesPage toast={showToast} profiles={pub?.profiles ?? []} />}
         {page === 'niches' && <NichesPage toast={showToast} />}
         {page === 'clipping' && <Clipage sources={sources} clips={clips} progress={progress} onRefresh={refresh} toast={showToast} />}
         {page === 'genai' && <GenAI toast={showToast} />}
@@ -4235,7 +4235,10 @@ const CAT_MOTS: Record<string, string> = {
  *  « 1 » passé dans CAT_MOTS ressort en « Incrustés » — le libellé des
  *  sous-titres, qui partagent le même code. */
 const CAT_NOMBRES = new Set(['maxScenes', 'speed', 'slides', 'clipCount'])
-function CategoriesPage({ toast }: { toast: (m: string) => void }): JSX.Element {
+/** Les quatre catégories stockées côté serveur — sert à compter les réglages
+ *  d'une couche entière (« combien ce compte dévie-t-il ? »). */
+const CATEGORIES_TOUTES = ['niche', 'carousel', 'clip', 'genai']
+function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profiles: PubProfile[] }): JSX.Element {
   const [cfg, setCfg] = useState<Record<string, Record<string, string | number>>>({})
   const [globals, setGlobals] = useState<CatGlobals>({})
   const [busy, setBusy] = useState('')
@@ -4246,15 +4249,31 @@ function CategoriesPage({ toast }: { toast: (m: string) => void }): JSX.Element 
   // obligeaient à lire chaque champ pour savoir où l'on était ; on choisit
   // d'abord, on règle ensuite.
   const [ouvert, setOuvert] = useState<string | null>(null)
+  // Compte dont on règle les catégories. `null` = l'étape de choix du compte,
+  // `''` = la couche « tous les comptes » dont tous les autres héritent.
+  const [compte, setCompte] = useState<string | null>(null)
+  /** Couche héritée AVANT les globaux : vide en vue tous comptes, la couche
+   *  tous comptes quand on regarde un compte précis. */
+  const [inherited, setInherited] = useState<Record<string, Record<string, string | number>>>({})
+  /** Nombre de déviations par compte — pour l'étape de choix. */
+  const [parCompte, setParCompte] = useState<Record<string, number>>({})
 
-  const charger = useCallback((): void => {
-    api.categories().then((r) => {
+  const charger = useCallback((u: string): void => {
+    api.categories(u).then((r) => {
       setCfg(r.settings ?? {})
       setRef(r.settings ?? {})
+      setInherited(r.inherited ?? {})
+      setParCompte(r.parCompte ?? {})
       setGlobals((r as unknown as { globals?: CatGlobals }).globals ?? {})
     }).catch(() => undefined)
   }, [])
-  useEffect(() => { charger() }, [charger])
+  // `compte` null (étape de choix) charge la couche tous comptes : c'est elle
+  // qu'il faut résumer sur la tuile « Tous les comptes ».
+  useEffect(() => { charger(compte ?? '') }, [compte, charger])
+  // Changer de compte remet à l'étape des catégories : rester dans le détail
+  // d'une catégorie tout en basculant de compte ferait croire qu'on règle
+  // encore le précédent.
+  useEffect(() => { setOuvert(null) }, [compte])
 
   const val = (cat: string, key: string): string => String(cfg[cat]?.[key] ?? '')
   const champ = (cat: string, key: string, v: string): void =>
@@ -4269,24 +4288,28 @@ function CategoriesPage({ toast }: { toast: (m: string) => void }): JSX.Element 
   const modifie = (cats: string[]): boolean =>
     cats.some((c) => JSON.stringify(Object.entries(cfg[c] ?? {}).filter(([, v]) => String(v ?? '') !== '').sort())
       !== JSON.stringify(Object.entries(ref[c] ?? {}).filter(([, v]) => String(v ?? '') !== '').sort()))
-  const herite = (key: string): string => {
+  /** Traduction d'une valeur. CAT_MOTS traduit des CODES ('veo', 'fr', '1' =
+   *  sous-titres incrustés) : le faire traverser à un nombre donnait
+   *  « Candidats = Incrustés ». */
+  const mot = (key: string, v: string): string => (CAT_NOMBRES.has(key) ? v : CAT_MOTS[v] ?? v)
+  /** Ce dont hérite un champ non personnalisé, et d'OÙ. Sur un compte, la couche
+   *  tous comptes s'intercale avant les globaux — dire « Global » alors que la
+   *  valeur vient d'un réglage tous comptes enverrait chercher au mauvais
+   *  endroit pour la changer. */
+  const heriteDe = (cat: string, key: string): { txt: string; src: string } => {
+    const t = inherited[cat]?.[key]
+    if (t != null && String(t) !== '') return { txt: mot(key, String(t)), src: 'Tous comptes' }
     const g = globals[key]
-    if (g == null || g === '') return 'global'
-    return CAT_MOTS[String(g)] ?? String(g)
+    if (g == null || g === '') return { txt: 'par défaut', src: 'Global' }
+    return { txt: mot(key, String(g)), src: 'Global' }
   }
-  /** Ce qui SERA appliqué : la personnalisation si elle existe, sinon la valeur
-   *  globale dont la catégorie hérite. Une tuile qui n'annoncerait que les
-   *  surcharges laisserait croire que le reste n'est pas réglé.
-   *  CAT_MOTS traduit des CODES ('veo', 'fr', '1' = sous-titres incrustés) : le
-   *  faire traverser à un nombre donnait « Candidats = Incrustés ». */
+  /** Ce qui SERA appliqué : la personnalisation si elle existe, sinon ce dont
+   *  elle hérite. Une tuile qui n'annoncerait que les surcharges laisserait
+   *  croire que le reste n'est pas réglé. */
   const applique = (cat: string, key: string): { txt: string; perso: boolean } => {
-    const num = CAT_NOMBRES.has(key)
-    const mot = (v: string): string => (num ? v : CAT_MOTS[v] ?? v)
     const v = String(ref[cat]?.[key] ?? '')
-    if (v !== '') return { txt: mot(v), perso: true }
-    const g = globals[key]
-    if (g == null || g === '') return { txt: 'par défaut', perso: false }
-    return { txt: mot(String(g)), perso: false }
+    if (v !== '') return { txt: mot(key, v), perso: true }
+    return { txt: heriteDe(cat, key).txt, perso: false }
   }
 
   const enregistrer = async (cats: string[], cle: string): Promise<void> => {
@@ -4294,7 +4317,7 @@ function CategoriesPage({ toast }: { toast: (m: string) => void }): JSX.Element 
     try {
       let dernier = cfg
       for (const c of cats) {
-        const r = await api.saveCategory(c, (cfg[c] ?? {}) as Record<string, string | number | null>)
+        const r = await api.saveCategory(c, (cfg[c] ?? {}) as Record<string, string | number | null>, compte ?? '')
         dernier = r.settings ?? dernier
       }
       setCfg(dernier); setRef(dernier)
@@ -4309,11 +4332,11 @@ function CategoriesPage({ toast }: { toast: (m: string) => void }): JSX.Element 
       const vide = { engine: '', quality: '', maxScenes: '', lang: '', subtitles: '', speed: '', slides: '', clipCount: '', reframe: '' }
       let dernier = cfg
       for (const c of cats) {
-        const r = await api.saveCategory(c, vide)
+        const r = await api.saveCategory(c, vide, compte ?? '')
         dernier = r.settings ?? {}
       }
       setCfg(dernier); setRef(dernier)
-      toast('Catégorie remise sur les réglages globaux')
+      toast(compte ? 'Catégorie remise sur les réglages tous comptes' : 'Catégorie remise sur les réglages globaux')
     } catch (e) {
       toast('Erreur : ' + (e as Error).message)
     } finally { setBusy('') }
@@ -4325,7 +4348,9 @@ function CategoriesPage({ toast }: { toast: (m: string) => void }): JSX.Element 
       <div className={`cat-f${perso ? ' on' : ''}`}>
         <label className="cat-lbl">{label}{perso && <span className="cat-dot" title="Personnalisé pour cette catégorie" />}</label>
         <select className="input-full" value={val(cat, key)} onChange={(e) => champ(cat, key, e.target.value)}>
-          <option value="">Global · {herite(key)}</option>
+          {/* L'option « suivre » nomme la SOURCE de la valeur héritée : sur un
+              compte, elle peut venir du réglage tous comptes et non des globaux. */}
+          <option value="">{heriteDe(cat, key).src} · {heriteDe(cat, key).txt}</option>
           {opts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
       </div>
@@ -4352,7 +4377,9 @@ function CategoriesPage({ toast }: { toast: (m: string) => void }): JSX.Element 
         <label className="cat-lbl">{label}{perso && <span className="cat-dot" title="Personnalisé pour cette catégorie" />}</label>
         <input
           className="input-full" type="number" min={min} max={max} step={step}
-          placeholder={String(globals[key] ?? '')}
+          // Le fantôme montre la valeur réellement héritée, couche tous comptes
+          // comprise — pas systématiquement le réglage global.
+          placeholder={String(inherited[cat]?.[key] ?? globals[key] ?? '')}
           value={val(cat, key)}
           onChange={(e) => champ(cat, key, e.target.value)}
         />
@@ -4461,16 +4488,93 @@ function CategoriesPage({ toast }: { toast: (m: string) => void }): JSX.Element 
   ]
 
   const carte = CARTES.find((c) => c.cle === ouvert) ?? null
+  const nomCompte = compte
+    ? (profiles.find((p) => p.username === compte)?.handle
+      ? `@${profiles.find((p) => p.username === compte)?.handle}`
+      : compte)
+    : 'Tous les comptes'
+
+  // ── Étape 1 : à quel compte ces réglages s'appliquent-ils ? ───────────────
+  if (compte === null) {
+    const nTous = nbEnregistre(CATEGORIES_TOUTES)
+    return (
+      <>
+        <div className="page-head"><div><h1>Catégories</h1></div></div>
+        <div className="cat-grid">
+          <button
+            className="card cat-card cat-tile cat-acc"
+            style={{ '--cat': 'var(--brand)' } as CSSProperties}
+            onClick={() => setCompte('')}
+          >
+            <div className="cat-head">
+              <span className="cat-ico"><Icon name="globe" size={16} /></span>
+              <div>
+                <div className="cat-title">Tous les comptes</div>
+                <div className="muted small cat-hint">Le socle. Chaque compte le suit tant qu’il n’a pas de réglage propre.</div>
+              </div>
+            </div>
+            <div className="cat-tile-foot">
+              <span className={`cat-count${nTous ? ' on' : ''}`}>
+                {nTous === 0 ? 'Tout suit les réglages globaux' : `${nTous} réglage${nTous > 1 ? 's' : ''} personnalisé${nTous > 1 ? 's' : ''}`}
+              </span>
+              <span className="cat-go">
+                Ouvrir
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
+              </span>
+            </div>
+          </button>
+          {profiles.map((p) => {
+            const n = parCompte[p.username] ?? 0
+            return (
+              <button
+                className="card cat-card cat-tile cat-acc"
+                key={p.username}
+                style={{ '--cat': 'var(--cat-niche)' } as CSSProperties}
+                onClick={() => setCompte(p.username)}
+              >
+                <div className="cat-head">
+                  <span className="cat-ico"><Icon name="bolt" size={16} /></span>
+                  {/* Pas de sous-titre : la même phrase répétée cinq fois est du
+                      bruit, et la ligne d'état dit déjà ce qu'il faut savoir. */}
+                  <div className="cat-title">{p.handle ? `@${p.handle}` : p.username}</div>
+                </div>
+                <div className="cat-tile-foot">
+                  <span className={`cat-count${n ? ' on' : ''}`}>
+                    {n === 0 ? 'Suit « Tous les comptes »' : `${n} réglage${n > 1 ? 's' : ''} propre${n > 1 ? 's' : ''}`}
+                  </span>
+                  <span className="cat-go">
+                    Ouvrir
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
+                  </span>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      </>
+    )
+  }
+
+  /** Fil d'Ariane. Trois niveaux : sans lui, deux écrans de tuiles se
+   *  ressemblent trop pour qu'on sache où l'on est. */
+  const fil = (feuille?: string): JSX.Element => (
+    <div className="cat-fil">
+      <button onClick={() => setCompte(null)}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+        Comptes
+      </button>
+      <span className="cat-fil-sep">/</span>
+      {feuille ? <button onClick={() => setOuvert(null)}>{nomCompte}</button> : <span className="cat-fil-ici">{nomCompte}</span>}
+      {feuille && <><span className="cat-fil-sep">/</span><span className="cat-fil-ici">{feuille}</span></>}
+    </div>
+  )
 
   // ── Détail d'une catégorie ────────────────────────────────────────────────
   if (carte) {
     const dirty = modifie(carte.cats)
     return (
       <div className="cat-detail" style={{ '--cat': `var(--cat-${carte.teinte})` } as CSSProperties}>
-        <button className="cat-back" onClick={() => setOuvert(null)}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
-          Catégories
-        </button>
+        {fil(carte.titre)}
         <div className="cat-dhead">
           <span className="cat-ico lg"><Icon name={carte.icone} size={21} /></span>
           <div>
@@ -4493,10 +4597,11 @@ function CategoriesPage({ toast }: { toast: (m: string) => void }): JSX.Element 
   // ── Grille de choix ───────────────────────────────────────────────────────
   return (
     <>
+      {fil()}
       {/* Sans sous-titre : les tuiles disent déjà ce que fait chaque catégorie
           et ce qu'elle applique. */}
       <div className="page-head">
-        <div><h1>Catégories</h1></div>
+        <div><h1>{nomCompte}</h1></div>
       </div>
       <div className="cat-grid">
         {/* La teinte de la catégorie passe par une variable locale `--cat` : la
