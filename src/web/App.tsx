@@ -4459,8 +4459,11 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
             <div className="cat-sub">Vidéos</div>
             {blocVideo('niche')}
           </section>
-          {blocMoteur('niche', 'Séries',
-            'N’agit que sur les épisodes de série, dont les scènes sont animées. Une vidéo de niche ordinaire est faite d’images fixes : sa voix vient du TTS, jamais du moteur vidéo.')}
+          {/* Pas de moteur vidéo ici : une vidéo de niche est faite d'images
+              fixes, sa voix vient du TTS et le moteur ne tourne jamais. Les
+              épisodes de série, eux, lisent cette catégorie et ont bien des
+              scènes animées — mais ils ne sont plus produits, et le moteur reste
+              réglable globalement (Réglages → Génération vidéos). */}
           <section className="cat-sec">
             <div className="cat-sub">Carrousels</div>
             {nombre('carousel', 'slides', 'Nombre de diapos', 3, 10)}
