@@ -4337,7 +4337,9 @@ function CategoriesPage({ toast }: { toast: (m: string) => void }): JSX.Element 
   const texte = (cat: string, key: string, label: string, ph: string): JSX.Element => {
     const perso = val(cat, key) !== ''
     return (
-      <div className={`cat-f${perso ? ' on' : ''}`}>
+      // `wide` : une description tient mal dans la largeur d'un sélecteur, elle
+      // occupe deux colonnes de la grille.
+      <div className={`cat-f wide${perso ? ' on' : ''}`}>
         <label className="cat-lbl">{label}{perso && <span className="cat-dot" title="Personnalisé pour cette catégorie" />}</label>
         <textarea className="input-full cat-ta" rows={3} placeholder={ph} value={val(cat, key)} onChange={(e) => champ(cat, key, e.target.value)} />
       </div>
@@ -4370,14 +4372,12 @@ function CategoriesPage({ toast }: { toast: (m: string) => void }): JSX.Element 
         ['seedance', 'Seedance 2.0 — ~0,84 $/scène'],
         ['veo', 'Veo payant — ~1,20 $/scène']
       ])}
-      <div className="cat-row">
-        {nombre(cat, 'maxScenes', 'Scènes max', 1, 60)}
-        {nombre(cat, 'speed', 'Débit de parole', 0.5, 2, '0.05')}
-      </div>
-      <div className="cat-row">
-        {select(cat, 'lang', 'Langue', [['fr', 'Français'], ['en', 'Anglais']])}
-        {select(cat, 'subtitles', 'Sous-titres', [['1', 'Incrustés'], ['0', 'Aucun']])}
-      </div>
+      {/* Plus de paires figées : la grille du panneau place les champs selon la
+          largeur disponible, et les apparie d'elle-même quand il y a la place. */}
+      {nombre(cat, 'maxScenes', 'Scènes max', 1, 60)}
+      {nombre(cat, 'speed', 'Débit de parole', 0.5, 2, '0.05')}
+      {select(cat, 'lang', 'Langue', [['fr', 'Français'], ['en', 'Anglais']])}
+      {select(cat, 'subtitles', 'Sous-titres', [['1', 'Incrustés'], ['0', 'Aucun']])}
       {texte(cat, 'style', 'Style visuel des images', 'ex. photographie cinématographique, lumière chaude et rasante, grain argentique, palette ocre — tenu sur toutes les scènes')}
     </>
   )
@@ -4403,8 +4403,6 @@ function CategoriesPage({ toast }: { toast: (m: string) => void }): JSX.Element 
 
   type Carte = {
     cle: string; cats: string[]; icone: string; titre: string; teinte: string; hint: string
-    /** Nombre de colonnes du détail : deux sections côte à côte, ou une seule. */
-    sections: 1 | 2
     /** Ce que la tuile résume, sans avoir à ouvrir. */
     apercu: [string, { txt: string; perso: boolean }][]
     corps: JSX.Element
@@ -4413,7 +4411,6 @@ function CategoriesPage({ toast }: { toast: (m: string) => void }): JSX.Element 
     {
       cle: 'niche', cats: ['niche', 'carousel'], icone: 'bulb', titre: 'Niches', teinte: 'niche',
       hint: 'Le tout-venant du pilote, sur la niche du compte. Les séries et les sujets imposés suivent ces réglages.',
-      sections: 2,
       apercu: [
         ['Moteur', applique('niche', 'engine')],
         ['Qualité', applique('niche', 'quality')],
@@ -4437,7 +4434,6 @@ function CategoriesPage({ toast }: { toast: (m: string) => void }): JSX.Element 
     {
       cle: 'clip', cats: ['clip'], icone: 'scissors', titre: 'Clips (cut streamer)', teinte: 'clip',
       hint: 'Extraits découpés dans un live ou un reportage. Aucune génération : ces vidéos existent déjà.',
-      sections: 1,
       apercu: [
         ['Candidats', applique('clip', 'clipCount')],
         ['Cadrage', applique('clip', 'reframe')]
@@ -4445,17 +4441,16 @@ function CategoriesPage({ toast }: { toast: (m: string) => void }): JSX.Element 
       corps: (
         <section className="cat-sec">
           {nombre('clip', 'clipCount', 'Candidats par source', 1, 10)}
+          {select('clip', 'reframe', 'Cadrage vertical', [['center', 'Centré'], ['face', 'Suivi du visage']])}
           <div className="muted small cat-note">
             Le pilote n’en publie qu’un — les autres restent en stock, prêts pour les créneaux « clip en stock ».
           </div>
-          {select('clip', 'reframe', 'Cadrage vertical', [['center', 'Centré'], ['face', 'Suivi du visage']])}
         </section>
       )
     },
     {
       cle: 'genai', cats: ['genai'], icone: 'sparkles', titre: 'Génération IA', teinte: 'genai',
       hint: 'Les vidéos lancées à la main. Les sélecteurs de la carte d’idée restent prioritaires sur ces valeurs.',
-      sections: 1,
       apercu: [
         ['Moteur', applique('genai', 'engine')],
         ['Qualité', applique('genai', 'quality')],
@@ -4487,7 +4482,7 @@ function CategoriesPage({ toast }: { toast: (m: string) => void }): JSX.Element 
               de l'écran au moment où l'on modifie un champ. */}
           {dirty && <span className="cat-dirty">Modifications non enregistrées</span>}
         </div>
-        <div className={`card cat-panel${carte.sections === 2 ? ' large' : ''}`}>
+        <div className="card cat-panel">
           <div className="cat-body">{carte.corps}</div>
           {pied(carte.cats, carte.cle)}
         </div>

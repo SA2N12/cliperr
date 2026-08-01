@@ -4700,28 +4700,45 @@ video:-webkit-full-screen {
   background: color-mix(in srgb, var(--cat) 12%, transparent);
   border: 1px solid color-mix(in srgb, var(--cat) 35%, transparent);
 }
-/* Largeur bornée : un champ de formulaire étiré sur 1500 px est illisible.
-   Deux sections → deux colonnes, pour que « Niches » tienne sans défilement. */
+/* Le panneau occupe toute la largeur de la page. Ce sont les CHAMPS qui sont
+   bornés, pas la carte : un sélecteur étiré sur 1400 px serait illisible, alors
+   qu'une grille qui se remplit d'elle-même range autant de champs par ligne que
+   la place le permet. */
 .cat-panel {
-  max-width: 470px;
   padding: 18px 20px 14px;
   border-top: 2px solid var(--cat, var(--border));
 }
-.cat-panel.large {
-  max-width: 840px;
-}
-.cat-panel.large .cat-body {
+.cat-body {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0 26px;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 0 22px;
   align-items: start;
 }
-.cat-sec > .cat-sub:first-child {
+/* Les sections ne sont plus des boîtes : leurs enfants entrent directement dans
+   la grille du panneau. Sans ça, chaque section serait UNE case et ses champs
+   s'empileraient dedans, à côté d'un grand vide. */
+.cat-sec {
+  display: contents;
+}
+/* Un intertitre coupe la grille sur toute sa largeur — c'est ce qui fait lire
+   « Vidéos » puis « Carrousels » comme deux blocs et non comme deux colonnes. */
+.cat-sub {
+  grid-column: 1 / -1;
+}
+.cat-body > .cat-sec:first-child > .cat-sub:first-child {
   margin-top: 0;
 }
-@media (max-width: 900px) {
-  .cat-panel.large .cat-body {
-    grid-template-columns: 1fr;
+/* Descriptions et notes : deux colonnes, sinon le texte est haché. */
+.cat-f.wide {
+  grid-column: span 2;
+}
+.cat-note {
+  grid-column: 1 / -1;
+  max-width: 60ch;
+}
+@media (max-width: 620px) {
+  .cat-f.wide {
+    grid-column: 1 / -1;
   }
 }
 @media (prefers-reduced-motion: reduce) {
