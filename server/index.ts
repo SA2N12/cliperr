@@ -3171,15 +3171,16 @@ app.post('/api/subtitles/preview', async (req, res) => {
     // Fond dégradé sombre → clair : c'est là qu'on juge si le contour tient. Le
     // texte est incrusté en 1080×1920 puis réduit, comme dans la vraie vidéo —
     // incruster sur une image déjà réduite grossirait la police relativement.
-    // Fond : deux pixels empilés puis étirés en 1080×1920 — un dégradé vertical
+    // Fond : deux carrés empilés puis étirés en 1080×1920 — un dégradé vertical
     // sombre → clair, où l'on juge si le contour tient sur les deux moitiés.
     // (`gradients` tire un angle AU HASARD et le fait tourner malgré x0/y0/x1/y1
     //  et speed=0 : le décor changeait à chaque rendu, rendant deux réglages
-    //  impossibles à comparer. Ici le résultat est identique à l'octet près.)
+    //  impossibles à comparer. Ici trois rendus donnent le même octet.)
+    // 2×2 et non 2×1 : ce ffmpeg refuse une hauteur de 1 (« Picture size 2x0 »).
     await run(ctx.bin.ffmpeg, [
       '-y', '-loglevel', 'error',
-      '-f', 'lavfi', '-i', 'color=c=0x0e1a14:s=2x1:r=25:d=4',
-      '-f', 'lavfi', '-i', 'color=c=0xc9cfbc:s=2x1:r=25:d=4',
+      '-f', 'lavfi', '-i', 'color=c=0x0e1a14:s=2x2:r=25:d=4',
+      '-f', 'lavfi', '-i', 'color=c=0xc9cfbc:s=2x2:r=25:d=4',
       '-filter_complex',
       `[0:v][1:v]vstack=inputs=2,scale=1080:1920:flags=bicubic,subtitles=${ass},scale=324:576[o]`,
       '-map', '[o]', '-ss', '1.5', '-frames:v', '1', png
