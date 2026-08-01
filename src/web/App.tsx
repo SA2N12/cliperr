@@ -4382,33 +4382,38 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
       </div>
     )
   }
-  /** Moteur des scènes parlées. Il n'agit QUE sur les vidéos aux scènes animées :
-   *  les épisodes de série et les reproductions. Une vidéo ordinaire est faite
-   *  d'images fixes, sa voix vient du TTS et le moteur vidéo ne tourne jamais
-   *  (video-gen.ts : la branche Veo exige `animateScenes`). Le laisser dans le
-   *  bloc « Vidéos » laissait croire qu'il gouvernait toute la catégorie. */
-  const blocMoteur = (cat: string, quoi: string, note: string): JSX.Element => (
+  /** Réglages réservés aux vidéos à SCÈNES ANIMÉES — les reproductions. Aucun
+   *  des trois n'agit sur une vidéo ordinaire, faite d'images fixes :
+   *   · le moteur et la qualité passent par des chemins qui exigent
+   *     `animateScenes` (video-gen.ts) ;
+   *   · « scènes max » devient `reproMaxScenes`, lu uniquement dans le prompt de
+   *     reproduction — le prompt ordinaire code « 4 à 5 scènes » en dur.
+   *  Les laisser dans le bloc « Vidéos » laissait croire le contraire. */
+  const blocRepro = (cat: string): JSX.Element => (
     <section className="cat-sec">
-      <div className="cat-sub">{quoi}</div>
+      <div className="cat-sub">Reproductions</div>
       {select(cat, 'engine', 'Moteur des scènes parlées', [
         ['seedance', 'Seedance'],
         ['veo', 'Veo — voix natives + vraie synchro labiale'],
         ['pixverse', 'Pixverse — économique'],
         ['wan', 'Wan 2.7 — nos voix + synchro labiale']
       ])}
-      <div className="muted small cat-note">{note}</div>
-    </section>
-  )
-  const blocVideo = (cat: string): JSX.Element => (
-    <>
       {select(cat, 'quality', 'Qualité imposée', [
         ['wan', 'Wan 2.7 — ~0,50 $/scène'],
         ['seedance', 'Seedance 2.0 — ~0,84 $/scène'],
         ['veo', 'Veo payant — ~1,20 $/scène']
       ])}
+      {nombre(cat, 'maxScenes', 'Scènes max', 1, 60)}
+      <div className="muted small cat-note">
+        N’agissent que sur les vidéos reproduites depuis une source, seules à avoir des scènes animées.
+        Une idée lancée normalement donne des images fixes en 4 à 5 scènes, sans moteur vidéo.
+      </div>
+    </section>
+  )
+  const blocVideo = (cat: string): JSX.Element => (
+    <>
       {/* Plus de paires figées : la grille du panneau place les champs selon la
           largeur disponible, et les apparie d'elle-même quand il y a la place. */}
-      {nombre(cat, 'maxScenes', 'Scènes max', 1, 60)}
       {nombre(cat, 'speed', 'Débit de parole', 0.5, 2, '0.05')}
       {select(cat, 'lang', 'Langue', [['fr', 'Français'], ['en', 'Anglais']])}
       {select(cat, 'subtitles', 'Sous-titres', [['1', 'Incrustés'], ['0', 'Aucun']])}
@@ -4445,12 +4450,11 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
     {
       cle: 'niche', cats: ['niche', 'carousel'], icone: 'bulb', titre: 'Niches', teinte: 'niche',
       hint: 'Le tout-venant du pilote, sur la niche du compte. Les séries et les sujets imposés suivent ces réglages.',
-      // L'aperçu montre ce qui gouverne une vidéo ORDINAIRE : le moteur n'y a pas
-      // sa place, il ne concerne que les épisodes de série.
+      // L'aperçu ne montre que ce qui gouverne réellement une vidéo de niche.
       apercu: [
-        ['Qualité', applique('niche', 'quality')],
         ['Langue', applique('niche', 'lang')],
-        ['Scènes max', applique('niche', 'maxScenes')],
+        ['Sous-titres', applique('niche', 'subtitles')],
+        ['Débit', applique('niche', 'speed')],
         ['Diapos', applique('carousel', 'slides')]
       ],
       corps: (
@@ -4493,9 +4497,9 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
       cle: 'genai', cats: ['genai'], icone: 'sparkles', titre: 'Génération IA', teinte: 'genai',
       hint: 'Les vidéos lancées à la main. Les sélecteurs de la carte d’idée restent prioritaires sur ces valeurs.',
       apercu: [
-        ['Qualité', applique('genai', 'quality')],
         ['Langue', applique('genai', 'lang')],
-        ['Scènes max', applique('genai', 'maxScenes')]
+        ['Sous-titres', applique('genai', 'subtitles')],
+        ['Débit', applique('genai', 'speed')]
       ],
       corps: (
         <>
@@ -4503,8 +4507,7 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
             <div className="cat-sub">Vidéos</div>
             {blocVideo('genai')}
           </section>
-          {blocMoteur('genai', 'Reproductions',
-            'N’agit que sur les vidéos reproduites depuis une source, seules à avoir des scènes animées. Une idée lancée normalement n’utilise pas de moteur vidéo.')}
+          {blocRepro('genai')}
         </>
       )
     }
