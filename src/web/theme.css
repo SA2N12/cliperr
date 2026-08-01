@@ -4741,8 +4741,8 @@ video:-webkit-full-screen {
     grid-column: 1 / -1;
   }
 }
-/* Tuile de compte : pas d'aperçu de réglages, donc pas de zone extensible.
-   L'en-tête et le pied se touchent, la carte reste basse. */
+/* Tuile de compte : pas d'aperçu de réglages, donc pas de zone extensible —
+   l'en-tête et le pied se touchent et la carte reste basse. */
 .cat-grid.comptes {
   align-items: start;
 }

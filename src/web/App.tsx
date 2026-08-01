@@ -4235,9 +4235,6 @@ const CAT_MOTS: Record<string, string> = {
  *  « 1 » passé dans CAT_MOTS ressort en « Incrustés » — le libellé des
  *  sous-titres, qui partagent le même code. */
 const CAT_NOMBRES = new Set(['maxScenes', 'speed', 'slides', 'clipCount'])
-/** Les quatre catégories stockées côté serveur — sert à compter les réglages
- *  d'une couche entière (« combien ce compte dévie-t-il ? »). */
-const CATEGORIES_TOUTES = ['niche', 'carousel', 'clip', 'genai']
 function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profiles: PubProfile[] }): JSX.Element {
   const [cfg, setCfg] = useState<Record<string, Record<string, string | number>>>({})
   const [globals, setGlobals] = useState<CatGlobals>({})
@@ -4249,8 +4246,7 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
   // obligeaient à lire chaque champ pour savoir où l'on était ; on choisit
   // d'abord, on règle ensuite.
   const [ouvert, setOuvert] = useState<string | null>(null)
-  // Compte dont on règle les catégories. `null` = l'étape de choix du compte,
-  // `''` = la couche « tous les comptes » dont tous les autres héritent.
+  // Compte dont on règle les catégories. `null` = l'étape de choix du compte.
   const [compte, setCompte] = useState<string | null>(null)
   /** Couche héritée AVANT les globaux : vide en vue tous comptes, la couche
    *  tous comptes quand on regarde un compte précis. */
@@ -4267,8 +4263,8 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
       setGlobals((r as unknown as { globals?: CatGlobals }).globals ?? {})
     }).catch(() => undefined)
   }, [])
-  // `compte` null (étape de choix) charge la couche tous comptes : c'est elle
-  // qu'il faut résumer sur la tuile « Tous les comptes ».
+  // À l'étape de choix, l'appel sans compte ne sert qu'à récupérer `parCompte` :
+  // c'est lui qui dit, sur chaque tuile, si le compte dévie ou non.
   useEffect(() => { charger(compte ?? '') }, [compte, charger])
   // Changer de compte remet à l'étape des catégories : rester dans le détail
   // d'une catégorie tout en basculant de compte ferait croire qu'on règle
@@ -4416,9 +4412,7 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
     return (
       <div className="cat-foot">
         <span className={`cat-count${n ? ' on' : ''}`}>
-          {n === 0
-            ? (compte ? 'Suit « Tous les comptes »' : 'Tout suit les réglages globaux')
-            : `${n} réglage${n > 1 ? 's' : ''} personnalisé${n > 1 ? 's' : ''}`}
+          {n === 0 ? 'Tout suit les réglages globaux' : `${n} réglage${n > 1 ? 's' : ''} personnalisé${n > 1 ? 's' : ''}`}
         </span>
         {n > 0 && !dirty && (
           <button className="btn ghost-sm" disabled={busy === cle} onClick={() => void reinitialiser(cats, cle)}>Réinitialiser</button>
@@ -4490,44 +4484,16 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
   ]
 
   const carte = CARTES.find((c) => c.cle === ouvert) ?? null
-  const nomCompte = compte
-    ? (profiles.find((p) => p.username === compte)?.handle
-      ? `@${profiles.find((p) => p.username === compte)?.handle}`
-      : compte)
-    : 'Tous les comptes'
+  const profilCourant = profiles.find((p) => p.username === compte)
+  const nomCompte = profilCourant?.handle ? `@${profilCourant.handle}` : (compte ?? '')
 
   // ── Étape 1 : à quel compte ces réglages s'appliquent-ils ? ───────────────
   if (compte === null) {
-    const nTous = nbEnregistre(CATEGORIES_TOUTES)
     return (
       <>
         <div className="page-head"><div><h1>Catégories</h1></div></div>
-        {/* `comptes` : chaque tuile prend la hauteur de son contenu. Les tuiles de
-            compte portent moins de texte que « Tous les comptes », les étirer à sa
-            hauteur creusait un vide au milieu. */}
+        {/* `comptes` : chaque tuile prend la hauteur de son contenu. */}
         <div className="cat-grid comptes">
-          <button
-            className="card cat-card cat-tile cat-acc"
-            style={{ '--cat': 'var(--brand)' } as CSSProperties}
-            onClick={() => setCompte('')}
-          >
-            <div className="cat-head">
-              <span className="cat-ico"><Icon name="globe" size={16} /></span>
-              <div>
-                <div className="cat-title">Tous les comptes</div>
-                <div className="muted small cat-hint">Le socle. Chaque compte le suit tant qu’il n’a pas de réglage propre.</div>
-              </div>
-            </div>
-            <div className="cat-tile-foot">
-              <span className={`cat-count${nTous ? ' on' : ''}`}>
-                {nTous === 0 ? 'Tout suit les réglages globaux' : `${nTous} réglage${nTous > 1 ? 's' : ''} personnalisé${nTous > 1 ? 's' : ''}`}
-              </span>
-              <span className="cat-go">
-                Ouvrir
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
-              </span>
-            </div>
-          </button>
           {profiles.map((p) => {
             const n = parCompte[p.username] ?? 0
             return (
@@ -4545,7 +4511,7 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
                 </div>
                 <div className="cat-tile-foot">
                   <span className={`cat-count${n ? ' on' : ''}`}>
-                    {n === 0 ? 'Suit « Tous les comptes »' : `${n} réglage${n > 1 ? 's' : ''} propre${n > 1 ? 's' : ''}`}
+                    {n === 0 ? 'Suit les réglages globaux' : `${n} réglage${n > 1 ? 's' : ''} propre${n > 1 ? 's' : ''}`}
                   </span>
                   <span className="cat-go">
                     Ouvrir
@@ -4642,10 +4608,7 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
                   {dirty
                     ? 'Modifications non enregistrées'
                     : n === 0
-                      // Sur un compte, ce qui n'est pas réglé suit la couche tous
-                      // comptes — pas directement les globaux. Nommer la mauvaise
-                      // source enverrait la changer au mauvais endroit.
-                      ? (compte ? 'Suit « Tous les comptes »' : 'Tout suit les réglages globaux')
+                      ? 'Tout suit les réglages globaux'
                       : `${n} réglage${n > 1 ? 's' : ''} personnalisé${n > 1 ? 's' : ''}`}
                 </span>
                 <span className="cat-go">
