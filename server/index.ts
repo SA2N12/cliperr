@@ -3173,7 +3173,12 @@ app.post('/api/subtitles/preview', async (req, res) => {
     // incruster sur une image déjà réduite grossirait la police relativement.
     await run(ctx.bin.ffmpeg, [
       '-y', '-loglevel', 'error',
-      '-f', 'lavfi', '-i', 'gradients=s=1080x1920:c0=0x101c16:c1=0xbfc7b4:type=linear:d=4',
+      // Direction et vitesse FIXÉES : sans x0/y0/x1/y1 ni speed=0, `gradients`
+      // tire un angle au hasard et le fait tourner. Le fond changeait alors à
+      // chaque rendu, et on ne savait plus si une différence venait du réglage
+      // qu'on venait de toucher ou du décor.
+      '-f', 'lavfi', '-i',
+      'gradients=s=1080x1920:c0=0x0e1a14:c1=0xc9cfbc:nb_colors=2:x0=0:y0=0:x1=0:y1=1920:speed=0:d=4',
       '-vf', `subtitles=${ass},scale=324:576`,
       '-ss', '1.5', '-frames:v', '1', png
     ])
