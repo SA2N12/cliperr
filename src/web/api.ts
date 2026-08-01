@@ -171,7 +171,20 @@ export const api = {
       inherited: Record<string, Record<string, string | number>>
       parCompte: Record<string, number>
       globals: Record<string, string | number>
+      polices: [string, string][]
     }>(`/api/categories${user ? `?user=${encodeURIComponent(user)}` : ''}`),
+  /** Apercu des sous-titres : PNG rendu par ffmpeg + libass, comme la video.
+   *  Renvoie une URL d'objet — a revoquer par l'appelant. */
+  subtitlePreview: async (style: Record<string, string | number>): Promise<string> => {
+    const r = await fetch('/api/subtitles/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify(style)
+    })
+    if (!r.ok) throw new Error((await r.text()).slice(0, 200))
+    return URL.createObjectURL(await r.blob())
+  },
   saveCategory: (category: string, cfg: Record<string, string | number | null>, user?: string) =>
     post<{ ok: boolean; settings: Record<string, Record<string, string | number>> }>('/api/categories', { category, cfg, user: user ?? '' }),
   // Bibliotheque de niches : fiches reutilisables assignees aux comptes.

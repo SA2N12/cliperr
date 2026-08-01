@@ -3,7 +3,7 @@ import cookieParser from 'cookie-parser'
 import multer from 'multer'
 import cron, { type ScheduledTask } from 'node-cron'
 import { mkdirSync, existsSync, readdirSync, rmSync, readFileSync } from 'fs'
-import { mkdir, copyFile, unlink, readdir } from 'fs/promises'
+import { mkdir, copyFile, unlink, readdir, writeFile, readFile } from 'fs/promises'
 import { randomBytes } from 'crypto'
 import { join, basename } from 'path'
 import Anthropic from '@anthropic-ai/sdk'
@@ -11,7 +11,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { appPaths, config, assertConfig, type AppPaths } from './config'
 import { handleLogin, handleLogout, isAuthed, requireAuth } from './auth'
 import { sseHandler, emitProgress, emitLog, emitIdeaVideo } from './sse'
-import { generateVideoFromIdea, chooseMusicTrack, genImageGemini, ttsPreview, listElevenVoices, OPENAI_VOICES } from './video-gen'
+import { generateVideoFromIdea, chooseMusicTrack, genImageGemini, ttsPreview, listElevenVoices, OPENAI_VOICES, sceneAss, subStyle, SUB_DEFAUT, type SubStyle } from './video-gen'
 import { veoQuota } from './veo-quota'
 import { generateCarousel } from './carousel-gen'
 import { uploadPostTikTokPhotos } from '../src/main/publish/uploadpost'
@@ -593,6 +593,7 @@ async function runVideoGen(
       // une scène bascule (erreur/quota Veo), le repli prend les voix ElevenLabs
       // distinctes par personnage (naturelles) au lieu du TTS OpenAI robotique.
       videoEngine: cat.engine || repo.getSetting('series_video_engine') || 'seedance',
+      subStyle: catSubStyle(cat),
       onProgress: (m) => emitIdeaVideo({ ideaId, status: 'running', message: m })
     })
     if (usage) addSpend(model, usage)
@@ -875,6 +876,15 @@ export type CategoryCfg = {
   subtitles?: string
   /** Débit de parole (1 = naturel). */
   speed?: number
+  /** Style des sous-titres incrustés (cf. SubStyle dans video-gen). */
+  subFont?: string
+  subSize?: number
+  subColor?: string
+  subHilite?: string
+  subOutline?: number
+  subGroup?: number
+  subBottom?: number
+  subUpper?: string
   /** Carrousels : nombre de diapos. */
   slides?: number
   /** Clips : nombre de candidats extraits d'une source. */
@@ -889,6 +899,17 @@ export type CategoryCfg = {
 // lancée à la main. Séries et sujets libres ne sont pas des catégories à part —
 // ce sont des vidéos de niche dont on a imposé l'univers ou le sujet.
 const CATEGORIES = ['niche', 'carousel', 'clip', 'genai'] as const
+/** Polices installées dans l'image (cf. Dockerfile). Toute autre valeur serait
+ *  substituée en silence par fontconfig — donc refusée à l'enregistrement. */
+const SUB_POLICES: [string, string][] = [
+  ['Archivo Black', 'Archivo Black — grasse, la plus courante sur TikTok'],
+  ['Anton', 'Anton — condensée, tient les longues phrases'],
+  ['Luckiest Guy', 'Luckiest Guy — cartoon'],
+  ['Fredoka', 'Fredoka — arrondie'],
+  ['Inter', 'Inter — neutre'],
+  ['Comic Neue', 'Comic Neue — manuscrite'],
+  ['Liberation Sans', 'Liberation Sans — sobre']
+]
 function categorySettings(): Record<string, CategoryCfg> {
   try {
     const o = JSON.parse(repo.getSetting('category_settings') || '{}') as Record<string, CategoryCfg>
@@ -905,6 +926,21 @@ function catKeyOf(type?: string): string {
   const t = String(type)
   if (t === 'serie' || t === 'custom' || t === 'niche') return 'niche'
   return t
+}
+/** Style des sous-titres d'une catégorie. Les champs vides sont écartés ici
+ *  plutôt que transmis : `subStyle()` remet alors le défaut, et un réglage vide
+ *  reste indistinguable d'un réglage absent. */
+function catSubStyle(c: CategoryCfg): SubStyle {
+  return {
+    font: c.subFont || undefined,
+    size: c.subSize,
+    color: c.subColor || undefined,
+    hilite: c.subHilite || undefined,
+    outline: c.subOutline,
+    group: c.subGroup,
+    bottom: c.subBottom,
+    upper: c.subUpper == null || c.subUpper === '' ? undefined : c.subUpper !== '0'
+  }
 }
 /** Réglages de catégorie PROPRES À UN COMPTE. Couche facultative : un compte
  *  sans réglage suit à l'identique la catégorie « tous les comptes ». */
@@ -3089,9 +3125,67 @@ app.get('/api/categories', (req, res) => {
       slides: 6,
       clipCount: 1,
       reframe: repo.getSetting('reframe_focus') || 'center',
-      style: ''
-    }
+      style: '',
+      // Sous-titres : le « global » est le défaut historique du moteur, il n'y a
+      // pas de réglage global séparé pour eux.
+      subFont: SUB_DEFAUT.font,
+      subSize: SUB_DEFAUT.size,
+      subColor: SUB_DEFAUT.color,
+      subHilite: SUB_DEFAUT.hilite,
+      subOutline: SUB_DEFAUT.outline,
+      subGroup: SUB_DEFAUT.group,
+      subBottom: SUB_DEFAUT.bottom,
+      subUpper: SUB_DEFAUT.upper ? '1' : '0'
+    },
+    polices: SUB_POLICES
   })
+})
+// Aperçu des sous-titres. Rendu par le MÊME `sceneAss` et le même libass que la
+// vidéo : une imitation en CSS se tromperait sur les métriques de police, le
+// contour et le retour à la ligne — donc montrerait autre chose que le résultat.
+app.post('/api/subtitles/preview', async (req, res) => {
+  const b = (req.body ?? {}) as Record<string, unknown>
+  const st: SubStyle = {
+    font: String(b.subFont ?? '') || undefined,
+    size: b.subSize == null || b.subSize === '' ? undefined : Number(b.subSize),
+    color: String(b.subColor ?? '').replace(/^#/, '') || undefined,
+    hilite: String(b.subHilite ?? '').replace(/^#/, '') || undefined,
+    outline: b.subOutline == null || b.subOutline === '' ? undefined : Number(b.subOutline),
+    group: b.subGroup == null || b.subGroup === '' ? undefined : Number(b.subGroup),
+    bottom: b.subBottom == null || b.subBottom === '' ? undefined : Number(b.subBottom),
+    upper: b.subUpper == null || b.subUpper === '' ? undefined : String(b.subUpper) !== '0'
+  }
+  const phrase = (String(b.text ?? '').trim() || 'Personne ne te le dira jamais mais ça change tout').slice(0, 120)
+  // Un mot par « seconde » : la frame prise à 1,5 s tombe donc sur le 2e mot, qui
+  // s'affiche surligné. On voit les DEUX couleurs d'un coup d'œil.
+  const mots = phrase.split(/\s+/).filter(Boolean)
+  const timed = mots.map((m, i) => ({ text: m, start: i, end: i + 1 }))
+  const dir = join(paths.downloads, 'subprev')
+  await mkdir(dir, { recursive: true })
+  const jeton = randomBytes(6).toString('hex')
+  const ass = join(dir, `${jeton}.ass`)
+  const png = join(dir, `${jeton}.png`)
+  try {
+    await writeFile(ass, sceneAss(phrase, mots.length, timed, st))
+    const ctx = await getContext()
+    // Fond dégradé sombre → clair : c'est là qu'on juge si le contour tient. Le
+    // texte est incrusté en 1080×1920 puis réduit, comme dans la vraie vidéo —
+    // incruster sur une image déjà réduite grossirait la police relativement.
+    await run(ctx.bin.ffmpeg, [
+      '-y', '-loglevel', 'error',
+      '-f', 'lavfi', '-i', 'gradients=s=1080x1920:c0=0x101c16:c1=0xbfc7b4:type=linear:d=4',
+      '-vf', `subtitles=${ass},scale=324:576`,
+      '-ss', '1.5', '-frames:v', '1', png
+    ])
+    res.setHeader('Content-Type', 'image/png')
+    res.setHeader('Cache-Control', 'no-store')
+    res.send(await readFile(png))
+  } catch (e) {
+    res.status(500).json({ error: e instanceof Error ? e.message : String(e) })
+  } finally {
+    await unlink(ass).catch(() => undefined)
+    await unlink(png).catch(() => undefined)
+  }
 })
 app.post('/api/categories', (req, res) => {
   const b = (req.body ?? {}) as { category?: unknown; cfg?: Record<string, unknown>; user?: unknown }
@@ -3107,7 +3201,7 @@ app.post('/api/categories', (req, res) => {
   // Chaîne vide / null = « suivre le réglage global » : on EFFACE la clé plutôt
   // que d'enregistrer une valeur vide, sinon on ne distinguerait plus « non
   // réglé » de « réglé à vide ».
-  const setStr = (k: 'quality' | 'engine' | 'lang' | 'subtitles' | 'reframe', autorises?: string[]): void => {
+  const setStr = (k: 'quality' | 'engine' | 'lang' | 'subtitles' | 'reframe' | 'subFont' | 'subUpper', autorises?: string[]): void => {
     if (!(k in c)) return
     const v = String(c[k] ?? '').trim()
     if (!v || (autorises && !autorises.includes(v))) delete cur[k]
@@ -3138,6 +3232,29 @@ app.post('/api/categories', (req, res) => {
     else delete cur.clipCount
   }
   setStr('reframe', ['center', 'face'])
+  // ── Style des sous-titres ────────────────────────────────────────────────
+  setStr('subFont', SUB_POLICES.map(([v]) => v))
+  setStr('subUpper', ['0', '1'])
+  const setCouleur = (k: 'subColor' | 'subHilite'): void => {
+    if (!(k in c)) return
+    // On accepte « #FFCC00 » comme « ffcc00 » : le champ web envoie l'un, une
+    // saisie manuelle l'autre.
+    const v = String(c[k] ?? '').trim().replace(/^#/, '').toUpperCase()
+    if (/^[0-9A-F]{6}$/.test(v)) cur[k] = v
+    else delete cur[k]
+  }
+  setCouleur('subColor')
+  setCouleur('subHilite')
+  const setNb = (k: 'subSize' | 'subOutline' | 'subGroup' | 'subBottom', min: number, max: number): void => {
+    if (!(k in c)) return
+    const v = Math.round(Number(c[k]))
+    if (Number.isFinite(v) && v >= min && v <= max) cur[k] = v
+    else delete cur[k]
+  }
+  setNb('subSize', 30, 200)
+  setNb('subOutline', 0, 20)
+  setNb('subGroup', 1, 8)
+  setNb('subBottom', 40, 1500)
   if ('style' in c) {
     const v = String(c.style ?? '').trim().slice(0, 600)
     if (v) cur.style = v

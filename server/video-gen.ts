@@ -79,6 +79,8 @@ export interface VideoGenOptions {
   publishPublic?: (localPath: string) => Promise<{ url: string; cleanup: () => Promise<void> } | null>
   /** Plafond de scènes d'une reproduction (défaut 8, borné 4-24). */
   reproMaxScenes?: number
+  /** Style des sous-titres incrustés. Absent = défauts historiques. */
+  subStyle?: SubStyle
   /** Langue des dialogues/voix : 'fr' (défaut) ou 'en'. En anglais, les voix
    *  natives des modèles (Veo, Seedance) sonnent parfaitement — et Seedance
    *  (moins cher que Veo) devient utilisable comme moteur de scènes parlées. */
@@ -1129,17 +1131,71 @@ async function speechWordTimings(
 
 // ── Sous-titres style TikTok : groupes de 3 MOTS, TOUT EN MAJUSCULES, police
 // grasse à contour noir, et le mot en cours de prononciation affiché en JAUNE. ──
-const SUB_GROUP = 3
-/** Police des sous-titres : grotesque très grasse, comme les gros comptes TikTok.
- *  Autres polices installées si besoin : 'Anton' (condensée), 'Luckiest Guy' et
- *  'Fredoka' (cartoon), 'Inter'. */
-const SUB_FONT = 'Archivo Black'
-// Surlignement du mot prononcé : sa couleur passe au JAUNE (le reste du groupe
-// reste blanc). Couleurs ASS = &HBBGGRR& → jaune = 00FFFF, blanc = FFFFFF.
-const SUB_HILITE = '{\\c&H00FFFF&}'
-const SUB_NORMAL = '{\\c&HFFFFFF&}'
+/** Style des sous-titres, personnalisable par catégorie. Toute valeur absente
+ *  reprend le défaut historique : un réglage vide ne doit rien changer au rendu. */
+export type SubStyle = {
+  /** Police installée dans l'image (cf. Dockerfile). */
+  font?: string
+  size?: number
+  /** Couleurs en RRGGBB (comme le web) — converties en BBGGRR pour l'ASS. */
+  color?: string
+  hilite?: string
+  outline?: number
+  /** Mots affichés ensemble. */
+  group?: number
+  /** Distance au bas de l'image, en pixels d'une vidéo 1080×1920. */
+  bottom?: number
+  upper?: boolean
+}
+export const SUB_DEFAUT: Required<SubStyle> = {
+  // Grotesque très grasse, comme les gros comptes TikTok. Autres polices
+  // installées : Anton (condensée), Luckiest Guy et Fredoka (cartoon), Inter.
+  font: 'Archivo Black',
+  size: 86,
+  color: 'FFFFFF',
+  // Le mot prononcé passe au jaune, le reste du groupe reste blanc.
+  hilite: 'FFFF00',
+  outline: 6,
+  group: 3,
+  bottom: 430,
+  upper: true
+}
+/** RRGGBB (web) → BBGGRR (ASS). Inverser les octets est tout ce qui les sépare. */
+function assColor(rgb: string): string {
+  const h = /^[0-9a-f]{6}$/i.test(rgb) ? rgb : SUB_DEFAUT.color
+  return `${h.slice(4, 6)}${h.slice(2, 4)}${h.slice(0, 2)}`.toUpperCase()
+}
+/** Complète un style partiel, en écartant les valeurs hors bornes. */
+export function subStyle(s?: SubStyle | null): Required<SubStyle> {
+  const n = (v: unknown, def: number, min: number, max: number): number => {
+    const x = Number(v)
+    return Number.isFinite(x) && x >= min && x <= max ? x : def
+  }
+  return {
+    font: (s?.font || '').trim() || SUB_DEFAUT.font,
+    size: n(s?.size, SUB_DEFAUT.size, 30, 200),
+    color: /^[0-9a-f]{6}$/i.test(s?.color ?? '') ? (s?.color as string) : SUB_DEFAUT.color,
+    hilite: /^[0-9a-f]{6}$/i.test(s?.hilite ?? '') ? (s?.hilite as string) : SUB_DEFAUT.hilite,
+    outline: n(s?.outline, SUB_DEFAUT.outline, 0, 20),
+    group: Math.round(n(s?.group, SUB_DEFAUT.group, 1, 8)),
+    bottom: Math.round(n(s?.bottom, SUB_DEFAUT.bottom, 40, 1500)),
+    upper: s?.upper ?? SUB_DEFAUT.upper
+  }
+}
 
-function sceneAss(text: string, durationSec: number, timed?: { text: string; start: number; end: number }[] | null): string {
+export function sceneAss(
+  text: string,
+  durationSec: number,
+  timed?: { text: string; start: number; end: number }[] | null,
+  style?: SubStyle | null
+): string {
+  const st = subStyle(style)
+  const SUB_GROUP = st.group
+  const SUB_HILITE = `{\\c&H${assColor(st.hilite)}&}`
+  const SUB_NORMAL = `{\\c&H${assColor(st.color)}&}`
+  /** Majuscules optionnelles : certains styles (Fredoka, Inter) se lisent mieux
+   *  en casse normale, et le forçage cassait les sigles. */
+  const casse = (s: string): string => (st.upper ? s.toUpperCase() : s)
   const header = `[Script Info]
 ScriptType: v4.00+
 PlayResX: 1080
@@ -1148,7 +1204,7 @@ WrapStyle: 0
 ScaledBorderAndShadow: yes
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BackColour, Bold, Italic, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV
-Style: Def,${SUB_FONT},86,&H00FFFFFF,&H00000000,&H00000000,1,0,1,6,0,2,90,90,430
+Style: Def,${st.font},${st.size},&H00${assColor(st.color)},&H00000000,&H00000000,1,0,1,${st.outline},0,2,90,90,${st.bottom}
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
 
@@ -1164,7 +1220,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
   // Timings RÉELS (Whisper sur l'audio de la scène) : chaque mot se colore
   // exactement quand il est prononcé, et le groupe reste affiché entre-temps.
   if (timed && timed.length) {
-    const words = timed.map((w) => ({ ...w, text: assEscape(w.text).toUpperCase() })).filter((w) => w.text)
+    const words = timed.map((w) => ({ ...w, text: casse(assEscape(w.text)) })).filter((w) => w.text)
     const lines: string[] = []
     for (let g = 0; g < words.length; g += SUB_GROUP) {
       const group = words.slice(g, g + SUB_GROUP)
@@ -1182,7 +1238,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
   }
 
   // Repli sans timings : répartition proportionnelle à la longueur des mots.
-  const words = assEscape(text).toUpperCase().split(/\s+/).filter(Boolean)
+  const words = casse(assEscape(text)).split(/\s+/).filter(Boolean)
   if (!words.length) return header
   const weights = words.map((w) => Math.max(2, w.length))
   const total = weights.reduce((a, b) => a + b, 0)
@@ -1423,7 +1479,7 @@ NO TEXT — CRITICAL: nothing written anywhere in the frame. No subtitles, no ca
           // l'écoutant. Sans ce calage, les mots défilaient sur toute la durée du
           // clip (silences compris) → décalage très visible.
           const timed = await speechWordTimings(ctx, clip, work, i, { deepinfraKey: opts.deepinfraKey, groqKey: opts.groqKey }, log)
-          await writeFile(ass, sceneAss(subText, clipDur, timed))
+          await writeFile(ass, sceneAss(subText, clipDur, timed, opts.subStyle))
           await run(ctx.bin.ffmpeg, [
             '-y', '-loglevel', 'error',
             '-i', clip,
@@ -1572,7 +1628,7 @@ NO TEXT — CRITICAL: nothing written anywhere in the frame. No subtitles, no ca
       const timedTts = opts.mute
         ? null
         : await speechWordTimings(ctx, mp3, work, i, { deepinfraKey: opts.deepinfraKey, groqKey: opts.groqKey }, log)
-      await writeFile(ass, sceneAss(subText, dur, timedTts))
+      await writeFile(ass, sceneAss(subText, dur, timedTts, opts.subStyle))
       if (animClip && opts.mute) {
         // Source MUETTE : aucune voix à caler → on garde le clip TEL QUEL (pas de
         // setpts) avec SA piste d'ambiance si le modèle en a produit une ; sinon
@@ -1580,7 +1636,7 @@ NO TEXT — CRITICAL: nothing written anywhere in the frame. No subtitles, no ca
         // (le concat final l'exige).
         const clipDur = await mediaDuration(ctx.bin.ffprobe, animClip)
         const ambient = await hasAudioStream(ctx.bin.ffprobe, animClip)
-        await writeFile(ass, sceneAss(subText, clipDur)) // muet : aucune parole à caler
+        await writeFile(ass, sceneAss(subText, clipDur, null, opts.subStyle)) // muet : aucune parole à caler
         await run(ctx.bin.ffmpeg, [
           '-y', '-loglevel', 'error',
           '-i', animClip,
@@ -1604,7 +1660,7 @@ NO TEXT — CRITICAL: nothing written anywhere in the frame. No subtitles, no ca
         // (garantie présente et déjà celle sur laquelle la bouche a été calée).
         const clipDur = await mediaDuration(ctx.bin.ffprobe, animClip)
         // Même voix TTS que ci-dessus → on réutilise ses timings réels.
-        await writeFile(ass, sceneAss(subText, clipDur, timedTts))
+        await writeFile(ass, sceneAss(subText, clipDur, timedTts, opts.subStyle))
         await run(ctx.bin.ffmpeg, [
           '-y', '-loglevel', 'error',
           '-i', animClip,

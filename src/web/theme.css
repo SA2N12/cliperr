@@ -4796,3 +4796,124 @@ video:-webkit-full-screen {
     transform: none;
   }
 }
+
+/* ── Sous-titres : champs à gauche, aperçu à droite ────────────────────────
+   L'aperçu est au format 9:16 : le poser sous le formulaire faisait déborder
+   le panneau de l'écran. En colonne, la hauteur totale reste celle du plus
+   grand des deux au lieu de leur somme. */
+.cat-panel-in.avec-apercu {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 270px;
+  gap: 0 26px;
+  align-items: start;
+}
+.cat-prev {
+  position: sticky;
+  top: 8px;
+}
+.cat-prev-t {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted-2);
+  margin-bottom: 8px;
+}
+.cat-prev-box {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 9 / 16;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.cat-prev-box img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+/* Rendu en cours : on ternit l'image PRÉCÉDENTE au lieu de la retirer — un
+   cadre vide entre deux frappes ferait clignoter tout le panneau. */
+.cat-prev-box.load img {
+  opacity: 0.45;
+  transition: opacity 0.15s ease;
+}
+.cat-prev-box.load::after {
+  content: '';
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--muted-2);
+  border-top-color: var(--brand);
+  border-radius: 50%;
+  animation: cat-spin 0.7s linear infinite;
+}
+@keyframes cat-spin {
+  to { transform: rotate(360deg); }
+}
+.cat-prev-err {
+  padding: 12px;
+  font-size: 12px;
+  color: var(--bad);
+  text-align: center;
+}
+.cat-prev-n {
+  margin-top: 8px;
+  line-height: 1.35;
+}
+
+/* Champ couleur : pastille + code, et retour à l'hérité. */
+.cat-col {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cat-col input[type='color'] {
+  width: 38px;
+  height: 34px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  background: var(--panel);
+  cursor: pointer;
+}
+.cat-col-hex {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+}
+.cat-col-x {
+  margin-left: auto;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: var(--muted-2);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1;
+  padding: 4px 2px;
+  cursor: pointer;
+}
+.cat-col-x:hover {
+  color: var(--text);
+}
+@media (max-width: 980px) {
+  .cat-panel-in.avec-apercu {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+  .cat-prev {
+    position: static;
+    max-width: 270px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cat-prev-box.load::after {
+    animation: none;
+  }
+}

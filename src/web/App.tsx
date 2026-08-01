@@ -4234,7 +4234,9 @@ const CAT_MOTS: Record<string, string> = {
 /** Réglages dont la valeur est un NOMBRE et non un code. Sans cette liste, un
  *  « 1 » passé dans CAT_MOTS ressort en « Incrustés » — le libellé des
  *  sous-titres, qui partagent le même code. */
-const CAT_NOMBRES = new Set(['maxScenes', 'speed', 'slides', 'clipCount'])
+const CAT_NOMBRES = new Set(['maxScenes', 'speed', 'slides', 'clipCount', 'subSize', 'subOutline', 'subGroup', 'subBottom'])
+/** Champs du style de sous-titres, dans l'ordre envoyé à l'aperçu. */
+const SUB_CLES = ['subFont', 'subSize', 'subColor', 'subHilite', 'subOutline', 'subGroup', 'subBottom', 'subUpper']
 function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profiles: PubProfile[] }): JSX.Element {
   const [cfg, setCfg] = useState<Record<string, Record<string, string | number>>>({})
   const [globals, setGlobals] = useState<CatGlobals>({})
@@ -4253,6 +4255,16 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
   const [inherited, setInherited] = useState<Record<string, Record<string, string | number>>>({})
   /** Nombre de déviations par compte — pour l'étape de choix. */
   const [parCompte, setParCompte] = useState<Record<string, number>>({})
+  /** Polices réellement installées côté serveur : la liste vient de lui, sinon
+   *  on proposerait une police que fontconfig remplacerait en silence. */
+  const [polices, setPolices] = useState<[string, string][]>([])
+  /** Aperçu des sous-titres, rendu par le serveur. */
+  const [apercuSub, setApercuSub] = useState<{ url: string; err: string } | null>(null)
+  const [apercuEnCours, setApercuEnCours] = useState(false)
+  // L'URL d'objet du PNG précédent doit être révoquée à la main, sinon chaque
+  // frappe laisse un blob en mémoire jusqu'au rechargement de la page.
+  const urlApercu = useRef('')
+  useEffect(() => () => { if (urlApercu.current) URL.revokeObjectURL(urlApercu.current) }, [])
 
   const charger = useCallback((u: string): void => {
     api.categories(u).then((r) => {
@@ -4260,6 +4272,7 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
       setRef(r.settings ?? {})
       setInherited(r.inherited ?? {})
       setParCompte(r.parCompte ?? {})
+      setPolices(r.polices ?? [])
       setGlobals((r as unknown as { globals?: CatGlobals }).globals ?? {})
     }).catch(() => undefined)
   }, [])
@@ -4410,6 +4423,40 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
       </div>
     </section>
   )
+  /** Couleur : le champ natif exige TOUJOURS une valeur, il ne sait pas dire
+   *  « hérité ». On l'initialise donc sur la valeur héritée et on ajoute un
+   *  bouton pour y revenir — sans lui, ouvrir le sélecteur suffirait à figer
+   *  une personnalisation qu'on n'a jamais voulue. */
+  const couleur = (cat: string, key: string, label: string): JSX.Element => {
+    const perso = val(cat, key) !== ''
+    const h = String(inherited[cat]?.[key] ?? globals[key] ?? 'FFFFFF').replace(/^#/, '')
+    const hex = (val(cat, key) || h).replace(/^#/, '').toUpperCase()
+    return (
+      <div className={`cat-f${perso ? ' on' : ''}`}>
+        <label className="cat-lbl">{label}{perso && <span className="cat-dot" title="Personnalisé pour cette catégorie" />}</label>
+        <div className="cat-col">
+          <input type="color" value={`#${hex}`} onChange={(e) => champ(cat, key, e.target.value.replace(/^#/, '').toUpperCase())} />
+          <span className="cat-col-hex">#{hex}</span>
+          {perso && (
+            <button className="cat-col-x" title="Revenir à la valeur héritée" onClick={() => champ(cat, key, '')}>↺</button>
+          )}
+        </div>
+      </div>
+    )
+  }
+  const blocSousTitres = (cat: string): JSX.Element => (
+    <section className="cat-sec">
+      <div className="cat-sub">Sous-titres</div>
+      {select(cat, 'subFont', 'Police', polices)}
+      {nombre(cat, 'subSize', 'Taille', 30, 200)}
+      {select(cat, 'subUpper', 'Casse', [['1', 'MAJUSCULES'], ['0', 'Normale']])}
+      {nombre(cat, 'subGroup', 'Mots affichés ensemble', 1, 8)}
+      {nombre(cat, 'subOutline', 'Épaisseur du contour', 0, 20)}
+      {nombre(cat, 'subBottom', 'Hauteur depuis le bas', 40, 1500)}
+      {couleur(cat, 'subColor', 'Couleur du texte')}
+      {couleur(cat, 'subHilite', 'Mot prononcé')}
+    </section>
+  )
   const blocVideo = (cat: string): JSX.Element => (
     <>
       {/* Plus de paires figées : la grille du panneau place les champs selon la
@@ -4463,6 +4510,7 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
             <div className="cat-sub">Vidéos</div>
             {blocVideo('niche')}
           </section>
+          {blocSousTitres('niche')}
           {/* Pas de moteur vidéo ici : une vidéo de niche est faite d'images
               fixes, sa voix vient du TTS et le moteur ne tourne jamais. Les
               épisodes de série, eux, lisent cette catégorie et ont bien des
@@ -4507,6 +4555,7 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
             <div className="cat-sub">Vidéos</div>
             {blocVideo('genai')}
           </section>
+          {blocSousTitres('genai')}
           {blocRepro('genai')}
         </>
       )
@@ -4514,6 +4563,37 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
   ]
 
   const carte = CARTES.find((c) => c.cle === ouvert) ?? null
+
+  // ── Aperçu des sous-titres ────────────────────────────────────────────────
+  // Le style envoyé est le style EFFECTIF (personnalisation, sinon héritage) :
+  // un aperçu qui n'enverrait que les surcharges retomberait sur les défauts du
+  // moteur et montrerait autre chose que ce qui sera incrusté.
+  const catSub = carte && (carte.cle === 'niche' || carte.cle === 'genai') ? carte.cle : null
+  const cleSub = catSub
+    ? JSON.stringify(Object.fromEntries(SUB_CLES.map((k) => {
+      const v = val(catSub, k)
+      return [k, v !== '' ? v : String(inherited[catSub]?.[k] ?? globals[k] ?? '')]
+    })))
+    : ''
+  useEffect(() => {
+    if (!cleSub) return
+    let vivant = true
+    setApercuEnCours(true)
+    // Débounce : sans lui, glisser le sélecteur de couleur lancerait un ffmpeg
+    // par pixel parcouru.
+    const t = window.setTimeout(() => {
+      api.subtitlePreview(JSON.parse(cleSub) as Record<string, string>)
+        .then((url) => {
+          if (!vivant) { URL.revokeObjectURL(url); return }
+          if (urlApercu.current) URL.revokeObjectURL(urlApercu.current)
+          urlApercu.current = url
+          setApercuSub({ url, err: '' })
+        })
+        .catch((e: Error) => { if (vivant) setApercuSub({ url: '', err: e.message }) })
+        .finally(() => { if (vivant) setApercuEnCours(false) })
+    }, 400)
+    return () => { vivant = false; window.clearTimeout(t) }
+  }, [cleSub])
   const profilCourant = profiles.find((p) => p.username === compte)
   const nomCompte = profilCourant?.handle ? `@${profilCourant.handle}` : (compte ?? '')
 
@@ -4588,7 +4668,23 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
           {dirty && <span className="cat-dirty">Modifications non enregistrées</span>}
         </div>
         <div className="card cat-panel">
-          <div className="cat-body">{carte.corps}</div>
+          <div className={`cat-panel-in${catSub ? ' avec-apercu' : ''}`}>
+            <div className="cat-body">{carte.corps}</div>
+            {catSub && (
+              <aside className="cat-prev">
+                <div className="cat-prev-t">Aperçu</div>
+                <div className={`cat-prev-box${apercuEnCours ? ' load' : ''}`}>
+                  {apercuSub?.url && <img src={apercuSub.url} alt="Rendu des sous-titres" />}
+                  {apercuSub?.err && <div className="cat-prev-err">{apercuSub.err}</div>}
+                </div>
+                {/* On dit ce que l'image est et ce qu'elle n'est pas : une frame
+                    réelle, prise au moment où le 2e mot est prononcé. */}
+                <div className="muted small cat-prev-n">
+                  Image rendue par le serveur, comme la vidéo. Arrêtée sur le 2<sup>e</sup> mot pour montrer les deux couleurs.
+                </div>
+              </aside>
+            )}
+          </div>
           {pied(carte.cats, carte.cle)}
         </div>
       </div>
