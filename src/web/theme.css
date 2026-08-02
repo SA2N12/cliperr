@@ -4720,8 +4720,11 @@ video:-webkit-full-screen {
 }
 .cat-body {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-  gap: 0 22px;
+  /* 190 et non 230 : la section « Sous-titres » compte 9 champs, ce qui tenait
+     sur 3 rangées de 4 dont une à un seul élément. Une colonne de plus les met
+     sur 2 rangées et fait tenir le panneau sans défilement. */
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0 20px;
   align-items: start;
 }
 /* Les sections ne sont plus des boîtes : leurs enfants entrent directement dans
