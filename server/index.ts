@@ -880,6 +880,8 @@ export type CategoryCfg = {
   subStyleId?: string
   /** Style VISUEL choisi. Vide = celui par défaut de la catégorie. */
   imgStyleId?: string
+  /** Réglage nommé choisi. Vide = celui par défaut de la catégorie. */
+  presetId?: string
   /** Surcharges ponctuelles par-dessus ce style (cf. SubStyle dans video-gen). */
   subFont?: string
   subSize?: number
@@ -1006,6 +1008,50 @@ function catImgStyle(c: CategoryCfg, catKey: string): string {
 function imgStylePreviewPath(id: string): string {
   return join(paths.downloads, 'imgstyles', `${id.replace(/[^a-z0-9]/gi, '')}.png`)
 }
+
+// ── Réglages nommés ────────────────────────────────────────────────────────
+// Troisième bibliothèque, sur le même modèle que les styles : les paramètres
+// eux-mêmes deviennent des fiches nommées, réutilisables d'un compte à l'autre.
+// Chaque catégorie a les siens — régler un carrousel n'a rien à voir avec
+// régler un découpage.
+const CAT_PARAMS: Record<string, string[]> = {
+  niche: ['speed', 'lang', 'subtitles'],
+  carousel: ['slides'],
+  clip: ['clipCount', 'reframe'],
+  genai: ['speed', 'lang', 'subtitles', 'engine', 'quality', 'maxScenes']
+}
+export type NamedPreset = { id: string; name: string } & Partial<CategoryCfg>
+type PresetLib = { presets: NamedPreset[]; defaultId: string }
+function paramPresets(): Record<string, PresetLib> {
+  const vide = (): Record<string, PresetLib> =>
+    Object.fromEntries(Object.keys(CAT_PARAMS).map((c) => [c, { presets: [], defaultId: '' }]))
+  try {
+    const o = JSON.parse(repo.getSetting('param_presets') || '{}') as Record<string, Partial<PresetLib>>
+    const out = vide()
+    for (const c of Object.keys(CAT_PARAMS)) {
+      const l = o[c]
+      if (l && Array.isArray(l.presets)) out[c] = { presets: l.presets, defaultId: String(l.defaultId ?? '') }
+    }
+    return out
+  } catch {
+    return vide()
+  }
+}
+function presetLibDe(cat: string): PresetLib {
+  return paramPresets()[cat] ?? { presets: [], defaultId: '' }
+}
+/** Valeurs qu'apporte le réglage nommé d'une catégorie, avant toute surcharge. */
+function presetOf(c: CategoryCfg, catKey: string): Partial<CategoryCfg> {
+  const lib = presetLibDe(catKey)
+  const voulu = c.presetId
+    ? lib.presets.find((p) => p.id === c.presetId)
+    : lib.presets.find((p) => p.id === lib.defaultId)
+  if (!voulu) return {}
+  const { id: _id, name: _name, ...reste } = voulu
+  // Un champ vide dans une fiche = « suivre le global » : on ne le transmet pas,
+  // sinon il écraserait le global par du vide.
+  return Object.fromEntries(Object.entries(reste).filter(([, v]) => v !== '' && v != null))
+}
 /** Style qu'une catégorie applique AVANT ses propres surcharges : celui qu'elle
  *  a choisi, sinon le style par défaut de SA bibliothèque, sinon rien. */
 function baseSubStyle(c: CategoryCfg, catKey: string): SubStyle {
@@ -1051,8 +1097,10 @@ function categorySettingsByUser(): Record<string, Record<string, CategoryCfg>> {
 function catCfg(type?: string, user?: string): CategoryCfg {
   const k = catKeyOf(type)
   const base = categorySettings()[k] ?? {}
-  if (!user) return base
-  return { ...base, ...(categorySettingsByUser()[user]?.[k] ?? {}) }
+  const propre = user ? { ...base, ...(categorySettingsByUser()[user]?.[k] ?? {}) } : base
+  // Le réglage nommé passe SOUS les valeurs posées directement : il fournit le
+  // socle, une surcharge ponctuelle garde le dernier mot.
+  return { ...presetOf(propre, k), ...propre }
 }
 
 type SlotOverride = { hm?: number; type?: string; subject?: string; music?: string; from?: string; stockPick?: string; stockKinds?: string }
@@ -3231,7 +3279,9 @@ app.get('/api/categories', (req, res) => {
     },
     polices: SUB_POLICES,
     stylesParCat: subtitleStyles(),
-    imgStylesParCat: imageStyles()
+    imgStylesParCat: imageStyles(),
+    presetsParCat: paramPresets(),
+    champsParCat: CAT_PARAMS
   })
 })
 // ── Bibliothèque de styles de sous-titres ──────────────────────────────────
@@ -3304,6 +3354,85 @@ app.delete('/api/subtitle-styles/:category/:id', (req, res) => {
   const nettoie = (m: Record<string, CategoryCfg>): boolean => {
     let touche = false
     for (const c of Object.values(m)) if (c.subStyleId === id) { delete c.subStyleId; touche = true }
+    return touche
+  }
+  const tous = categorySettings()
+  if (nettoie(tous)) repo.setSetting('category_settings', JSON.stringify(tous))
+  const parUser = categorySettingsByUser()
+  let bouge = false
+  for (const m of Object.values(parUser)) if (nettoie(m)) bouge = true
+  if (bouge) repo.setSetting('category_settings_by_user', JSON.stringify(parUser))
+  res.json({ ok: true, parCategorie: toutes })
+})
+
+// ── Bibliothèque de réglages nommés ────────────────────────────────────────
+app.get('/api/param-presets', (_req, res) => {
+  res.json({ parCategorie: paramPresets(), champs: CAT_PARAMS })
+})
+app.post('/api/param-presets', (req, res) => {
+  const b = (req.body ?? {}) as Record<string, unknown>
+  const cat = String(b.category ?? '')
+  if (!CAT_PARAMS[cat]) return res.status(400).json({ error: 'Catégorie sans réglages' })
+  const nom = String(b.name ?? '').trim().slice(0, 60)
+  if (!nom) return res.status(400).json({ error: 'Nom requis' })
+  const toutes = paramPresets()
+  const lib = toutes[cat]
+  const id = String(b.id ?? '').trim() || `p${Date.now().toString(36)}${randomBytes(3).toString('hex')}`
+  // On ne recopie QUE les champs de cette catégorie : une fiche de carrousel
+  // n'a pas à trimballer une langue qu'elle n'utilisera jamais.
+  const cfg = (b.cfg ?? {}) as Record<string, unknown>
+  const fiche: NamedPreset = { id, name: nom }
+  const num = (k: string, min: number, max: number, entier = true): void => {
+    const brut = String(cfg[k] ?? '').trim()
+    if (brut === '') return
+    const v = entier ? Math.round(Number(brut)) : Number(brut)
+    if (Number.isFinite(v) && v >= min && v <= max) (fiche as Record<string, unknown>)[k] = v
+  }
+  const enu = (k: string, ok: string[]): void => {
+    const v = String(cfg[k] ?? '').trim()
+    if (ok.includes(v)) (fiche as Record<string, unknown>)[k] = v
+  }
+  for (const k of CAT_PARAMS[cat]) {
+    if (k === 'speed') num('speed', 0.5, 2, false)
+    else if (k === 'maxScenes') num('maxScenes', 1, 60)
+    else if (k === 'slides') num('slides', 3, 10)
+    else if (k === 'clipCount') num('clipCount', 1, 10)
+    else if (k === 'lang') enu('lang', ['fr', 'en'])
+    else if (k === 'subtitles') enu('subtitles', ['0', '1'])
+    else if (k === 'reframe') enu('reframe', ['center', 'face'])
+    else if (k === 'engine') enu('engine', ['seedance', 'veo', 'pixverse', 'wan'])
+    else if (k === 'quality') enu('quality', ['wan', 'seedance', 'veo'])
+  }
+  const i = lib.presets.findIndex((p) => p.id === id)
+  if (i >= 0) lib.presets[i] = fiche
+  else lib.presets.push(fiche)
+  if (!lib.presets.some((p) => p.id === lib.defaultId)) lib.defaultId = lib.presets[0].id
+  repo.setSetting('param_presets', JSON.stringify(toutes))
+  res.json({ ok: true, parCategorie: toutes })
+})
+app.post('/api/param-presets/default', (req, res) => {
+  const b = (req.body ?? {}) as { id?: unknown; category?: unknown }
+  const cat = String(b.category ?? '')
+  if (!CAT_PARAMS[cat]) return res.status(400).json({ error: 'Catégorie sans réglages' })
+  const id = String(b.id ?? '')
+  const toutes = paramPresets()
+  if (!toutes[cat].presets.some((p) => p.id === id)) return res.status(400).json({ error: 'Réglage inconnu' })
+  toutes[cat].defaultId = id
+  repo.setSetting('param_presets', JSON.stringify(toutes))
+  res.json({ ok: true, parCategorie: toutes })
+})
+app.delete('/api/param-presets/:category/:id', (req, res) => {
+  const cat = String(req.params.category ?? '')
+  if (!CAT_PARAMS[cat]) return res.status(400).json({ error: 'Catégorie sans réglages' })
+  const id = String(req.params.id ?? '')
+  const toutes = paramPresets()
+  const lib = toutes[cat]
+  lib.presets = lib.presets.filter((p) => p.id !== id)
+  if (!lib.presets.some((p) => p.id === lib.defaultId)) lib.defaultId = lib.presets[0]?.id ?? ''
+  repo.setSetting('param_presets', JSON.stringify(toutes))
+  const nettoie = (m: Record<string, CategoryCfg>): boolean => {
+    let touche = false
+    for (const c of Object.values(m)) if (c.presetId === id) { delete c.presetId; touche = true }
     return touche
   }
   const tous = categorySettings()
@@ -3480,7 +3609,7 @@ app.post('/api/categories', (req, res) => {
   // Chaîne vide / null = « suivre le réglage global » : on EFFACE la clé plutôt
   // que d'enregistrer une valeur vide, sinon on ne distinguerait plus « non
   // réglé » de « réglé à vide ».
-  const setStr = (k: 'quality' | 'engine' | 'lang' | 'subtitles' | 'reframe' | 'subFont' | 'subUpper' | 'subStyleId' | 'imgStyleId', autorises?: string[]): void => {
+  const setStr = (k: 'quality' | 'engine' | 'lang' | 'subtitles' | 'reframe' | 'subFont' | 'subUpper' | 'subStyleId' | 'imgStyleId' | 'presetId', autorises?: string[]): void => {
     if (!(k in c)) return
     const v = String(c[k] ?? '').trim()
     if (!v || (autorises && !autorises.includes(v))) delete cur[k]
@@ -3520,6 +3649,7 @@ app.post('/api/categories', (req, res) => {
   // niche n'a rien à faire sur une génération IA.
   setStr('subStyleId', libDe(cat).styles.map((s) => s.id))
   setStr('imgStyleId', imgLibDe(cat).styles.map((s) => s.id))
+  setStr('presetId', presetLibDe(cat).presets.map((p) => p.id))
   const setCouleur = (k: 'subColor' | 'subHilite'): void => {
     if (!(k in c)) return
     // On accepte « #FFCC00 » comme « ffcc00 » : le champ web envoie l'un, une

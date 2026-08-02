@@ -11,7 +11,9 @@ import {
   type SubStyleDTO,
   type StyleLibDTO,
   type ImgStyleDTO,
-  type ImgLibDTO
+  type ImgLibDTO,
+  type PresetDTO,
+  type PresetLibDTO
 } from './api'
 
 type Page = 'dashboard' | 'autopilot' | 'categories' | 'niches' | 'analyse' | 'clipping' | 'genai' | 'ideas' | 'history' | 'clips' | 'providers' | 'settings'
@@ -4271,6 +4273,90 @@ function VignetteStyle({ s }: { s: SubStyleDTO }): JSX.Element {
   )
 }
 
+/** Description d'un paramètre : ce qu'il faut pour l'afficher et le résumer.
+ *  Une seule table, partagée par l'éditeur et les cartes — deux libellés pour
+ *  le même champ finiraient par diverger. */
+const PARAM_DEF: Record<string, { label: string; court: string; opts?: [string, string][]; min?: number; max?: number; pas?: string }> = {
+  speed: { label: 'Débit de parole', court: 'Débit', min: 0.5, max: 2, pas: '0.05' },
+  lang: { label: 'Langue', court: 'Langue', opts: [['fr', 'Français'], ['en', 'Anglais']] },
+  subtitles: { label: 'Sous-titres', court: 'Sous-titres', opts: [['1', 'Incrustés'], ['0', 'Aucun']] },
+  slides: { label: 'Nombre de diapos', court: 'Diapos', min: 3, max: 10 },
+  clipCount: { label: 'Candidats par source', court: 'Candidats', min: 1, max: 10 },
+  reframe: { label: 'Cadrage vertical', court: 'Cadrage', opts: [['center', 'Centré'], ['face', 'Suivi du visage']] },
+  engine: {
+    label: 'Moteur des scènes parlées', court: 'Moteur',
+    opts: [['seedance', 'Seedance'], ['veo', 'Veo'], ['pixverse', 'Pixverse'], ['wan', 'Wan 2.7']]
+  },
+  quality: {
+    label: 'Qualité imposée', court: 'Qualité',
+    opts: [['wan', 'Wan 2.7 — ~0,50 $/scène'], ['seedance', 'Seedance 2.0 — ~0,84 $/scène'], ['veo', 'Veo payant — ~1,20 $/scène']]
+  },
+  maxScenes: { label: 'Scènes max', court: 'Scènes', min: 1, max: 60 }
+}
+
+/** Éditeur d'un réglage nommé. Les champs affichés dépendent de la catégorie —
+ *  un carrousel n'a ni langue ni sous-titres. */
+function ModalePreset({ preset, champs, herite, onFerme, onEnregistre }: {
+  preset: PresetDTO
+  champs: string[]
+  /** Valeur globale de chaque champ, pour l'option « suivre ». */
+  herite: (k: string) => string
+  onFerme: () => void
+  onEnregistre: (p: PresetDTO) => Promise<void>
+}): JSX.Element {
+  const [p, setP] = useState<PresetDTO>(preset)
+  const [busy, setBusy] = useState(false)
+  const maj = (k: string, v: string): void => setP((o) => ({ ...o, [k]: v }))
+  return (
+    <div className="pal-back" onMouseDown={onFerme}>
+      <div className="card sty-modale etroite" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="cat-f">
+          <label className="cat-lbl">Nom du réglage</label>
+          <input className="input-full" value={p.name} placeholder="ex. Français standard" onChange={(e) => setP((o) => ({ ...o, name: e.target.value }))} />
+        </div>
+        <div className="sty-champs">
+          {champs.map((k) => {
+            const d = PARAM_DEF[k]
+            if (!d) return null
+            const v = String(p[k] ?? '')
+            return (
+              <div className="cat-f" key={k}>
+                <label className="cat-lbl">{d.label}</label>
+                {d.opts
+                  ? (
+                    <select className="input-full" value={v} onChange={(e) => maj(k, e.target.value)}>
+                      <option value="">Global · {herite(k)}</option>
+                      {d.opts.map(([o, l]) => <option key={o} value={o}>{l}</option>)}
+                    </select>
+                  )
+                  : (
+                    <input
+                      className="input-full" type="number" min={d.min} max={d.max} step={d.pas}
+                      placeholder={herite(k)}
+                      value={v}
+                      onChange={(e) => maj(k, e.target.value)}
+                    />
+                  )}
+              </div>
+            )
+          })}
+        </div>
+        <div className="cat-foot">
+          <span className="cat-count">Un champ laissé vide suit le réglage global.</span>
+          <button className="btn ghost-sm" onClick={onFerme}>Annuler</button>
+          <button
+            className="btn primary"
+            disabled={busy || !p.name.trim()}
+            onClick={() => { setBusy(true); void onEnregistre(p).finally(() => setBusy(false)) }}
+          >
+            {busy ? 'Enregistrement…' : 'Enregistrer'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /** Vignette d'un style visuel. L'image n'existe que si on l'a demandée : la
  *  générer coûte un appel payant, on ne le fait pas dans le dos de l'utilisateur. */
 function VignetteImage({ s, cat, onGen }: { s: ImgStyleDTO; cat: string; onGen: (id: string) => Promise<void> }): JSX.Element {
@@ -4493,6 +4579,30 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
   const [imgStylesParCat, setImgStylesParCat] = useState<Record<string, ImgLibDTO>>({})
   const imgLibDe = (cat: string): ImgLibDTO => imgStylesParCat[cat] ?? { styles: [], defaultId: '' }
   const [editImg, setEditImg] = useState<ImgStyleDTO | null>(null)
+  /** Bibliothèques de RÉGLAGES nommés, et les champs propres à chaque catégorie. */
+  const [presetsParCat, setPresetsParCat] = useState<Record<string, PresetLibDTO>>({})
+  const [champsParCat, setChampsParCat] = useState<Record<string, string[]>>({})
+  const presetLibDe = (cat: string): PresetLibDTO => presetsParCat[cat] ?? { presets: [], defaultId: '' }
+  const [editPreset, setEditPreset] = useState<PresetDTO | null>(null)
+  const enregistrePreset = async (cat: string, p: PresetDTO): Promise<void> => {
+    const cfg: Record<string, string> = {}
+    for (const k of champsParCat[cat] ?? []) cfg[k] = String(p[k] ?? '')
+    try {
+      const r = await api.saveParamPreset(cat, { id: p.id || undefined, name: p.name, cfg })
+      setPresetsParCat(r.parCategorie)
+      setEditPreset(null)
+      toast('Réglage enregistré ✓')
+    } catch (e) { toast('Erreur : ' + (e as Error).message) }
+  }
+  const majDefautPreset = async (cat: string, id: string): Promise<void> => {
+    try { setPresetsParCat((await api.setDefaultParamPreset(cat, id)).parCategorie); toast('Réglage par défaut changé') }
+    catch (e) { toast('Erreur : ' + (e as Error).message) }
+  }
+  const supprimePreset = async (cat: string, p: PresetDTO): Promise<void> => {
+    if (!window.confirm(`Supprimer le réglage « ${p.name} » ? Les comptes qui l’utilisaient repasseront au réglage par défaut.`)) return
+    try { setPresetsParCat((await api.deleteParamPreset(cat, p.id)).parCategorie); toast('Réglage supprimé') }
+    catch (e) { toast('Erreur : ' + (e as Error).message) }
+  }
   /** Bibliothèque de niches et fiche assignée à chaque compte. La niche est le
    *  SUJET du compte — commune à ses vidéos et à ses carrousels, elle vit donc
    *  au niveau de la catégorie et non d'un de ses panneaux. */
@@ -4592,6 +4702,8 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
       setPolices(r.polices ?? [])
       setStylesParCat(r.stylesParCat ?? {})
       setImgStylesParCat(r.imgStylesParCat ?? {})
+      setPresetsParCat(r.presetsParCat ?? {})
+      setChampsParCat(r.champsParCat ?? {})
       setGlobals((r as unknown as { globals?: CatGlobals }).globals ?? {})
     }).catch(() => undefined)
   }, [])
@@ -4738,33 +4850,6 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
       </div>
     )
   }
-  /** Réglages réservés aux vidéos à SCÈNES ANIMÉES — les reproductions. Aucun
-   *  des trois n'agit sur une vidéo ordinaire, faite d'images fixes :
-   *   · le moteur et la qualité passent par des chemins qui exigent
-   *     `animateScenes` (video-gen.ts) ;
-   *   · « scènes max » devient `reproMaxScenes`, lu uniquement dans le prompt de
-   *     reproduction — le prompt ordinaire code « 4 à 5 scènes » en dur.
-   *  Les laisser dans le bloc « Vidéos » laissait croire le contraire. */
-  const blocRepro = (cat: string): JSX.Element => (
-    <section className="cat-sec">
-      <div className="cat-sub">Reproductions</div>
-      {select(cat, 'engine', 'Moteur des scènes parlées', [
-        ['seedance', 'Seedance'],
-        ['veo', 'Veo — voix natives + vraie synchro labiale'],
-        ['pixverse', 'Pixverse — économique'],
-        ['wan', 'Wan 2.7 — nos voix + synchro labiale']
-      ])}
-      {select(cat, 'quality', 'Qualité imposée', [
-        ['wan', 'Wan 2.7 — ~0,50 $/scène'],
-        ['seedance', 'Seedance 2.0 — ~0,84 $/scène'],
-        ['veo', 'Veo payant — ~1,20 $/scène']
-      ])}
-      {nombre(cat, 'maxScenes', 'Scènes max', 1, 60)}
-      <div className="muted small cat-note">
-        N’agissent que sur les vidéos reproduites depuis une source — seules à avoir des scènes animées.
-      </div>
-    </section>
-  )
 
   const blocSousTitres = (cat: string): JSX.Element => {
     const lib = libDe(cat)
@@ -4826,15 +4911,65 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
       </section>
     )
   }
-  const blocVideo = (cat: string): JSX.Element => (
-    <>
-      {/* Plus de paires figées : la grille du panneau place les champs selon la
-          largeur disponible, et les apparie d'elle-même quand il y a la place. */}
-      {nombre(cat, 'speed', 'Débit de parole', 0.5, 2, '0.05')}
-      {select(cat, 'lang', 'Langue', [['fr', 'Français'], ['en', 'Anglais']])}
-      {select(cat, 'subtitles', 'Sous-titres', [['1', 'Incrustés'], ['0', 'Aucun']])}
-    </>
-  )
+  /** Bande des réglages nommés. Les paramètres ne sont plus des champs posés sur
+   *  le compte mais des fiches réutilisables, comme les styles : on choisit,
+   *  on ne ressaisit pas. */
+  const blocReglages = (cat: string, note?: string): JSX.Element => {
+    const lib = presetLibDe(cat)
+    const champs = champsParCat[cat] ?? []
+    const choisi = val(cat, 'presetId')
+    /** Résumé d'une fiche : ce qu'elle impose, le reste suivant le global. */
+    const resume = (p: PresetDTO): string => {
+      const parts = champs
+        .filter((k) => String(p[k] ?? '') !== '')
+        .map((k) => {
+          const d = PARAM_DEF[k]
+          const v = String(p[k])
+          return `${d.court} ${d.opts ? (d.opts.find(([o]) => o === v)?.[1] ?? v) : v}`
+        })
+      return parts.length ? parts.join(' · ') : 'Tout suit les réglages globaux'
+    }
+    return (
+      <section className="cat-sec sous-titres">
+        <div className="cat-sub">Réglages</div>
+        <div className="sty-liste">
+          {lib.presets.map((p) => {
+            const actif = choisi ? p.id === choisi : p.id === lib.defaultId
+            return (
+              <div key={p.id} className={`card sty-item${actif ? ' actif' : ''}`}>
+                <button
+                  className="sty-choix"
+                  title={actif ? 'Réglage appliqué ici' : 'Appliquer à ce compte'}
+                  onClick={() => champ(cat, 'presetId', p.id === choisi ? '' : p.id)}
+                >
+                  <span className="sty-nom">
+                    {p.name}
+                    {p.id === lib.defaultId && <span className="sty-badge" title="Suivi par tous les comptes qui ne choisissent pas de réglage">Défaut</span>}
+                    {actif && <span className="sty-coche" title="Appliqué à ce compte"><Icon name="check" size={13} /></span>}
+                  </span>
+                  <span className="muted small sty-res">
+                    <span className="sty-res-t nic-resume">{resume(p)}</span>
+                  </span>
+                </button>
+                <div className="sty-actions">
+                  {p.id !== lib.defaultId && (
+                    <button className="btn xsmall" onClick={() => void majDefautPreset(cat, p.id)}>Défaut</button>
+                  )}
+                  <button className="btn xsmall" onClick={() => setEditPreset(p)}>Modifier</button>
+                  <button className="btn xsmall danger" onClick={() => void supprimePreset(cat, p)}>Supprimer</button>
+                </div>
+              </div>
+            )
+          })}
+          <button className="card sty-ajout" onClick={() => setEditPreset({ id: '', name: '' } as PresetDTO)}>
+            <span className="sty-plus">+</span>
+            <span>Nouveau réglage</span>
+          </button>
+        </div>
+        {note && <div className="muted small cat-note">{note}</div>}
+      </section>
+    )
+  }
 
   /** Styles visuels : même modèle que les sous-titres. La différence tient à
    *  l'aperçu — il coûte une image, donc il se demande au lieu de s'afficher. */
@@ -4951,7 +5086,7 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
           ],
           corps: (
             <>
-              <section className="cat-sec">{blocVideo('niche')}</section>
+              {blocReglages('niche')}
               {blocStyleVisuel('niche', 'Style visuel des images', 'ex. photographie cinématographique, lumière rasante, grain argentique')}
               {blocSousTitres('niche')}
             </>
@@ -4967,7 +5102,7 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
           ],
           corps: (
             <>
-              <section className="cat-sec">{nombre('carousel', 'slides', 'Nombre de diapos', 3, 10)}</section>
+              {blocReglages('carousel')}
               {blocStyleVisuel('carousel', 'Style visuel des diapos', 'ex. illustration vectorielle épurée, aplats de couleur, fond uni sombre')}
             </>
           )
@@ -4984,13 +5119,14 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
       panneaux: [{
         cle: 'c', cats: ['clip'],
         corps: (
-          <section className="cat-sec">
-            {nombre('clip', 'clipCount', 'Candidats par source', 1, 10)}
-            {select('clip', 'reframe', 'Cadrage vertical', [['center', 'Centré'], ['face', 'Suivi du visage']])}
-            <div className="muted small cat-note">
-              Le pilote n’en publie qu’un — les autres restent en stock, prêts pour les créneaux « clip en stock ».
-            </div>
-          </section>
+          <>
+            {blocReglages('clip')}
+            <section className="cat-sec">
+              <div className="muted small cat-note">
+                Le pilote n’en publie qu’un — les autres restent en stock, prêts pour les créneaux « clip en stock ».
+              </div>
+            </section>
+          </>
         )
       }]
     },
@@ -5006,10 +5142,9 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
         cle: 'v', cats: ['genai'],
         corps: (
           <>
-            <section className="cat-sec">{blocVideo('genai')}</section>
+            {blocReglages('genai', 'Moteur, qualité imposée et scènes max n’agissent que sur les vidéos reproduites depuis une source — seules à avoir des scènes animées.')}
             {blocStyleVisuel('genai', 'Style visuel des images', 'ex. photographie cinématographique, lumière rasante, grain argentique')}
             {blocSousTitres('genai')}
-            {blocRepro('genai')}
           </>
         )
       }]
@@ -5116,6 +5251,20 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
             style={editImg}
             onFerme={() => setEditImg(null)}
             onEnregistre={(s) => enregistreImg(catImg, s)}
+          />
+        )}
+        {editPreset && (
+          <ModalePreset
+            preset={editPreset}
+            champs={champsParCat[catImg] ?? []}
+            // L'option « suivre » nomme la valeur globale : sans elle, on ne
+            // sait pas ce qu'on obtient en laissant le champ vide.
+            herite={(k) => {
+              const g = globals[k]
+              return g == null || g === '' ? 'par défaut' : mot(k, String(g))
+            }}
+            onFerme={() => setEditPreset(null)}
+            onEnregistre={(p) => enregistrePreset(catImg, p)}
           />
         )}
       </>

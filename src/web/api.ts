@@ -23,6 +23,9 @@ export type StyleLibDTO = { styles: SubStyleDTO[]; defaultId: string }
 /** Style visuel : une consigne de rendu reinjectee dans chaque prompt d'image. */
 export type ImgStyleDTO = { id: string; name: string; prompt: string }
 export type ImgLibDTO = { styles: ImgStyleDTO[]; defaultId: string }
+/** Reglage nomme : un jeu de parametres d'une categorie, reutilisable. */
+export type PresetDTO = { id: string; name: string } & Record<string, string | number>
+export type PresetLibDTO = { presets: PresetDTO[]; defaultId: string }
 
 export interface PublishOverrides {
   caption?: string
@@ -196,7 +199,16 @@ export const api = {
       polices: [string, string][]
       stylesParCat: Record<string, StyleLibDTO>
       imgStylesParCat: Record<string, ImgLibDTO>
+      presetsParCat: Record<string, PresetLibDTO>
+      champsParCat: Record<string, string[]>
     }>(`/api/categories${user ? `?user=${encodeURIComponent(user)}` : ''}`),
+  // Reglages nommes : troisieme bibliotheque, meme modele que les styles.
+  saveParamPreset: (category: string, p: { id?: string; name: string; cfg: Record<string, string> }) =>
+    post<{ ok: boolean; parCategorie: Record<string, PresetLibDTO> }>('/api/param-presets', { ...p, category }),
+  setDefaultParamPreset: (category: string, id: string) =>
+    post<{ ok: boolean; parCategorie: Record<string, PresetLibDTO> }>('/api/param-presets/default', { id, category }),
+  deleteParamPreset: (category: string, id: string) =>
+    req<{ ok: boolean; parCategorie: Record<string, PresetLibDTO> }>(`/api/param-presets/${encodeURIComponent(category)}/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   // Styles VISUELS : meme modele que les sous-titres, une bibliotheque par
   // categorie. L'apercu, lui, coute une generation d'image reelle.
   saveImageStyle: (category: string, s: { id?: string; name: string; prompt: string }) =>
