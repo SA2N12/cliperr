@@ -4953,20 +4953,8 @@ video:-webkit-full-screen {
   flex: 1;
   min-width: 0;
 }
-.sty-liste {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
-  gap: 10px;
-}
-.sty-item {
-  border: 1px solid var(--border);
-  border-left: 2px solid var(--border);
-  background: var(--panel);
-  padding: 11px 13px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
+
+
 /* Le style par défaut se repère au liseré, pas seulement à son étiquette :
    c'est lui qui s'applique partout où rien n'est choisi. */
 .sty-item.defaut {
@@ -5048,4 +5036,117 @@ video:-webkit-full-screen {
   .sty-modale {
     animation: none;
   }
+}
+
+/* ── Styles de sous-titres : une carte par style ───────────────────────────
+   Le nom et les chiffres ne disent pas à quoi ça ressemble : chaque carte
+   porte le rendu réel du style, recadré sur la bande de sous-titres. */
+.sty-liste {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+.sty-item {
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-top: 2px solid var(--border);
+}
+/* Le style par défaut se repère au filet, pas seulement à son étiquette :
+   c'est lui qui s'applique partout où rien n'est choisi. */
+.sty-item.defaut {
+  border-top-color: var(--brand);
+}
+.sty-vign {
+  height: 92px;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
+}
+.sty-vign img {
+  width: 100%;
+  height: 100%;
+  /* Recadré sur la ligne de sous-titres : montrer les 9:16 en entier
+     réduirait le texte à quelques pixels illisibles. */
+  object-fit: cover;
+  display: block;
+}
+.sty-vign-vide {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+}
+.sty-nom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 550;
+  font-size: 13.5px;
+  padding: 10px 12px 0;
+}
+.sty-badge {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 1px 5px;
+  color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--brand) 35%, transparent);
+  flex-shrink: 0;
+}
+.sty-res {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 12px 0;
+  font-size: 11.5px;
+}
+.sty-pastilles {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: auto;
+}
+.sty-pastilles i {
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--border);
+  display: block;
+}
+.sty-actions {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  padding: 10px 12px 11px;
+  margin-top: auto;
+}
+
+/* Carte d'ajout : même gabarit que les autres, en pointillés. */
+.sty-ajout {
+  min-height: 150px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px dashed var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.16s ease, color 0.16s ease;
+}
+.sty-ajout:hover {
+  border-color: var(--brand);
+  color: var(--brand);
+}
+.sty-plus {
+  font-size: 22px;
+  line-height: 1;
 }

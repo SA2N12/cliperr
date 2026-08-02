@@ -4244,6 +4244,39 @@ const CAT_MOTS_CLE: Record<string, Record<string, string>> = {
 const CAT_NOMBRES = new Set(['maxScenes', 'speed', 'slides', 'clipCount', 'subSize', 'subOutline', 'subGroup', 'subBottom'])
 /** Champs du style de sous-titres, dans l'ordre envoyé à l'aperçu. */
 const SUB_CLES = ['subFont', 'subSize', 'subColor', 'subHilite', 'subOutline', 'subGroup', 'subBottom', 'subUpper']
+/** Vignette d'un style : son rendu réel, recadré sur la bande de sous-titres.
+ *  Lire « Anton · 86 px » ne dit pas à quoi ça ressemble — c'est l'image qui
+ *  permet de choisir. */
+function VignetteStyle({ s }: { s: SubStyleDTO }): JSX.Element {
+  const [url, setUrl] = useState('')
+  const ref = useRef('')
+  const cle = `${s.font}|${s.size}|${s.color}|${s.hilite}|${s.outline}|${s.group}|${s.bottom}|${s.upper}`
+  useEffect(() => {
+    let vivant = true
+    const [font, size, color, hilite, outline, group, bottom, upper] = cle.split('|')
+    api.subtitlePreview({
+      subFont: font, subSize: size, subColor: color, subHilite: hilite,
+      subOutline: outline, subGroup: group, subBottom: bottom, subUpper: upper === 'true' ? '1' : '0'
+    })
+      .then((u) => {
+        if (!vivant) { URL.revokeObjectURL(u); return }
+        if (ref.current) URL.revokeObjectURL(ref.current)
+        ref.current = u
+        setUrl(u)
+      })
+      .catch(() => undefined)
+    return () => { vivant = false }
+  }, [cle])
+  useEffect(() => () => { if (ref.current) URL.revokeObjectURL(ref.current) }, [])
+  return (
+    <div className="sty-vign">
+      {url
+        ? <img src={url} alt={`Rendu du style ${s.name}`} style={{ objectPosition: `center ${Math.round(100 - (s.bottom / 1920) * 100 - 4)}%` }} />
+        : <span className="sty-vign-vide" />}
+    </div>
+  )
+}
+
 /** Éditeur d'un style de sous-titres, avec le rendu réel à côté des champs. */
 function ModaleStyle({ style, polices, onFerme, onEnregistre }: {
   style: SubStyleDTO
@@ -4835,38 +4868,42 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
               <div className="cat-title">Styles de sous-titres</div>
               <div className="muted small">
                 {styles.length === 0
-                  ? 'Aucun style. Sans style, les sous-titres suivent les réglages du moteur.'
-                  : `Le style par défaut s’applique à toute catégorie qui n’en choisit pas d’autre.`}
+                  ? 'Aucun style pour l’instant. Tant qu’il n’y en a pas, les sous-titres suivent les réglages du moteur.'
+                  : 'Le style par défaut s’applique à toute catégorie qui n’en choisit pas d’autre.'}
               </div>
             </div>
-            <button className="btn" onClick={() => setEditStyle(styleVierge())}>Nouveau style</button>
           </div>
-          {styles.length > 0 && (
-            <div className="sty-liste">
-              {styles.map((s) => (
-                <div key={s.id} className={`sty-item${s.id === defaultId ? ' defaut' : ''}`}>
-                  <div className="sty-nom">
-                    {s.name}
-                    {s.id === defaultId && <span className="sty-badge">Par défaut</span>}
-                  </div>
-                  <div className="muted small sty-res">
-                    {s.font} · {s.size} px · {s.group} mot{s.group > 1 ? 's' : ''} · {s.upper ? 'MAJ' : 'normale'}
-                    <span className="sty-pastilles">
-                      <i style={{ background: `#${s.color}` }} title={`Texte #${s.color}`} />
-                      <i style={{ background: `#${s.hilite}` }} title={`Mot prononcé #${s.hilite}`} />
-                    </span>
-                  </div>
-                  <div className="sty-actions">
-                    {s.id !== defaultId && (
-                      <button className="btn xsmall" onClick={() => void majDefaut(s.id)}>Par défaut</button>
-                    )}
-                    <button className="btn xsmall" onClick={() => setEditStyle(s)}>Modifier</button>
-                    <button className="btn xsmall danger" onClick={() => void supprimeStyle(s)}>Supprimer</button>
-                  </div>
+          <div className="sty-liste">
+            {styles.map((s) => (
+              <div key={s.id} className={`card sty-item${s.id === defaultId ? ' defaut' : ''}`}>
+                <VignetteStyle s={s} />
+                <div className="sty-nom">
+                  {s.name}
+                  {s.id === defaultId && <span className="sty-badge">Par défaut</span>}
                 </div>
-              ))}
-            </div>
-          )}
+                <div className="muted small sty-res">
+                  {s.font} · {s.size} px · {s.group} mot{s.group > 1 ? 's' : ''} · {s.upper ? 'MAJ' : 'normale'}
+                  <span className="sty-pastilles">
+                    <i style={{ background: `#${s.color}` }} title={`Texte #${s.color}`} />
+                    <i style={{ background: `#${s.hilite}` }} title={`Mot prononcé #${s.hilite}`} />
+                  </span>
+                </div>
+                <div className="sty-actions">
+                  {s.id !== defaultId && (
+                    <button className="btn xsmall" onClick={() => void majDefaut(s.id)}>Par défaut</button>
+                  )}
+                  <button className="btn xsmall" onClick={() => setEditStyle(s)}>Modifier</button>
+                  <button className="btn xsmall danger" onClick={() => void supprimeStyle(s)}>Supprimer</button>
+                </div>
+              </div>
+            ))}
+            {/* Carte d'ajout en fin de grille : elle tient lieu d'état vide quand
+                la bibliothèque l'est, et reste à la même place ensuite. */}
+            <button className="card sty-ajout" onClick={() => setEditStyle(styleVierge())}>
+              <span className="sty-plus">+</span>
+              <span>Nouveau style</span>
+            </button>
+          </div>
         </div>
 
         {editStyle && (
