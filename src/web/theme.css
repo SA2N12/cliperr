@@ -5250,3 +5250,35 @@ video:-webkit-full-screen {
 .sty-ajust-in .cat-prev {
   position: static;
 }
+
+/* ── Detail : un panneau par nature de production ──────────────────────────
+   Les niches produisent des videos ET des carrousels. Deux cartes plutot que
+   deux intertitres dans la meme : chacune s enregistre seule, regler les
+   diapos n a pas a valider les reglages video au passage. */
+.cat-cartes.plusieurs {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 330px;
+  gap: 14px;
+  align-items: start;
+}
+.cat-panel-t {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+  margin-bottom: 2px;
+}
+/* Panneau etroit : une seule colonne, et les descriptions cessent de vouloir
+   en occuper deux — sinon la grille en fabrique une hors du cadre. */
+.cat-panel.etroit .cat-body {
+  grid-template-columns: 1fr;
+}
+.cat-panel.etroit .cat-f.wide {
+  grid-column: 1 / -1;
+}
+@media (max-width: 1100px) {
+  .cat-cartes.plusieurs {
+    grid-template-columns: 1fr;
+  }
+}

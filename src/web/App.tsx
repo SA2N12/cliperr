@@ -4784,7 +4784,10 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
     cle: string; cats: string[]; icone: string; titre: string; teinte: string; hint: string
     /** Ce que la tuile résume, sans avoir à ouvrir. */
     apercu: [string, { txt: string; perso: boolean }][]
-    corps: JSX.Element
+    /** Panneaux du détail. Plusieurs quand la catégorie produit des choses de
+     *  natures différentes — chacun s'enregistre séparément, régler les diapos
+     *  n'a pas à valider les réglages vidéo au passage. */
+    panneaux: { cle: string; titre?: string; cats: string[]; etroit?: boolean; corps: JSX.Element }[]
   }
   const CARTES: Carte[] = [
     {
@@ -4797,25 +4800,32 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
         ['Débit', applique('niche', 'speed')],
         ['Diapos', applique('carousel', 'slides')]
       ],
-      corps: (
-        <>
-          <section className="cat-sec">
-            <div className="cat-sub">Vidéos</div>
-            {blocVideo('niche')}
-          </section>
-          {blocSousTitres('niche')}
-          {/* Pas de moteur vidéo ici : une vidéo de niche est faite d'images
-              fixes, sa voix vient du TTS et le moteur ne tourne jamais. Les
-              épisodes de série, eux, lisent cette catégorie et ont bien des
-              scènes animées — mais ils ne sont plus produits, et le moteur reste
-              réglable globalement (Réglages → Génération vidéos). */}
-          <section className="cat-sec">
-            <div className="cat-sub">Carrousels</div>
-            {nombre('carousel', 'slides', 'Nombre de diapos', 3, 10)}
-            {texte('carousel', 'style', 'Style visuel des diapos', 'ex. illustration vectorielle épurée, aplats de couleur, fond uni sombre')}
-          </section>
-        </>
-      )
+      // Pas de moteur vidéo ici : une vidéo de niche est faite d'images fixes,
+      // sa voix vient du TTS et le moteur ne tourne jamais. Les épisodes de
+      // série, eux, lisaient cette catégorie et avaient bien des scènes animées
+      // — mais ils ne sont plus produits, et le moteur reste réglable
+      // globalement (Réglages → Génération vidéos).
+      panneaux: [
+        {
+          cle: 'v', titre: 'Vidéos', cats: ['niche'],
+          corps: (
+            <>
+              <section className="cat-sec">{blocVideo('niche')}</section>
+              {blocSousTitres('niche')}
+            </>
+          )
+        },
+        {
+          // Les carrousels sont des images : ni voix, ni sous-titres.
+          cle: 'c', titre: 'Carrousels', cats: ['carousel'], etroit: true,
+          corps: (
+            <section className="cat-sec">
+              {nombre('carousel', 'slides', 'Nombre de diapos', 3, 10)}
+              {texte('carousel', 'style', 'Style visuel des diapos', 'ex. illustration vectorielle épurée, aplats de couleur, fond uni sombre')}
+            </section>
+          )
+        }
+      ]
     },
     {
       cle: 'clip', cats: ['clip'], icone: 'scissors', titre: 'Clips (cut streamer)', teinte: 'clip',
@@ -4824,15 +4834,18 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
         ['Candidats', applique('clip', 'clipCount')],
         ['Cadrage', applique('clip', 'reframe')]
       ],
-      corps: (
-        <section className="cat-sec">
-          {nombre('clip', 'clipCount', 'Candidats par source', 1, 10)}
-          {select('clip', 'reframe', 'Cadrage vertical', [['center', 'Centré'], ['face', 'Suivi du visage']])}
-          <div className="muted small cat-note">
-            Le pilote n’en publie qu’un — les autres restent en stock, prêts pour les créneaux « clip en stock ».
-          </div>
-        </section>
-      )
+      panneaux: [{
+        cle: 'c', cats: ['clip'],
+        corps: (
+          <section className="cat-sec">
+            {nombre('clip', 'clipCount', 'Candidats par source', 1, 10)}
+            {select('clip', 'reframe', 'Cadrage vertical', [['center', 'Centré'], ['face', 'Suivi du visage']])}
+            <div className="muted small cat-note">
+              Le pilote n’en publie qu’un — les autres restent en stock, prêts pour les créneaux « clip en stock ».
+            </div>
+          </section>
+        )
+      }]
     },
     {
       cle: 'genai', cats: ['genai'], icone: 'sparkles', titre: 'Génération IA', teinte: 'genai',
@@ -4842,16 +4855,16 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
         ['Sous-titres', applique('genai', 'subtitles')],
         ['Débit', applique('genai', 'speed')]
       ],
-      corps: (
-        <>
-          <section className="cat-sec">
-            <div className="cat-sub">Vidéos</div>
-            {blocVideo('genai')}
-          </section>
-          {blocSousTitres('genai')}
-          {blocRepro('genai')}
-        </>
-      )
+      panneaux: [{
+        cle: 'v', cats: ['genai'],
+        corps: (
+          <>
+            <section className="cat-sec">{blocVideo('genai')}</section>
+            {blocSousTitres('genai')}
+            {blocRepro('genai')}
+          </>
+        )
+      }]
     }
   ]
 
@@ -4961,11 +4974,14 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
               de l'écran au moment où l'on modifie un champ. */}
           {dirty && <span className="cat-dirty">Modifications non enregistrées</span>}
         </div>
-        <div className="card cat-panel">
-          <div className="cat-panel-in">
-            <div className="cat-body">{carte.corps}</div>
-          </div>
-          {pied(carte.cats, carte.cle)}
+        <div className={`cat-cartes${carte.panneaux.length > 1 ? ' plusieurs' : ''}`}>
+          {carte.panneaux.map((p) => (
+            <div className={`card cat-panel${p.etroit ? ' etroit' : ''}`} key={p.cle}>
+              {p.titre && <div className="cat-panel-t">{p.titre}</div>}
+              <div className="cat-body">{p.corps}</div>
+              {pied(p.cats, `${carte.cle}:${p.cle}`)}
+            </div>
+          ))}
         </div>
         {editStyle && (
           <ModaleStyle
