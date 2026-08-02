@@ -4712,11 +4712,11 @@ video:-webkit-full-screen {
   border-top: 2px solid var(--cat, var(--border));
 }
 .cat-panel .cat-foot {
-  margin-top: 6px;
-  padding-top: 8px;
+  margin-top: 4px;
+  padding-top: 6px;
 }
 .cat-detail .cat-dhead {
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 .cat-body {
   display: grid;
