@@ -3402,6 +3402,11 @@ app.post('/api/image-styles/:category/:id/preview', async (req, res) => {
 app.get('/api/image-styles/preview/:id', (req, res) => {
   const f = imgStylePreviewPath(String(req.params.id ?? ''))
   if (!existsSync(f)) return res.status(404).end()
+  // Le fichier porte l'extension .png mais DeepInfra renvoie du JPEG : on
+  // annonce le type d'après les octets de signature plutôt que d'après le nom,
+  // sinon l'en-tête ment et ne tient que grâce au flair des navigateurs.
+  const tete = readFileSync(f).subarray(0, 4).toString('hex')
+  res.setHeader('Content-Type', tete.startsWith('89504e47') ? 'image/png' : tete.startsWith('ffd8ff') ? 'image/jpeg' : 'application/octet-stream')
   res.setHeader('Cache-Control', 'no-cache')
   res.sendFile(f)
 })
