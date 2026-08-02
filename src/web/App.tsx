@@ -5347,10 +5347,13 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
                   )
                 })}
               </section>
-              {/* Les deux bibliothèques : on compose le réglage en cliquant, et
-                  on peut y créer un style au passage sans quitter la page. */}
-              {blocStyleVisuel(catP, catP === 'carousel' ? 'Style visuel des diapos' : 'Style visuel des images',
-                String(d.imgStyleId ?? ''), (id) => majD('imgStyleId', id))}
+              {/* Les bibliothèques disponibles : on compose le réglage en
+                  cliquant, et on peut y créer un style sans quitter la page.
+                  Un clip n'engendre aucune image, une reproduction doit garder
+                  celui de sa source — ni l'un ni l'autre n'a de style visuel. */}
+              {(catP === 'niche' || catP === 'carousel') &&
+                blocStyleVisuel(catP, catP === 'carousel' ? 'Style visuel des diapos' : 'Style visuel des images',
+                  String(d.imgStyleId ?? ''), (id) => majD('imgStyleId', id))}
               {catP !== 'carousel' && catP !== 'clip' &&
                 blocSousTitres(catP, String(d.subStyleId ?? ''), (id) => majD('subStyleId', id))}
             </div>

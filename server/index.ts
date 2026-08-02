@@ -974,7 +974,11 @@ function libDe(cat: string): StyleLib {
 // dans chaque prompt d'image.
 export type NamedImgStyle = { id: string; name: string; prompt: string }
 type ImgLib = { styles: NamedImgStyle[]; defaultId: string }
-const CAT_AVEC_IMAGES = ['niche', 'carousel', 'genai']
+// Ni les clips ni la génération IA n'en ont : un clip est découpé dans une
+// vidéo existante, aucune image n'est produite ; et une reproduction doit garder
+// le style ANALYSÉ de sa source — or la consigne de catégorie prime sur
+// `idea.imageStyle`, elle l'écraserait donc exactement là où il faut le suivre.
+const CAT_AVEC_IMAGES = ['niche', 'carousel']
 function imageStyles(): Record<string, ImgLib> {
   const vide = (): Record<string, ImgLib> =>
     Object.fromEntries(CAT_AVEC_IMAGES.map((c) => [c, { styles: [], defaultId: '' }]))
