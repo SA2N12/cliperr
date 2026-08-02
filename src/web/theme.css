@@ -4936,23 +4936,9 @@ video:-webkit-full-screen {
 /* ── Bibliothèque de styles de sous-titres ─────────────────────────────────
    Posée sous la grille des comptes : un style se réutilise d'un compte à
    l'autre, il n'appartient à aucun. */
-.sty-bloc {
-  margin-top: 22px;
-  border-top: 1px solid var(--border);
-  padding-top: 16px;
-  animation: rise 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
-  animation-delay: 180ms;
-}
-.sty-tete {
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  margin-bottom: 12px;
-}
-.sty-tete > div:first-child {
-  flex: 1;
-  min-width: 0;
-}
+
+
+
 
 
 /* Le style par défaut se repère au liseré, pas seulement à son étiquette :
@@ -5156,4 +5142,98 @@ video:-webkit-full-screen {
 .sty-plus {
   font-size: 22px;
   line-height: 1;
+}
+
+/* ── Sous-titres d'une catégorie : ses styles, puis l'ajustement ───────────
+   La section sort du flux en colonnes du panneau : elle a sa propre mise en
+   page (grille de cartes + repli) et occupe toute la largeur. */
+.cat-sec.sous-titres {
+  display: block;
+  grid-column: 1 / -1;
+}
+.sty-intro {
+  margin-bottom: 9px;
+  line-height: 1.35;
+  max-width: 78ch;
+}
+/* La carte entière sélectionne : viser une case à cocher quand on a une image
+   sous les yeux est un geste de trop. */
+.sty-choix {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  font-family: inherit;
+  font-size: inherit;
+  color: var(--text);
+  cursor: pointer;
+}
+.sty-item.actif {
+  border-top-color: var(--brand);
+  border-color: color-mix(in srgb, var(--brand) 45%, var(--border));
+}
+.sty-coche {
+  margin-left: auto;
+  display: inline-flex;
+  color: var(--brand);
+}
+.sty-item.actif .sty-badge {
+  margin-left: 0;
+}
+.sty-item .sty-nom {
+  display: flex;
+}
+.sty-item .sty-res {
+  display: flex;
+}
+
+/* Repli d'ajustement : le style porte déjà les huit valeurs, ces champs n'en
+   sont que la dérive pour un compte. */
+.sty-ajust {
+  margin-top: 12px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+.sty-ajust > summary {
+  cursor: pointer;
+  font-size: 12.5px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  list-style: none;
+  user-select: none;
+}
+.sty-ajust > summary::-webkit-details-marker {
+  display: none;
+}
+.sty-ajust > summary::before {
+  content: '›';
+  display: inline-block;
+  font-size: 15px;
+  line-height: 1;
+  transition: transform 0.15s ease;
+}
+.sty-ajust[open] > summary::before {
+  transform: rotate(90deg);
+}
+.sty-ajust > summary:hover {
+  color: var(--text);
+}
+/* Compteur de surcharges : sans lui, replier reviendrait à cacher des valeurs
+   qui s'appliquent pourtant. */
+.sty-nb {
+  font-size: 10.5px;
+  padding: 0 5px;
+  color: var(--cat);
+  border: 1px solid color-mix(in srgb, var(--cat) 40%, transparent);
+}
+.sty-champs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0 20px;
+  margin-top: 4px;
 }

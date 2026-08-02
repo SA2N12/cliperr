@@ -593,7 +593,7 @@ async function runVideoGen(
       // une scène bascule (erreur/quota Veo), le repli prend les voix ElevenLabs
       // distinctes par personnage (naturelles) au lieu du TTS OpenAI robotique.
       videoEngine: cat.engine || repo.getSetting('series_video_engine') || 'seedance',
-      subStyle: catSubStyle(cat),
+      subStyle: catSubStyle(cat, catKeyOf(opts.videoType)),
       onProgress: (m) => emitIdeaVideo({ ideaId, status: 'running', message: m })
     })
     if (usage) addSpend(model, usage)
@@ -934,18 +934,39 @@ function catKeyOf(type?: string): string {
  *  choisi le sien. */
 export type NamedSubStyle = SubStyle & { id: string; name: string }
 type StyleLib = { styles: NamedSubStyle[]; defaultId: string }
-function subtitleStyles(): StyleLib {
+/** Bibliothèques PAR CATÉGORIE : une vidéo de niche et une vidéo lancée à la
+ *  main n'appellent pas le même habillage, leurs styles n'ont donc rien à faire
+ *  dans le même sac. Une bibliothèque est en revanche partagée par tous les
+ *  comptes — c'est la catégorie qui la porte, pas le compte. */
+const CAT_AVEC_STYLES = ['niche', 'genai']
+function subtitleStyles(): Record<string, StyleLib> {
+  const vide = (): Record<string, StyleLib> =>
+    Object.fromEntries(CAT_AVEC_STYLES.map((c) => [c, { styles: [], defaultId: '' }]))
   try {
-    const o = JSON.parse(repo.getSetting('subtitle_styles') || '{}') as Partial<StyleLib>
-    return { styles: Array.isArray(o.styles) ? o.styles : [], defaultId: String(o.defaultId ?? '') }
+    const o = JSON.parse(repo.getSetting('subtitle_styles') || '{}') as Record<string, unknown>
+    const out = vide()
+    // Ancien format : une bibliothèque unique, à plat. On la rattache aux niches
+    // plutôt que de la perdre en silence.
+    if (Array.isArray((o as Partial<StyleLib>).styles)) {
+      out.niche = { styles: (o as StyleLib).styles, defaultId: String((o as StyleLib).defaultId ?? '') }
+      return out
+    }
+    for (const c of CAT_AVEC_STYLES) {
+      const l = o[c] as Partial<StyleLib> | undefined
+      if (l && Array.isArray(l.styles)) out[c] = { styles: l.styles, defaultId: String(l.defaultId ?? '') }
+    }
+    return out
   } catch {
-    return { styles: [], defaultId: '' }
+    return vide()
   }
 }
+function libDe(cat: string): StyleLib {
+  return subtitleStyles()[cat] ?? { styles: [], defaultId: '' }
+}
 /** Style qu'une catégorie applique AVANT ses propres surcharges : celui qu'elle
- *  a choisi, sinon le style par défaut, sinon rien (défauts du moteur). */
-function baseSubStyle(c: CategoryCfg): SubStyle {
-  const lib = subtitleStyles()
+ *  a choisi, sinon le style par défaut de SA bibliothèque, sinon rien. */
+function baseSubStyle(c: CategoryCfg, catKey: string): SubStyle {
+  const lib = libDe(catKey)
   const voulu = c.subStyleId
     ? lib.styles.find((s) => s.id === c.subStyleId)
     : lib.styles.find((s) => s.id === lib.defaultId)
@@ -956,7 +977,7 @@ function baseSubStyle(c: CategoryCfg): SubStyle {
 /** Style effectif d'une catégorie : le style de base, puis ses surcharges. Les
  *  champs vides sont écartés plutôt que transmis — sinon une surcharge vide
  *  effacerait la valeur du style au lieu de la laisser passer. */
-function catSubStyle(c: CategoryCfg): SubStyle {
+function catSubStyle(c: CategoryCfg, catKey: string): SubStyle {
   const sur: SubStyle = {
     font: c.subFont || undefined,
     size: c.subSize,
@@ -968,7 +989,7 @@ function catSubStyle(c: CategoryCfg): SubStyle {
     upper: c.subUpper == null || c.subUpper === '' ? undefined : c.subUpper !== '0'
   }
   const net = Object.fromEntries(Object.entries(sur).filter(([, v]) => v !== undefined))
-  return { ...baseSubStyle(c), ...net }
+  return { ...baseSubStyle(c, catKey), ...net }
 }
 /** Réglages de catégorie PROPRES À UN COMPTE. Couche facultative : un compte
  *  sans réglage suit à l'identique la catégorie « tous les comptes ». */
@@ -3166,18 +3187,21 @@ app.get('/api/categories', (req, res) => {
       subUpper: SUB_DEFAUT.upper ? '1' : '0'
     },
     polices: SUB_POLICES,
-    ...subtitleStyles()
+    stylesParCat: subtitleStyles()
   })
 })
 // ── Bibliothèque de styles de sous-titres ──────────────────────────────────
 app.get('/api/subtitle-styles', (_req, res) => {
-  res.json({ ...subtitleStyles(), polices: SUB_POLICES, defauts: SUB_DEFAUT })
+  res.json({ parCategorie: subtitleStyles(), polices: SUB_POLICES, defauts: SUB_DEFAUT })
 })
 app.post('/api/subtitle-styles', (req, res) => {
   const b = (req.body ?? {}) as Record<string, unknown>
   const nom = String(b.name ?? '').trim().slice(0, 60)
   if (!nom) return res.status(400).json({ error: 'Nom requis' })
-  const lib = subtitleStyles()
+  const cat = String(b.category ?? '')
+  if (!CAT_AVEC_STYLES.includes(cat)) return res.status(400).json({ error: 'Catégorie sans styles' })
+  const toutes = subtitleStyles()
+  const lib = toutes[cat]
   const id = String(b.id ?? '').trim() || `s${Date.now().toString(36)}${randomBytes(3).toString('hex')}`
   const nb = (v: unknown, min: number, max: number): number | undefined => {
     const x = Math.round(Number(v))
@@ -3208,23 +3232,29 @@ app.post('/api/subtitle-styles', (req, res) => {
   // Le tout premier style devient le défaut : sans ça, en créer un ne changerait
   // rien tant qu'on n'aurait pas pensé à le désigner.
   if (!lib.styles.some((s) => s.id === lib.defaultId)) lib.defaultId = lib.styles[0].id
-  repo.setSetting('subtitle_styles', JSON.stringify(lib))
-  res.json({ ok: true, ...lib })
+  repo.setSetting('subtitle_styles', JSON.stringify(toutes))
+  res.json({ ok: true, parCategorie: toutes })
 })
 app.post('/api/subtitle-styles/default', (req, res) => {
-  const id = String((req.body as { id?: unknown })?.id ?? '')
-  const lib = subtitleStyles()
-  if (!lib.styles.some((s) => s.id === id)) return res.status(400).json({ error: 'Style inconnu' })
-  lib.defaultId = id
-  repo.setSetting('subtitle_styles', JSON.stringify(lib))
-  res.json({ ok: true, ...lib })
+  const b = (req.body ?? {}) as { id?: unknown; category?: unknown }
+  const cat = String(b.category ?? '')
+  if (!CAT_AVEC_STYLES.includes(cat)) return res.status(400).json({ error: 'Catégorie sans styles' })
+  const id = String(b.id ?? '')
+  const toutes = subtitleStyles()
+  if (!toutes[cat].styles.some((s) => s.id === id)) return res.status(400).json({ error: 'Style inconnu' })
+  toutes[cat].defaultId = id
+  repo.setSetting('subtitle_styles', JSON.stringify(toutes))
+  res.json({ ok: true, parCategorie: toutes })
 })
-app.delete('/api/subtitle-styles/:id', (req, res) => {
+app.delete('/api/subtitle-styles/:category/:id', (req, res) => {
+  const cat = String(req.params.category ?? '')
+  if (!CAT_AVEC_STYLES.includes(cat)) return res.status(400).json({ error: 'Catégorie sans styles' })
   const id = String(req.params.id ?? '')
-  const lib = subtitleStyles()
+  const toutes = subtitleStyles()
+  const lib = toutes[cat]
   lib.styles = lib.styles.filter((s) => s.id !== id)
   if (!lib.styles.some((s) => s.id === lib.defaultId)) lib.defaultId = lib.styles[0]?.id ?? ''
-  repo.setSetting('subtitle_styles', JSON.stringify(lib))
+  repo.setSetting('subtitle_styles', JSON.stringify(toutes))
   // Les catégories qui le référençaient repassent au défaut : laisser une
   // référence morte les ferait basculer sans que rien ne l'explique.
   const nettoie = (m: Record<string, CategoryCfg>): boolean => {
@@ -3238,7 +3268,7 @@ app.delete('/api/subtitle-styles/:id', (req, res) => {
   let bouge = false
   for (const m of Object.values(parUser)) if (nettoie(m)) bouge = true
   if (bouge) repo.setSetting('category_settings_by_user', JSON.stringify(parUser))
-  res.json({ ok: true, ...lib })
+  res.json({ ok: true, parCategorie: toutes })
 })
 
 // Aperçu des sous-titres. Rendu par le MÊME `sceneAss` et le même libass que la
@@ -3346,7 +3376,9 @@ app.post('/api/categories', (req, res) => {
   setStr('subUpper', ['0', '1'])
   // Le style doit exister : une référence morte ferait retomber la catégorie sur
   // le défaut sans que rien ne l'explique.
-  setStr('subStyleId', subtitleStyles().styles.map((s) => s.id))
+  // Le style doit exister DANS LA BIBLIOTHÈQUE DE CETTE CATÉGORIE : un style de
+  // niche n'a rien à faire sur une génération IA.
+  setStr('subStyleId', libDe(cat).styles.map((s) => s.id))
   const setCouleur = (k: 'subColor' | 'subHilite'): void => {
     if (!(k in c)) return
     // On accepte « #FFCC00 » comme « ffcc00 » : le champ web envoie l'un, une

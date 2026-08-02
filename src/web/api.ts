@@ -17,6 +17,10 @@ export type SubStyleDTO = {
   upper: boolean
 }
 
+/** Bibliotheque d'une categorie : ses styles, et celui qui s'applique quand un
+ *  compte n'en choisit pas. */
+export type StyleLibDTO = { styles: SubStyleDTO[]; defaultId: string }
+
 export interface PublishOverrides {
   caption?: string
   privacyLevel?: string
@@ -187,18 +191,17 @@ export const api = {
       parCompte: Record<string, number>
       globals: Record<string, string | number>
       polices: [string, string][]
-      styles: SubStyleDTO[]
-      defaultId: string
+      stylesParCat: Record<string, StyleLibDTO>
     }>(`/api/categories${user ? `?user=${encodeURIComponent(user)}` : ''}`),
-  // Bibliotheque de styles de sous-titres, partagee par toutes les categories.
-  subtitleStyles: () =>
-    req<{ styles: SubStyleDTO[]; defaultId: string; polices: [string, string][]; defauts: Record<string, string | number | boolean> }>('/api/subtitle-styles'),
-  saveSubtitleStyle: (s: Partial<SubStyleDTO>) =>
-    post<{ ok: boolean; styles: SubStyleDTO[]; defaultId: string }>('/api/subtitle-styles', s),
-  setDefaultSubtitleStyle: (id: string) =>
-    post<{ ok: boolean; styles: SubStyleDTO[]; defaultId: string }>('/api/subtitle-styles/default', { id }),
-  deleteSubtitleStyle: (id: string) =>
-    req<{ ok: boolean; styles: SubStyleDTO[]; defaultId: string }>(`/api/subtitle-styles/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  // Bibliotheques de styles, une PAR CATEGORIE : le style d'une video de niche
+  // n'a rien a faire sur une generation IA. Chacune est partagee par tous les
+  // comptes — c'est la categorie qui la porte.
+  saveSubtitleStyle: (category: string, s: Partial<SubStyleDTO>) =>
+    post<{ ok: boolean; parCategorie: Record<string, StyleLibDTO> }>('/api/subtitle-styles', { ...s, category }),
+  setDefaultSubtitleStyle: (category: string, id: string) =>
+    post<{ ok: boolean; parCategorie: Record<string, StyleLibDTO> }>('/api/subtitle-styles/default', { id, category }),
+  deleteSubtitleStyle: (category: string, id: string) =>
+    req<{ ok: boolean; parCategorie: Record<string, StyleLibDTO> }>(`/api/subtitle-styles/${encodeURIComponent(category)}/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   /** Apercu des sous-titres : PNG rendu par ffmpeg + libass, comme la video.
    *  Renvoie une URL d'objet — a revoquer par l'appelant. */
   subtitlePreview: async (style: Record<string, string | number>): Promise<string> => {
