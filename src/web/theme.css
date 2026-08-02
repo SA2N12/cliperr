@@ -5040,6 +5040,7 @@ video:-webkit-full-screen {
   gap: 8px;
   overflow-x: auto;
   padding-bottom: 0;
+  margin-bottom: -1px;
   scroll-snap-type: x proximity;
 }
 .sty-item,
