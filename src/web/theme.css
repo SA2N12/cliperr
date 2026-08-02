@@ -4708,7 +4708,7 @@ video:-webkit-full-screen {
   /* Serre a dessein : formulaire et aperçu font la même hauteur à 4 px près,
      rogner une seule colonne ne gagnerait rien — c'est le châssis commun qui
      fait tenir la page sans défilement. */
-  padding: 12px 18px 10px;
+  padding: 10px 18px 8px;
   border-top: 2px solid var(--cat, var(--border));
 }
 .cat-panel .cat-foot {
@@ -5226,7 +5226,7 @@ video:-webkit-full-screen {
 }
 .sty-ajust > summary {
   cursor: pointer;
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--muted);
   display: flex;
   align-items: center;
