@@ -5399,3 +5399,17 @@ video:-webkit-full-screen {
   background: color-mix(in srgb, var(--brand) 84%, #000);
   border-color: color-mix(in srgb, var(--brand) 84%, #000);
 }
+
+/* Cartes de bibliotheque : elles ne selectionnent plus rien, le choix se fait
+   au niveau du reglage qui les compose. Pas de curseur main, donc. */
+.sty-choix.inerte {
+  cursor: default;
+}
+/* Ligne des styles composes par un reglage. */
+.pre-styles {
+  color: var(--muted-2);
+  padding-top: 0;
+}
+.pre-styles .sty-res-t {
+  font-style: italic;
+}

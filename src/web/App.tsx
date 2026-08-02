@@ -4296,11 +4296,16 @@ const PARAM_DEF: Record<string, { label: string; court: string; opts?: [string, 
 
 /** Éditeur d'un réglage nommé. Les champs affichés dépendent de la catégorie —
  *  un carrousel n'a ni langue ni sous-titres. */
-function ModalePreset({ preset, champs, herite, onFerme, onEnregistre }: {
+function ModalePreset({ preset, champs, herite, stylesImg, stylesSub, onFerme, onEnregistre }: {
   preset: PresetDTO
   champs: string[]
   /** Valeur globale de chaque champ, pour l'option « suivre ». */
   herite: (k: string) => string
+  /** Bibliothèques de la catégorie : un réglage COMPOSE des styles existants
+   *  plutôt que de les redéfinir, sinon le même look serait à ressaisir dans
+   *  chaque réglage. */
+  stylesImg: ImgLibDTO
+  stylesSub: StyleLibDTO
   onFerme: () => void
   onEnregistre: (p: PresetDTO) => Promise<void>
 }): JSX.Element {
@@ -4341,6 +4346,32 @@ function ModalePreset({ preset, champs, herite, onFerme, onEnregistre }: {
             )
           })}
         </div>
+        {(stylesImg.styles.length > 0 || stylesSub.styles.length > 0) && (
+          <div className="sty-champs">
+            {stylesImg.styles.length > 0 && (
+              <div className="cat-f">
+                <label className="cat-lbl">Style visuel des images</label>
+                <select className="input-full" value={String(p.imgStyleId ?? '')} onChange={(e) => maj('imgStyleId', e.target.value)}>
+                  <option value="">
+                    Par défaut{stylesImg.styles.find((s) => s.id === stylesImg.defaultId) ? ` · ${stylesImg.styles.find((s) => s.id === stylesImg.defaultId)?.name}` : ''}
+                  </option>
+                  {stylesImg.styles.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+            )}
+            {stylesSub.styles.length > 0 && (
+              <div className="cat-f">
+                <label className="cat-lbl">Style des sous-titres</label>
+                <select className="input-full" value={String(p.subStyleId ?? '')} onChange={(e) => maj('subStyleId', e.target.value)}>
+                  <option value="">
+                    Par défaut{stylesSub.styles.find((s) => s.id === stylesSub.defaultId) ? ` · ${stylesSub.styles.find((s) => s.id === stylesSub.defaultId)?.name}` : ''}
+                  </option>
+                  {stylesSub.styles.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+            )}
+          </div>
+        )}
         <div className="cat-foot">
           <span className="cat-count">Un champ laissé vide suit le réglage global.</span>
           <button className="btn ghost-sm" onClick={onFerme}>Annuler</button>
@@ -4587,6 +4618,10 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
   const enregistrePreset = async (cat: string, p: PresetDTO): Promise<void> => {
     const cfg: Record<string, string> = {}
     for (const k of champsParCat[cat] ?? []) cfg[k] = String(p[k] ?? '')
+    // Les deux styles font partie du réglage : les omettre les effacerait à
+    // chaque enregistrement.
+    cfg.imgStyleId = String(p.imgStyleId ?? '')
+    cfg.subStyleId = String(p.subStyleId ?? '')
     try {
       const r = await api.saveParamPreset(cat, { id: p.id || undefined, name: p.name, cfg })
       setPresetsParCat(r.parCategorie)
@@ -4864,11 +4899,7 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
               <div key={s.id} className={`card sty-item${actif ? ' actif' : ''}`}>
                 {/* La carte entière sélectionne : cliquer sur l'image du style
                     qu'on veut est le geste naturel, pas viser une case. */}
-                <button
-                  className="sty-choix"
-                  title={actif ? 'Style appliqué ici' : 'Appliquer à cette catégorie'}
-                  onClick={() => champ(cat, 'subStyleId', s.id === choisi ? '' : s.id)}
-                >
+                <div className="sty-choix inerte">
                   <VignetteStyle s={s} />
                   <span className="sty-nom">
                     {s.name}
@@ -4879,7 +4910,6 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
                     {s.id === lib.defaultId && (
                       <span className="sty-badge" title="Suivi par tous les comptes qui ne choisissent pas de style">Défaut</span>
                     )}
-                    {actif && <span className="sty-coche" title="Appliqué à ce compte"><Icon name="check" size={13} /></span>}
                   </span>
                   <span className="muted small sty-res">
                     <span className="sty-res-t">
@@ -4890,7 +4920,7 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
                       <i style={{ background: `#${s.hilite}` }} title={`Mot prononcé #${s.hilite}`} />
                     </span>
                   </span>
-                </button>
+                </div>
                 <div className="sty-actions">
                   {s.id !== lib.defaultId && (
                     <button className="btn xsmall" title="Appliquer à tous les comptes qui n’ont rien choisi" onClick={() => void majDefaut(cat, s.id)}>Défaut</button>
@@ -4918,6 +4948,8 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
     const lib = presetLibDe(cat)
     const champs = champsParCat[cat] ?? []
     const choisi = val(cat, 'presetId')
+    const libImg = imgLibDe(cat)
+    const libSub = libDe(cat)
     /** Résumé d'une fiche : ce qu'elle impose, le reste suivant le global. */
     const resume = (p: PresetDTO): string => {
       const parts = champs
@@ -4929,12 +4961,20 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
         })
       return parts.length ? parts.join(' · ') : 'Tout suit les réglages globaux'
     }
+    /** Les deux styles que la fiche applique — celui qu'elle nomme, sinon celui
+     *  par défaut de la bibliothèque. */
+    const imgDe = (p: PresetDTO): ImgStyleDTO | undefined =>
+      libImg.styles.find((s) => s.id === (String(p.imgStyleId ?? '') || libImg.defaultId))
+    const subDe = (p: PresetDTO): SubStyleDTO | undefined =>
+      libSub.styles.find((s) => s.id === (String(p.subStyleId ?? '') || libSub.defaultId))
     return (
       <section className="cat-sec sous-titres">
         <div className="cat-sub">Réglages</div>
         <div className="sty-liste">
           {lib.presets.map((p) => {
             const actif = choisi ? p.id === choisi : p.id === lib.defaultId
+            const si = imgDe(p)
+            const ss = subDe(p)
             return (
               <div key={p.id} className={`card sty-item${actif ? ' actif' : ''}`}>
                 <button
@@ -4942,6 +4982,9 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
                   title={actif ? 'Réglage appliqué ici' : 'Appliquer à ce compte'}
                   onClick={() => champ(cat, 'presetId', p.id === choisi ? '' : p.id)}
                 >
+                  {/* Le rendu du style visuel sert de vignette : un réglage se
+                      reconnaît d'abord à ce qu'il produit. */}
+                  {si && <VignetteImage s={si} cat={cat} onGen={(id) => genApercuImg(cat, id)} />}
                   <span className="sty-nom">
                     {p.name}
                     {p.id === lib.defaultId && <span className="sty-badge" title="Suivi par tous les comptes qui ne choisissent pas de réglage">Défaut</span>}
@@ -4950,6 +4993,13 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
                   <span className="muted small sty-res">
                     <span className="sty-res-t nic-resume">{resume(p)}</span>
                   </span>
+                  {(si || ss) && (
+                    <span className="muted small sty-res pre-styles">
+                      <span className="sty-res-t">
+                        {[si?.name, ss?.name].filter(Boolean).join(' · ')}
+                      </span>
+                    </span>
+                  )}
                 </button>
                 <div className="sty-actions">
                   {p.id !== lib.defaultId && (
@@ -4985,11 +5035,7 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
             return (
               <div key={s.id} className={`card sty-item${actif ? ' actif' : ''}`}>
                 <VignetteImage s={s} cat={cat} onGen={(id) => genApercuImg(cat, id)} />
-                <button
-                  className="sty-choix"
-                  title={actif ? 'Style appliqué ici' : 'Appliquer à cette catégorie'}
-                  onClick={() => champ(cat, 'imgStyleId', s.id === choisi ? '' : s.id)}
-                >
+                <div className="sty-choix inerte">
                   <span className="sty-nom">
                     {s.name}
                     {/* Deux notions distinctes qu'on confond au premier regard :
@@ -4999,12 +5045,11 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
                     {s.id === lib.defaultId && (
                       <span className="sty-badge" title="Suivi par tous les comptes qui ne choisissent pas de style">Défaut</span>
                     )}
-                    {actif && <span className="sty-coche" title="Appliqué à ce compte"><Icon name="check" size={13} /></span>}
                   </span>
                   <span className="muted small sty-res">
                     <span className="sty-res-t">{s.prompt}</span>
                   </span>
-                </button>
+                </div>
                 <div className="sty-actions">
                   {s.id !== lib.defaultId && (
                     <button className="btn xsmall" onClick={() => void majDefautImg(cat, s.id)}>Défaut</button>
@@ -5257,6 +5302,8 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
           <ModalePreset
             preset={editPreset}
             champs={champsParCat[catImg] ?? []}
+            stylesImg={imgLibDe(catImg)}
+            stylesSub={libDe(catImg)}
             // L'option « suivre » nomme la valeur globale : sans elle, on ne
             // sait pas ce qu'on obtient en laissant le champ vide.
             herite={(k) => {

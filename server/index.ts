@@ -3388,10 +3388,16 @@ app.post('/api/param-presets', (req, res) => {
     const v = entier ? Math.round(Number(brut)) : Number(brut)
     if (Number.isFinite(v) && v >= min && v <= max) (fiche as Record<string, unknown>)[k] = v
   }
-  const enu = (k: string, ok: string[]): void => {
+  const enu = (k: string, ok: readonly string[]): void => {
     const v = String(cfg[k] ?? '').trim()
     if (ok.includes(v)) (fiche as Record<string, unknown>)[k] = v
   }
+  // Un réglage porte AUSSI les deux styles : c'est une configuration complète,
+  // pas seulement des nombres. Les identifiants sont validés contre les
+  // bibliothèques de CETTE catégorie — un style de carrousel n'a rien à faire
+  // dans un réglage de niche.
+  enu('subStyleId', libDe(cat).styles.map((s) => s.id))
+  enu('imgStyleId', imgLibDe(cat).styles.map((s) => s.id))
   for (const k of CAT_PARAMS[cat]) {
     if (k === 'speed') num('speed', 0.5, 2, false)
     else if (k === 'maxScenes') num('maxScenes', 1, 60)
