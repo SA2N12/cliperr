@@ -41,6 +41,10 @@ export interface PipelineOptions {
   // Portion à cliper (secondes) : seule cette tranche de la vidéo source est
   // téléchargée puis analysée. `null`/absent = vidéo entière.
   section?: { start: number; end: number } | null
+  /** Rendu des sous-titres. Fourni par l'appelant pour que les clips utilisent
+   *  EXACTEMENT le même moteur que les vidéos générées — deux implémentations
+   *  d'un même style finiraient par diverger. Absent = rendu par défaut. */
+  buildCaptions?: ((words: Word[], durationSec: number) => string) | null
 }
 
 export interface PipelineSource {
@@ -148,7 +152,9 @@ export async function runPipeline(
       assBasename = `${sid}-${i}.ass`
       await writeAss(
         join(ctx.dirs.clips, assBasename),
-        buildAss(inRange, { width: VIDEO_W, height: VIDEO_H })
+        opts.buildCaptions
+          ? opts.buildCaptions(inRange, Math.max(0.1, seg.end - seg.start))
+          : buildAss(inRange, { width: VIDEO_W, height: VIDEO_H })
       )
     }
 

@@ -221,7 +221,11 @@ async function runForSource(sourceId: number, clipCount: number, profileOverride
   const apiKey = getApiKey()
   const model = MODEL_MAP[repo.getSetting(FLAG_MODEL) ?? 'haiku'] ?? MODEL_MAP.haiku
   // Cadrage : la catégorie « Clips » prime sur le réglage global.
-  const reframeFocus = ((catCfg('clip', profileOverride).reframe || repo.getSetting(FLAG_REFRAME)) as ReframeFocus) || 'center'
+  const cfgClip = catCfg('clip', profileOverride)
+  const reframeFocus = ((cfgClip.reframe || repo.getSetting(FLAG_REFRAME)) as ReframeFocus) || 'center'
+  // Sous-titres des clips : MÊME moteur et même style que les vidéos générées.
+  // On passe `sceneAss` au pipeline plutôt que d'y réimplémenter le rendu.
+  const styleClip = catSubStyle(cfgClip, 'clip')
   const transcribeEnabled = repo.getSetting(FLAG_TRANSCRIBE) === '1'
   const backend = repo.getSetting(FLAG_TRANSCRIBE_BACKEND) || 'groq'
   const groqKey = getEncrypted('groq_key')
@@ -309,7 +313,12 @@ async function runForSource(sourceId: number, clipCount: number, profileOverride
         },
         onUsage: (m, usage) => addSpend(m, usage)
       },
-      { apiKey, model, transcribe, reframeFocus, detectFace, cookiesFromBrowser: null, cookiesFile, clipCount, section }
+      {
+        apiKey, model, transcribe, reframeFocus, detectFace, cookiesFromBrowser: null, cookiesFile, clipCount, section,
+        // Le premier argument de `sceneAss` ne sert que sans timings : ici on en
+        // a toujours (mots de la transcription), il reste donc vide.
+        buildCaptions: (mots, duree) => sceneAss('', duree, mots, styleClip)
+      }
     )
     repo.updateSource(sourceId, { status: 'done' })
   } catch (err) {
@@ -964,8 +973,11 @@ function subtitleStyles(): Record<string, StyleLib> {
     return vide()
   }
 }
+/** Les clips PARTAGENT la bibliothèque des niches : c'est le même habillage sur
+ *  le même compte, deux bibliothèques finiraient par diverger sans raison. */
+const CAT_STYLES_ALIAS: Record<string, string> = { clip: 'niche' }
 function libDe(cat: string): StyleLib {
-  return subtitleStyles()[cat] ?? { styles: [], defaultId: '' }
+  return subtitleStyles()[CAT_STYLES_ALIAS[cat] ?? cat] ?? { styles: [], defaultId: '' }
 }
 
 // ── Styles VISUELS d'images ────────────────────────────────────────────────

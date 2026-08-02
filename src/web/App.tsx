@@ -4511,7 +4511,8 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
   const [polices, setPolices] = useState<[string, string][]>([])
   /** Bibliothèques de styles, une par catégorie. */
   const [stylesParCat, setStylesParCat] = useState<Record<string, StyleLibDTO>>({})
-  const libDe = (cat: string): StyleLibDTO => stylesParCat[cat] ?? { styles: [], defaultId: '' }
+  /** Les clips partagent la bibliotheque de sous-titres des niches. */
+  const libDe = (cat: string): StyleLibDTO => stylesParCat[cat === 'clip' ? 'niche' : cat] ?? { styles: [], defaultId: '' }
   /** Bibliothèques de styles VISUELS, une par catégorie. */
   const [imgStylesParCat, setImgStylesParCat] = useState<Record<string, ImgLibDTO>>({})
   const imgLibDe = (cat: string): ImgLibDTO => imgStylesParCat[cat] ?? { styles: [], defaultId: '' }
@@ -4605,9 +4606,12 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
     bottom: Number(globals.subBottom ?? 430),
     upper: String(globals.subUpper ?? '1') !== '0'
   })
+  /** Les clips n ont pas de bibliotheque propre : creer, promouvoir ou
+   *  supprimer depuis un reglage de clip agit sur celle des niches. */
+  const catStyle = (c: string): string => (c === 'clip' ? 'niche' : c)
   const enregistreStyle = async (cat: string, s: SubStyleDTO): Promise<void> => {
     try {
-      const r = await api.saveSubtitleStyle(cat, s.id ? s : { ...s, id: undefined })
+      const r = await api.saveSubtitleStyle(catStyle(cat), s.id ? s : { ...s, id: undefined })
       setStylesParCat(r.parCategorie)
       setEditStyle(null)
       toast('Style enregistré ✓')
@@ -4615,7 +4619,7 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
   }
   const majDefaut = async (cat: string, id: string): Promise<void> => {
     try {
-      const r = await api.setDefaultSubtitleStyle(cat, id)
+      const r = await api.setDefaultSubtitleStyle(catStyle(cat), id)
       setStylesParCat(r.parCategorie)
       toast('Style par défaut changé')
     } catch (e) { toast('Erreur : ' + (e as Error).message) }
@@ -4623,7 +4627,7 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
   const supprimeStyle = async (cat: string, s: SubStyleDTO): Promise<void> => {
     if (!window.confirm(`Supprimer le style « ${s.name} » ? Les comptes qui l’utilisaient sur cette catégorie repasseront au style par défaut.`)) return
     try {
-      const r = await api.deleteSubtitleStyle(cat, s.id)
+      const r = await api.deleteSubtitleStyle(catStyle(cat), s.id)
       setStylesParCat(r.parCategorie)
       toast('Style supprimé')
     } catch (e) { toast('Erreur : ' + (e as Error).message) }
@@ -5354,7 +5358,7 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
               {(catP === 'niche' || catP === 'carousel') &&
                 blocStyleVisuel(catP, catP === 'carousel' ? 'Style visuel des diapos' : 'Style visuel des images',
                   String(d.imgStyleId ?? ''), (id) => majD('imgStyleId', id))}
-              {catP !== 'carousel' && catP !== 'clip' &&
+              {catP !== 'carousel' &&
                 blocSousTitres(catP, String(d.subStyleId ?? ''), (id) => majD('subStyleId', id))}
             </div>
             <div className="cat-foot">
