@@ -4796,6 +4796,14 @@ video:-webkit-full-screen {
 .cat-fil button:hover {
   color: var(--text);
 }
+/* Le segment groupe le separateur et son element : sans gap propre, ils se
+   collaient (« @compte /Niches »), l espacement du parent ne s appliquant
+   qu entre segments. */
+.cat-fil-seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
 .cat-fil-sep {
   color: var(--muted-2);
   opacity: 0.6;
