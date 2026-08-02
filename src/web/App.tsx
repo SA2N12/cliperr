@@ -5239,6 +5239,35 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
               <div className="muted small">{carte.hint}</div>
             </div>
           </div>
+          {/* Le SUJET du compte. Il vaut pour ses vidéos comme pour ses
+              carrousels, sa place est donc ici et non dans l'un des panneaux. */}
+          {compte && (
+            <section className="cat-sec sous-titres nic-bande">
+              <div className="cat-sub">Niche du compte</div>
+              <div className="sty-liste">
+                {nichesLib.map((n) => {
+                  const actif = nicheParCompte[compte] === n.id
+                  return (
+                    <div key={n.id} className={`card sty-item${actif ? ' actif' : ''}`}>
+                      <button
+                        className="sty-choix"
+                        title={actif ? 'Niche de ce compte' : 'Assigner à ce compte'}
+                        onClick={() => void assigner(compte, actif ? '' : n.id)}
+                      >
+                        <span className="sty-nom">
+                          {n.name}
+                          {actif && <span className="sty-coche" title="Niche de ce compte"><Icon name="check" size={13} /></span>}
+                        </span>
+                        <span className="muted small sty-res">
+                          <span className="sty-res-t nic-resume">{n.brief || 'Aucun brief — l’IA n’aura que le nom.'}</span>
+                        </span>
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            </section>
+          )}
           <div className="cat-grid">
             {carte.panneaux.map((p) => {
               const n = nbEnregistre(p.cats)
@@ -5281,35 +5310,6 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
             })}
           </div>
 
-          {/* Le SUJET du compte. Il vaut pour ses vidéos comme pour ses
-              carrousels, sa place est donc ici et non dans l'un des panneaux. */}
-          {compte && (
-            <section className="cat-sec sous-titres nic-bande">
-              <div className="cat-sub">Niche du compte</div>
-              <div className="sty-liste">
-                {nichesLib.map((n) => {
-                  const actif = nicheParCompte[compte] === n.id
-                  return (
-                    <div key={n.id} className={`card sty-item${actif ? ' actif' : ''}`}>
-                      <button
-                        className="sty-choix"
-                        title={actif ? 'Niche de ce compte' : 'Assigner à ce compte'}
-                        onClick={() => void assigner(compte, actif ? '' : n.id)}
-                      >
-                        <span className="sty-nom">
-                          {n.name}
-                          {actif && <span className="sty-coche" title="Niche de ce compte"><Icon name="check" size={13} /></span>}
-                        </span>
-                        <span className="muted small sty-res">
-                          <span className="sty-res-t nic-resume">{n.brief || 'Aucun brief — l’IA n’aura que le nom.'}</span>
-                        </span>
-                      </button>
-                    </div>
-                  )
-                })}
-              </div>
-            </section>
-          )}
         </div>
       )
     }

@@ -5344,8 +5344,11 @@ video:-webkit-full-screen {
 /* ── Bande des niches ──────────────────────────────────────────────────────
    Meme gabarit que les styles, sans vignette : une niche est un TEXTE, il n y
    a pas de rendu a montrer. Le brief prend la place liberee. */
+/* Placee AU-DESSUS des types : la niche est le sujet, on la choisit avant
+   de regler comment on la produit. La marge passe donc en bas. */
 .nic-bande {
-  margin-top: 18px;
+  margin-top: 0;
+  margin-bottom: 18px;
 }
 .nic-bande .sty-item {
   flex-basis: 262px;
