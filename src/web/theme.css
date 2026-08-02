@@ -3443,7 +3443,7 @@ input[type='checkbox'] {
 }
 /* Séparateur entre deux chaînes de génération d'une même carte. */
 .cat-sub {
-  margin-top: 15px;
+  margin-top: 10px;
   margin-bottom: 2px;
   font-size: 11px;
   font-weight: 600;
@@ -5048,7 +5048,7 @@ video:-webkit-full-screen {
   /* 70 et non 92 : la vignette montre une bande de sous-titres, pas une
      scene — la rallonger ne montre que du fond et pousse le panneau hors
      de l ecran. */
-  height: 70px;
+  height: 62px;
   background: var(--panel-2);
   border-bottom: 1px solid var(--border);
   overflow: hidden;
@@ -5121,7 +5121,7 @@ video:-webkit-full-screen {
 
 /* Carte d'ajout : même gabarit que les autres, en pointillés. */
 .sty-ajout {
-  min-height: 132px;
+  min-height: 122px;
   display: flex;
   flex-direction: column;
   align-items: center;
