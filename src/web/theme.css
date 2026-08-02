@@ -5032,12 +5032,31 @@ video:-webkit-full-screen {
 /* ── Styles de sous-titres : une carte par style ───────────────────────────
    Le nom et les chiffres ne disent pas à quoi ça ressemble : chaque carte
    porte le rendu réel du style, recadré sur la bande de sous-titres. */
+/* Bande horizontale plutot que grille : une bibliotheque n a pas de taille
+   maximale, et empiler ses rangees poussait la page hors de l ecran des dix
+   styles. Une seule rangee qui defile tient quel que soit leur nombre. */
 .sty-liste {
-  display: grid;
-  /* 250 : en dessous, les trois boutons d'action passaient à la ligne. */
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  display: flex;
   gap: 10px;
-  align-items: stretch;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  scroll-snap-type: x proximity;
+}
+.sty-item,
+.sty-ajout {
+  flex: 0 0 226px;
+  scroll-snap-align: start;
+}
+/* La barre doit RESTER VISIBLE : c est le seul indice qu il y a d autres
+   styles a droite. */
+.sty-liste::-webkit-scrollbar {
+  height: 6px;
+}
+.sty-liste::-webkit-scrollbar-thumb {
+  background: var(--border);
+}
+.sty-liste::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-2);
 }
 .sty-item {
   padding: 0;
