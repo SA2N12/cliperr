@@ -4294,100 +4294,6 @@ const PARAM_DEF: Record<string, { label: string; court: string; opts?: [string, 
   maxScenes: { label: 'Scènes max', court: 'Scènes', min: 1, max: 60 }
 }
 
-/** Éditeur d'un réglage nommé. Les champs affichés dépendent de la catégorie —
- *  un carrousel n'a ni langue ni sous-titres. */
-function ModalePreset({ preset, champs, herite, stylesImg, stylesSub, onFerme, onEnregistre }: {
-  preset: PresetDTO
-  champs: string[]
-  /** Valeur globale de chaque champ, pour l'option « suivre ». */
-  herite: (k: string) => string
-  /** Bibliothèques de la catégorie : un réglage COMPOSE des styles existants
-   *  plutôt que de les redéfinir, sinon le même look serait à ressaisir dans
-   *  chaque réglage. */
-  stylesImg: ImgLibDTO
-  stylesSub: StyleLibDTO
-  onFerme: () => void
-  onEnregistre: (p: PresetDTO) => Promise<void>
-}): JSX.Element {
-  const [p, setP] = useState<PresetDTO>(preset)
-  const [busy, setBusy] = useState(false)
-  const maj = (k: string, v: string): void => setP((o) => ({ ...o, [k]: v }))
-  return (
-    <div className="pal-back" onMouseDown={onFerme}>
-      <div className="card sty-modale etroite" onMouseDown={(e) => e.stopPropagation()}>
-        <div className="cat-f">
-          <label className="cat-lbl">Nom du réglage</label>
-          <input className="input-full" value={p.name} placeholder="ex. Français standard" onChange={(e) => setP((o) => ({ ...o, name: e.target.value }))} />
-        </div>
-        <div className="sty-champs">
-          {champs.map((k) => {
-            const d = PARAM_DEF[k]
-            if (!d) return null
-            const v = String(p[k] ?? '')
-            return (
-              <div className="cat-f" key={k}>
-                <label className="cat-lbl">{d.label}</label>
-                {d.opts
-                  ? (
-                    <select className="input-full" value={v} onChange={(e) => maj(k, e.target.value)}>
-                      <option value="">Global · {herite(k)}</option>
-                      {d.opts.map(([o, l]) => <option key={o} value={o}>{l}</option>)}
-                    </select>
-                  )
-                  : (
-                    <input
-                      className="input-full" type="number" min={d.min} max={d.max} step={d.pas}
-                      placeholder={herite(k)}
-                      value={v}
-                      onChange={(e) => maj(k, e.target.value)}
-                    />
-                  )}
-              </div>
-            )
-          })}
-        </div>
-        {(stylesImg.styles.length > 0 || stylesSub.styles.length > 0) && (
-          <div className="sty-champs">
-            {stylesImg.styles.length > 0 && (
-              <div className="cat-f">
-                <label className="cat-lbl">Style visuel des images</label>
-                <select className="input-full" value={String(p.imgStyleId ?? '')} onChange={(e) => maj('imgStyleId', e.target.value)}>
-                  <option value="">
-                    Par défaut{stylesImg.styles.find((s) => s.id === stylesImg.defaultId) ? ` · ${stylesImg.styles.find((s) => s.id === stylesImg.defaultId)?.name}` : ''}
-                  </option>
-                  {stylesImg.styles.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-              </div>
-            )}
-            {stylesSub.styles.length > 0 && (
-              <div className="cat-f">
-                <label className="cat-lbl">Style des sous-titres</label>
-                <select className="input-full" value={String(p.subStyleId ?? '')} onChange={(e) => maj('subStyleId', e.target.value)}>
-                  <option value="">
-                    Par défaut{stylesSub.styles.find((s) => s.id === stylesSub.defaultId) ? ` · ${stylesSub.styles.find((s) => s.id === stylesSub.defaultId)?.name}` : ''}
-                  </option>
-                  {stylesSub.styles.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-              </div>
-            )}
-          </div>
-        )}
-        <div className="cat-foot">
-          <span className="cat-count">Un champ laissé vide suit le réglage global.</span>
-          <button className="btn ghost-sm" onClick={onFerme}>Annuler</button>
-          <button
-            className="btn primary"
-            disabled={busy || !p.name.trim()}
-            onClick={() => { setBusy(true); void onEnregistre(p).finally(() => setBusy(false)) }}
-          >
-            {busy ? 'Enregistrement…' : 'Enregistrer'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 /** Vignette d'un style visuel. L'image n'existe que si on l'a demandée : la
  *  générer coûte un appel payant, on ne le fait pas dans le dos de l'utilisateur. */
 function VignetteImage({ s, cat, onGen }: { s: ImgStyleDTO; cat: string; onGen: (id: string) => Promise<void> }): JSX.Element {
@@ -4614,7 +4520,10 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
   const [presetsParCat, setPresetsParCat] = useState<Record<string, PresetLibDTO>>({})
   const [champsParCat, setChampsParCat] = useState<Record<string, string[]>>({})
   const presetLibDe = (cat: string): PresetLibDTO => presetsParCat[cat] ?? { presets: [], defaultId: '' }
-  const [editPreset, setEditPreset] = useState<PresetDTO | null>(null)
+  /** Réglage ouvert en pleine page (`null` = la liste). Son brouillon vit ici :
+   *  les styles se choisissent sur la page, on n'enregistre qu'au bouton. */
+  const [ouvrePreset, setOuvrePreset] = useState<PresetDTO | null>(null)
+  useEffect(() => { setOuvrePreset(null) }, [ouvert, ouvertPan])
   const enregistrePreset = async (cat: string, p: PresetDTO): Promise<void> => {
     const cfg: Record<string, string> = {}
     for (const k of champsParCat[cat] ?? []) cfg[k] = String(p[k] ?? '')
@@ -4625,7 +4534,6 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
     try {
       const r = await api.saveParamPreset(cat, { id: p.id || undefined, name: p.name, cfg })
       setPresetsParCat(r.parCategorie)
-      setEditPreset(null)
       toast('Réglage enregistré ✓')
     } catch (e) { toast('Erreur : ' + (e as Error).message) }
   }
@@ -4886,9 +4794,8 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
     )
   }
 
-  const blocSousTitres = (cat: string): JSX.Element => {
+  const blocSousTitres = (cat: string, choisi: string, choisir: (id: string) => void): JSX.Element => {
     const lib = libDe(cat)
-    const choisi = val(cat, 'subStyleId')
     return (
       <section className="cat-sec sous-titres">
         <div className="cat-sub">Sous-titres</div>
@@ -4899,7 +4806,11 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
               <div key={s.id} className={`card sty-item${actif ? ' actif' : ''}`}>
                 {/* La carte entière sélectionne : cliquer sur l'image du style
                     qu'on veut est le geste naturel, pas viser une case. */}
-                <div className="sty-choix inerte">
+                <button
+                  className="sty-choix"
+                  title={actif ? 'Style de ce réglage' : 'Choisir pour ce réglage'}
+                  onClick={() => choisir(s.id === choisi ? '' : s.id)}
+                >
                   <VignetteStyle s={s} />
                   <span className="sty-nom">
                     {s.name}
@@ -4910,6 +4821,7 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
                     {s.id === lib.defaultId && (
                       <span className="sty-badge" title="Suivi par tous les comptes qui ne choisissent pas de style">Défaut</span>
                     )}
+                    {actif && <span className="sty-coche" title="Style de ce réglage"><Icon name="check" size={13} /></span>}
                   </span>
                   <span className="muted small sty-res">
                     <span className="sty-res-t">
@@ -4920,7 +4832,7 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
                       <i style={{ background: `#${s.hilite}` }} title={`Mot prononcé #${s.hilite}`} />
                     </span>
                   </span>
-                </div>
+                </button>
                 <div className="sty-actions">
                   {s.id !== lib.defaultId && (
                     <button className="btn xsmall" title="Appliquer à tous les comptes qui n’ont rien choisi" onClick={() => void majDefaut(cat, s.id)}>Défaut</button>
@@ -4979,8 +4891,8 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
               <div key={p.id} className={`card sty-item${actif ? ' actif' : ''}`}>
                 <button
                   className="sty-choix"
-                  title={actif ? 'Réglage appliqué ici' : 'Appliquer à ce compte'}
-                  onClick={() => champ(cat, 'presetId', p.id === choisi ? '' : p.id)}
+                  title="Ouvrir ce réglage"
+                  onClick={() => setOuvrePreset(p)}
                 >
                   {/* Le rendu du style visuel sert de vignette : un réglage se
                       reconnaît d'abord à ce qu'il produit. */}
@@ -5005,13 +4917,15 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
                   {p.id !== lib.defaultId && (
                     <button className="btn xsmall" onClick={() => void majDefautPreset(cat, p.id)}>Défaut</button>
                   )}
-                  <button className="btn xsmall" onClick={() => setEditPreset(p)}>Modifier</button>
+                  {!actif && (
+                    <button className="btn xsmall" title="Appliquer à ce compte" onClick={() => champ(cat, 'presetId', p.id)}>Appliquer</button>
+                  )}
                   <button className="btn xsmall danger" onClick={() => void supprimePreset(cat, p)}>Supprimer</button>
                 </div>
               </div>
             )
           })}
-          <button className="card sty-ajout" onClick={() => setEditPreset({ id: '', name: '' } as PresetDTO)}>
+          <button className="card sty-ajout" onClick={() => setOuvrePreset({ id: '', name: '' } as PresetDTO)}>
             <span className="sty-plus">+</span>
             <span>Nouveau réglage</span>
           </button>
@@ -5023,9 +4937,8 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
 
   /** Styles visuels : même modèle que les sous-titres. La différence tient à
    *  l'aperçu — il coûte une image, donc il se demande au lieu de s'afficher. */
-  const blocStyleVisuel = (cat: string, titre: string, exemple: string): JSX.Element => {
+  const blocStyleVisuel = (cat: string, titre: string, choisi: string, choisir: (id: string) => void): JSX.Element => {
     const lib = imgLibDe(cat)
-    const choisi = val(cat, 'imgStyleId')
     return (
       <section className="cat-sec sous-titres">
         <div className="cat-sub">{titre}</div>
@@ -5035,7 +4948,11 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
             return (
               <div key={s.id} className={`card sty-item${actif ? ' actif' : ''}`}>
                 <VignetteImage s={s} cat={cat} onGen={(id) => genApercuImg(cat, id)} />
-                <div className="sty-choix inerte">
+                <button
+                  className="sty-choix"
+                  title={actif ? 'Style de ce réglage' : 'Choisir pour ce réglage'}
+                  onClick={() => choisir(s.id === choisi ? '' : s.id)}
+                >
                   <span className="sty-nom">
                     {s.name}
                     {/* Deux notions distinctes qu'on confond au premier regard :
@@ -5045,11 +4962,12 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
                     {s.id === lib.defaultId && (
                       <span className="sty-badge" title="Suivi par tous les comptes qui ne choisissent pas de style">Défaut</span>
                     )}
+                    {actif && <span className="sty-coche" title="Style de ce réglage"><Icon name="check" size={13} /></span>}
                   </span>
                   <span className="muted small sty-res">
                     <span className="sty-res-t">{s.prompt}</span>
                   </span>
-                </div>
+                </button>
                 <div className="sty-actions">
                   {s.id !== lib.defaultId && (
                     <button className="btn xsmall" onClick={() => void majDefautImg(cat, s.id)}>Défaut</button>
@@ -5132,8 +5050,6 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
           corps: (
             <>
               {blocReglages('niche')}
-              {blocStyleVisuel('niche', 'Style visuel des images', 'ex. photographie cinématographique, lumière rasante, grain argentique')}
-              {blocSousTitres('niche')}
             </>
           )
         },
@@ -5148,7 +5064,6 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
           corps: (
             <>
               {blocReglages('carousel')}
-              {blocStyleVisuel('carousel', 'Style visuel des diapos', 'ex. illustration vectorielle épurée, aplats de couleur, fond uni sombre')}
             </>
           )
         }
@@ -5188,8 +5103,6 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
         corps: (
           <>
             {blocReglages('genai', 'Moteur, qualité imposée et scènes max n’agissent que sur les vidéos reproduites depuis une source — seules à avoir des scènes animées.')}
-            {blocStyleVisuel('genai', 'Style visuel des images', 'ex. photographie cinématographique, lumière rasante, grain argentique')}
-            {blocSousTitres('genai')}
           </>
         )
       }]
@@ -5246,7 +5159,11 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
   const fil = (...feuilles: string[]): JSX.Element => {
     // Chaque niveau sauf le dernier est cliquable, et remonte EXACTEMENT à lui :
     // un fil dont seul le premier maillon fonctionne ne sert à rien.
-    const retours = [() => setOuvert(null), () => setOuvertPan(null)]
+    const retours = [
+      () => { setOuvert(null); setOuvertPan(null); setOuvrePreset(null) },
+      () => { setOuvertPan(null); setOuvrePreset(null) },
+      () => setOuvrePreset(null)
+    ]
     return (
       <div className="cat-fil">
         <button onClick={() => setCompte(null)}>
@@ -5298,23 +5215,7 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
             onEnregistre={(s) => enregistreImg(catImg, s)}
           />
         )}
-        {editPreset && (
-          <ModalePreset
-            preset={editPreset}
-            champs={champsParCat[catImg] ?? []}
-            stylesImg={imgLibDe(catImg)}
-            stylesSub={libDe(catImg)}
-            // L'option « suivre » nomme la valeur globale : sans elle, on ne
-            // sait pas ce qu'on obtient en laissant le champ vide.
-            herite={(k) => {
-              const g = globals[k]
-              return g == null || g === '' ? 'par défaut' : mot(k, String(g))
-            }}
-            onFerme={() => setEditPreset(null)}
-            onEnregistre={(p) => enregistrePreset(catImg, p)}
-          />
-        )}
-      </>
+              </>
     )
 
     // ── Choix du panneau ────────────────────────────────────────────────────
@@ -5403,9 +5304,75 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
       )
     }
 
+    const multi = carte.panneaux.length > 1
+    const catP = ouvertPan === 'c' ? 'carousel' : carte.cle
+
+    // ── Page d'UN réglage : ses paramètres et les deux styles qu'il compose ──
+    if (ouvrePreset) {
+      const d = ouvrePreset
+      const majD = (k: string, v: string): void => setOuvrePreset((o) => (o ? { ...o, [k]: v } : o))
+      const champsP = champsParCat[catP] ?? []
+      return (
+        <div className="cat-detail" style={{ '--cat': `var(--cat-${carte.teinte})` } as CSSProperties}>
+          {fil(carte.titre, ...(multi ? [pan.titre ?? ''] : []), d.name.trim() || 'Nouveau réglage')}
+          <div className="cat-dhead">
+            <span className="cat-ico lg"><Icon name="settings" size={21} /></span>
+            <div><h1>{d.name.trim() || 'Nouveau réglage'}</h1></div>
+          </div>
+          <div className="card cat-panel">
+            <div className="cat-body">
+              <section className="cat-sec">
+                <div className="cat-f">
+                  <label className="cat-lbl">Nom du réglage</label>
+                  <input className="input-full" value={d.name} placeholder="ex. Français standard" onChange={(e) => majD('name', e.target.value)} />
+                </div>
+                {champsP.map((k) => {
+                  const def = PARAM_DEF[k]
+                  if (!def) return null
+                  const g = globals[k]
+                  const h = g == null || g === '' ? 'par défaut' : mot(k, String(g))
+                  const v = String(d[k] ?? '')
+                  return (
+                    <div className={`cat-f${v !== '' ? ' on' : ''}`} key={k}>
+                      <label className="cat-lbl">{def.label}</label>
+                      {def.opts
+                        ? (
+                          <select className="input-full" value={v} onChange={(e) => majD(k, e.target.value)}>
+                            <option value="">Global · {h}</option>
+                            {def.opts.map(([o, l]) => <option key={o} value={o}>{l}</option>)}
+                          </select>
+                        )
+                        : <input className="input-full" type="number" min={def.min} max={def.max} step={def.pas} placeholder={h} value={v} onChange={(e) => majD(k, e.target.value)} />}
+                    </div>
+                  )
+                })}
+              </section>
+              {/* Les deux bibliothèques : on compose le réglage en cliquant, et
+                  on peut y créer un style au passage sans quitter la page. */}
+              {blocStyleVisuel(catP, catP === 'carousel' ? 'Style visuel des diapos' : 'Style visuel des images',
+                String(d.imgStyleId ?? ''), (id) => majD('imgStyleId', id))}
+              {catP !== 'carousel' && catP !== 'clip' &&
+                blocSousTitres(catP, String(d.subStyleId ?? ''), (id) => majD('subStyleId', id))}
+            </div>
+            <div className="cat-foot">
+              <span className="cat-count">Un champ laissé vide suit le réglage global.</span>
+              <button className="btn ghost-sm" onClick={() => setOuvrePreset(null)}>Annuler</button>
+              <button
+                className="btn primary"
+                disabled={!d.name.trim()}
+                onClick={() => void enregistrePreset(catP, d).then(() => setOuvrePreset(null))}
+              >
+                Enregistrer
+              </button>
+            </div>
+          </div>
+          {modale}
+        </div>
+      )
+    }
+
     // ── Formulaire d'un panneau ─────────────────────────────────────────────
     const dirty = modifie(pan.cats)
-    const multi = carte.panneaux.length > 1
     return (
       <div className="cat-detail" style={{ '--cat': `var(--cat-${carte.teinte})` } as CSSProperties}>
         {multi ? fil(carte.titre, pan.titre ?? '') : fil(carte.titre)}
