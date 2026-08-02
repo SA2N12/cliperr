@@ -4393,6 +4393,10 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
   // obligeaient à lire chaque champ pour savoir où l'on était ; on choisit
   // d'abord, on règle ensuite.
   const [ouvert, setOuvert] = useState<string | null>(null)
+  /** Panneau ouvert dans la catégorie (`null` = la grille des panneaux). Ne sert
+   *  qu'aux catégories qui en ont plusieurs. */
+  const [ouvertPan, setOuvertPan] = useState<string | null>(null)
+  useEffect(() => { setOuvertPan(null) }, [ouvert])
   // Compte dont on règle les catégories. `null` = l'étape de choix du compte.
   const [compte, setCompte] = useState<string | null>(null)
   /** Couche héritée AVANT les globaux : vide en vue tous comptes, la couche
@@ -4790,7 +4794,12 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
     /** Panneaux du détail. Plusieurs quand la catégorie produit des choses de
      *  natures différentes — chacun s'enregistre séparément, régler les diapos
      *  n'a pas à valider les réglages vidéo au passage. */
-    panneaux: { cle: string; titre?: string; cats: string[]; etroit?: boolean; corps: JSX.Element }[]
+    panneaux: {
+      cle: string; titre?: string; cats: string[]; corps: JSX.Element
+      /** Renseignés quand la catégorie en a plusieurs : ils deviennent alors des
+       *  tuiles, et une tuile doit dire ce qu'elle contient avant qu'on l'ouvre. */
+      icone?: string; hint?: string; apercu?: [string, { txt: string; perso: boolean }][]
+    }[]
   }
   const CARTES: Carte[] = [
     {
@@ -4810,7 +4819,15 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
       // globalement (Réglages → Génération vidéos).
       panneaux: [
         {
-          cle: 'v', titre: 'Vidéos', cats: ['niche'],
+          cle: 'v', titre: 'Vidéos', cats: ['niche'], icone: 'clips',
+          hint: 'Voix, langue, sous-titres et rendu des images.',
+          apercu: [
+            ['Langue', applique('niche', 'lang')],
+            ['Sous-titres', applique('niche', 'subtitles')],
+            ['Style', styleDe('niche')
+              ? { txt: styleDe('niche')!.name, perso: val('niche', 'subStyleId') !== '' }
+              : { txt: 'aucun', perso: false }]
+          ],
           corps: (
             <>
               <section className="cat-sec">{blocVideo('niche')}</section>
@@ -4820,7 +4837,12 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
         },
         {
           // Les carrousels sont des images : ni voix, ni sous-titres.
-          cle: 'c', titre: 'Carrousels', cats: ['carousel'], etroit: true,
+          cle: 'c', titre: 'Carrousels', cats: ['carousel'], icone: 'sources',
+          hint: 'Suites d’images publiées en diaporama. Ni voix, ni sous-titres.',
+          apercu: [
+            ['Diapos', applique('carousel', 'slides')],
+            ['Style visuel', { txt: val('carousel', 'style') ? 'personnalisé' : 'libre', perso: val('carousel', 'style') !== '' }]
+          ],
           corps: (
             <section className="cat-sec">
               {nombre('carousel', 'slides', 'Nombre de diapos', 3, 10)}
@@ -4948,52 +4970,129 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
 
   /** Fil d'Ariane. Trois niveaux : sans lui, deux écrans de tuiles se
    *  ressemblent trop pour qu'on sache où l'on est. */
-  const fil = (feuille?: string): JSX.Element => (
-    <div className="cat-fil">
-      <button onClick={() => setCompte(null)}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
-        Comptes
-      </button>
-      <span className="cat-fil-sep">/</span>
-      {feuille ? <button onClick={() => setOuvert(null)}>{nomCompte}</button> : <span className="cat-fil-ici">{nomCompte}</span>}
-      {feuille && <><span className="cat-fil-sep">/</span><span className="cat-fil-ici">{feuille}</span></>}
-    </div>
-  )
+  const fil = (...feuilles: string[]): JSX.Element => {
+    // Chaque niveau sauf le dernier est cliquable, et remonte EXACTEMENT à lui :
+    // un fil dont seul le premier maillon fonctionne ne sert à rien.
+    const retours = [() => setOuvert(null), () => setOuvertPan(null)]
+    return (
+      <div className="cat-fil">
+        <button onClick={() => setCompte(null)}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+          Comptes
+        </button>
+        <span className="cat-fil-sep">/</span>
+        {feuilles.length
+          ? <button onClick={retours[0]}>{nomCompte}</button>
+          : <span className="cat-fil-ici">{nomCompte}</span>}
+        {feuilles.map((f, i) => (
+          <span className="cat-fil-seg" key={f}>
+            <span className="cat-fil-sep">/</span>
+            {i === feuilles.length - 1
+              ? <span className="cat-fil-ici">{f}</span>
+              : <button onClick={retours[i + 1]}>{f}</button>}
+          </span>
+        ))}
+      </div>
+    )
+  }
 
   // ── Détail d'une catégorie ────────────────────────────────────────────────
   if (carte) {
-    const dirty = modifie(carte.cats)
+    // Une catégorie à panneau unique n'a rien à faire choisir : on va droit au
+    // formulaire. Ce sont les niches, qui produisent deux choses, qui gagnent
+    // une étape de plus.
+    const pan = carte.panneaux.length === 1
+      ? carte.panneaux[0]
+      : carte.panneaux.find((p) => p.cle === ouvertPan) ?? null
+
+    const modale = editStyle && (
+      <ModaleStyle
+        style={editStyle}
+        polices={polices}
+        onFerme={() => setEditStyle(null)}
+        onEnregistre={(s) => enregistreStyle(carte.cle, s)}
+      />
+    )
+
+    // ── Choix du panneau ────────────────────────────────────────────────────
+    if (!pan) {
+      return (
+        <div className="cat-detail" style={{ '--cat': `var(--cat-${carte.teinte})` } as CSSProperties}>
+          {fil(carte.titre)}
+          <div className="cat-dhead">
+            <span className="cat-ico lg"><Icon name={carte.icone} size={21} /></span>
+            <div>
+              <h1>{carte.titre}</h1>
+              <div className="muted small">{carte.hint}</div>
+            </div>
+          </div>
+          <div className="cat-grid">
+            {carte.panneaux.map((p) => {
+              const n = nbEnregistre(p.cats)
+              const dirty = modifie(p.cats)
+              return (
+                <button
+                  className="card cat-card cat-tile"
+                  key={p.cle}
+                  style={{ '--cat': `var(--cat-${carte.teinte})` } as CSSProperties}
+                  onClick={() => setOuvertPan(p.cle)}
+                >
+                  <div className="cat-head">
+                    <span className="cat-ico"><Icon name={p.icone ?? 'clips'} size={16} /></span>
+                    <div>
+                      <div className="cat-title">{p.titre}</div>
+                      <div className="muted small cat-hint">{p.hint}</div>
+                    </div>
+                  </div>
+                  <div className="cat-apercu">
+                    {(p.apercu ?? []).map(([lbl, v]) => (
+                      <div className={`cat-ap${v.perso ? ' on' : ''}`} key={lbl}>
+                        <span className="cat-ap-l">{lbl}</span>
+                        <span className="cat-ap-v">{v.txt}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="cat-tile-foot">
+                    <span className={`cat-count${n ? ' on' : ''}`}>
+                      {dirty
+                        ? 'Modifications non enregistrées'
+                        : n === 0 ? 'Tout suit les réglages globaux' : `${n} réglage${n > 1 ? 's' : ''} personnalisé${n > 1 ? 's' : ''}`}
+                    </span>
+                    <span className="cat-go">
+                      Personnaliser
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
+                    </span>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )
+    }
+
+    // ── Formulaire d'un panneau ─────────────────────────────────────────────
+    const dirty = modifie(pan.cats)
+    const multi = carte.panneaux.length > 1
     return (
       <div className="cat-detail" style={{ '--cat': `var(--cat-${carte.teinte})` } as CSSProperties}>
-        {fil(carte.titre)}
+        {multi ? fil(carte.titre, pan.titre ?? '') : fil(carte.titre)}
         <div className="cat-dhead">
-          <span className="cat-ico lg"><Icon name={carte.icone} size={21} /></span>
+          <span className="cat-ico lg"><Icon name={multi ? (pan.icone ?? carte.icone) : carte.icone} size={21} /></span>
           <div>
-            <h1>{carte.titre}</h1>
-            <div className="muted small">{carte.hint}</div>
+            <h1>{multi ? `${carte.titre} · ${pan.titre}` : carte.titre}</h1>
+            <div className="muted small">{multi ? pan.hint : carte.hint}</div>
           </div>
           {/* Le repère de saisie en cours vit dans l'en-tête, pas seulement à
               côté du bouton : sur un formulaire haut, le pied peut être sorti
               de l'écran au moment où l'on modifie un champ. */}
           {dirty && <span className="cat-dirty">Modifications non enregistrées</span>}
         </div>
-        <div className={`cat-cartes${carte.panneaux.length > 1 ? ' plusieurs' : ''}`}>
-          {carte.panneaux.map((p) => (
-            <div className={`card cat-panel${p.etroit ? ' etroit' : ''}`} key={p.cle}>
-              {p.titre && <div className="cat-panel-t">{p.titre}</div>}
-              <div className="cat-body">{p.corps}</div>
-              {pied(p.cats, `${carte.cle}:${p.cle}`)}
-            </div>
-          ))}
+        <div className="card cat-panel">
+          <div className="cat-body">{pan.corps}</div>
+          {pied(pan.cats, `${carte.cle}:${pan.cle}`)}
         </div>
-        {editStyle && (
-          <ModaleStyle
-            style={editStyle}
-            polices={polices}
-            onFerme={() => setEditStyle(null)}
-            onEnregistre={(s) => enregistreStyle(carte.cle, s)}
-          />
-        )}
+        {modale}
       </div>
     )
   }
