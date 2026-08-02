@@ -876,7 +876,9 @@ export type CategoryCfg = {
   subtitles?: string
   /** Débit de parole (1 = naturel). */
   speed?: number
-  /** Style des sous-titres incrustés (cf. SubStyle dans video-gen). */
+  /** Style de sous-titres choisi dans la bibliothèque. Vide = celui par défaut. */
+  subStyleId?: string
+  /** Surcharges ponctuelles par-dessus ce style (cf. SubStyle dans video-gen). */
   subFont?: string
   subSize?: number
   subColor?: string
@@ -927,11 +929,35 @@ function catKeyOf(type?: string): string {
   if (t === 'serie' || t === 'custom' || t === 'niche') return 'niche'
   return t
 }
-/** Style des sous-titres d'une catégorie. Les champs vides sont écartés ici
- *  plutôt que transmis : `subStyle()` remet alors le défaut, et un réglage vide
- *  reste indistinguable d'un réglage absent. */
+/** Bibliothèque de styles de sous-titres, réutilisables entre catégories et
+ *  comptes. `defaultId` désigne celui qu'applique toute catégorie n'ayant pas
+ *  choisi le sien. */
+export type NamedSubStyle = SubStyle & { id: string; name: string }
+type StyleLib = { styles: NamedSubStyle[]; defaultId: string }
+function subtitleStyles(): StyleLib {
+  try {
+    const o = JSON.parse(repo.getSetting('subtitle_styles') || '{}') as Partial<StyleLib>
+    return { styles: Array.isArray(o.styles) ? o.styles : [], defaultId: String(o.defaultId ?? '') }
+  } catch {
+    return { styles: [], defaultId: '' }
+  }
+}
+/** Style qu'une catégorie applique AVANT ses propres surcharges : celui qu'elle
+ *  a choisi, sinon le style par défaut, sinon rien (défauts du moteur). */
+function baseSubStyle(c: CategoryCfg): SubStyle {
+  const lib = subtitleStyles()
+  const voulu = c.subStyleId
+    ? lib.styles.find((s) => s.id === c.subStyleId)
+    : lib.styles.find((s) => s.id === lib.defaultId)
+  if (!voulu) return {}
+  const { id: _id, name: _name, ...reste } = voulu
+  return reste
+}
+/** Style effectif d'une catégorie : le style de base, puis ses surcharges. Les
+ *  champs vides sont écartés plutôt que transmis — sinon une surcharge vide
+ *  effacerait la valeur du style au lieu de la laisser passer. */
 function catSubStyle(c: CategoryCfg): SubStyle {
-  return {
+  const sur: SubStyle = {
     font: c.subFont || undefined,
     size: c.subSize,
     color: c.subColor || undefined,
@@ -941,6 +967,8 @@ function catSubStyle(c: CategoryCfg): SubStyle {
     bottom: c.subBottom,
     upper: c.subUpper == null || c.subUpper === '' ? undefined : c.subUpper !== '0'
   }
+  const net = Object.fromEntries(Object.entries(sur).filter(([, v]) => v !== undefined))
+  return { ...baseSubStyle(c), ...net }
 }
 /** Réglages de catégorie PROPRES À UN COMPTE. Couche facultative : un compte
  *  sans réglage suit à l'identique la catégorie « tous les comptes ». */
@@ -3137,9 +3165,82 @@ app.get('/api/categories', (req, res) => {
       subBottom: SUB_DEFAUT.bottom,
       subUpper: SUB_DEFAUT.upper ? '1' : '0'
     },
-    polices: SUB_POLICES
+    polices: SUB_POLICES,
+    ...subtitleStyles()
   })
 })
+// ── Bibliothèque de styles de sous-titres ──────────────────────────────────
+app.get('/api/subtitle-styles', (_req, res) => {
+  res.json({ ...subtitleStyles(), polices: SUB_POLICES, defauts: SUB_DEFAUT })
+})
+app.post('/api/subtitle-styles', (req, res) => {
+  const b = (req.body ?? {}) as Record<string, unknown>
+  const nom = String(b.name ?? '').trim().slice(0, 60)
+  if (!nom) return res.status(400).json({ error: 'Nom requis' })
+  const lib = subtitleStyles()
+  const id = String(b.id ?? '').trim() || `s${Date.now().toString(36)}${randomBytes(3).toString('hex')}`
+  const nb = (v: unknown, min: number, max: number): number | undefined => {
+    const x = Math.round(Number(v))
+    return Number.isFinite(x) && x >= min && x <= max ? x : undefined
+  }
+  const coul = (v: unknown): string | undefined => {
+    const s = String(v ?? '').replace(/^#/, '').toUpperCase()
+    return /^[0-9A-F]{6}$/.test(s) ? s : undefined
+  }
+  const police = SUB_POLICES.some(([p]) => p === String(b.font ?? '')) ? String(b.font) : undefined
+  // Un style est COMPLET : contrairement aux surcharges d'une catégorie, chaque
+  // champ absent retombe sur le défaut du moteur au lieu de rester « non réglé ».
+  const style: NamedSubStyle = {
+    id,
+    name: nom,
+    font: police ?? SUB_DEFAUT.font,
+    size: nb(b.size, 30, 200) ?? SUB_DEFAUT.size,
+    color: coul(b.color) ?? SUB_DEFAUT.color,
+    hilite: coul(b.hilite) ?? SUB_DEFAUT.hilite,
+    outline: nb(b.outline, 0, 20) ?? SUB_DEFAUT.outline,
+    group: nb(b.group, 1, 8) ?? SUB_DEFAUT.group,
+    bottom: nb(b.bottom, 40, 1500) ?? SUB_DEFAUT.bottom,
+    upper: b.upper == null ? SUB_DEFAUT.upper : String(b.upper) !== '0'
+  }
+  const i = lib.styles.findIndex((s) => s.id === id)
+  if (i >= 0) lib.styles[i] = style
+  else lib.styles.push(style)
+  // Le tout premier style devient le défaut : sans ça, en créer un ne changerait
+  // rien tant qu'on n'aurait pas pensé à le désigner.
+  if (!lib.styles.some((s) => s.id === lib.defaultId)) lib.defaultId = lib.styles[0].id
+  repo.setSetting('subtitle_styles', JSON.stringify(lib))
+  res.json({ ok: true, ...lib })
+})
+app.post('/api/subtitle-styles/default', (req, res) => {
+  const id = String((req.body as { id?: unknown })?.id ?? '')
+  const lib = subtitleStyles()
+  if (!lib.styles.some((s) => s.id === id)) return res.status(400).json({ error: 'Style inconnu' })
+  lib.defaultId = id
+  repo.setSetting('subtitle_styles', JSON.stringify(lib))
+  res.json({ ok: true, ...lib })
+})
+app.delete('/api/subtitle-styles/:id', (req, res) => {
+  const id = String(req.params.id ?? '')
+  const lib = subtitleStyles()
+  lib.styles = lib.styles.filter((s) => s.id !== id)
+  if (!lib.styles.some((s) => s.id === lib.defaultId)) lib.defaultId = lib.styles[0]?.id ?? ''
+  repo.setSetting('subtitle_styles', JSON.stringify(lib))
+  // Les catégories qui le référençaient repassent au défaut : laisser une
+  // référence morte les ferait basculer sans que rien ne l'explique.
+  const nettoie = (m: Record<string, CategoryCfg>): boolean => {
+    let touche = false
+    for (const c of Object.values(m)) if (c.subStyleId === id) { delete c.subStyleId; touche = true }
+    return touche
+  }
+  const tous = categorySettings()
+  if (nettoie(tous)) repo.setSetting('category_settings', JSON.stringify(tous))
+  const parUser = categorySettingsByUser()
+  let bouge = false
+  for (const m of Object.values(parUser)) if (nettoie(m)) bouge = true
+  if (bouge) repo.setSetting('category_settings_by_user', JSON.stringify(parUser))
+  res.json({ ok: true, ...lib })
+})
+
 // Aperçu des sous-titres. Rendu par le MÊME `sceneAss` et le même libass que la
 // vidéo : une imitation en CSS se tromperait sur les métriques de police, le
 // contour et le retour à la ligne — donc montrerait autre chose que le résultat.
@@ -3209,7 +3310,7 @@ app.post('/api/categories', (req, res) => {
   // Chaîne vide / null = « suivre le réglage global » : on EFFACE la clé plutôt
   // que d'enregistrer une valeur vide, sinon on ne distinguerait plus « non
   // réglé » de « réglé à vide ».
-  const setStr = (k: 'quality' | 'engine' | 'lang' | 'subtitles' | 'reframe' | 'subFont' | 'subUpper', autorises?: string[]): void => {
+  const setStr = (k: 'quality' | 'engine' | 'lang' | 'subtitles' | 'reframe' | 'subFont' | 'subUpper' | 'subStyleId', autorises?: string[]): void => {
     if (!(k in c)) return
     const v = String(c[k] ?? '').trim()
     if (!v || (autorises && !autorises.includes(v))) delete cur[k]
@@ -3243,6 +3344,9 @@ app.post('/api/categories', (req, res) => {
   // ── Style des sous-titres ────────────────────────────────────────────────
   setStr('subFont', SUB_POLICES.map(([v]) => v))
   setStr('subUpper', ['0', '1'])
+  // Le style doit exister : une référence morte ferait retomber la catégorie sur
+  // le défaut sans que rien ne l'explique.
+  setStr('subStyleId', subtitleStyles().styles.map((s) => s.id))
   const setCouleur = (k: 'subColor' | 'subHilite'): void => {
     if (!(k in c)) return
     // On accepte « #FFCC00 » comme « ffcc00 » : le champ web envoie l'un, une

@@ -2,6 +2,21 @@ import type { SourceDTO, ClipDTO, ProgressEvent, ViralIdea, SavedIdea } from '..
 
 export type { SourceDTO, ClipDTO, ProgressEvent, ViralIdea, SavedIdea }
 
+/** Style de sous-titres nomme. Toujours COMPLET : contrairement aux surcharges
+ *  d'une categorie, chaque champ y porte une valeur. */
+export type SubStyleDTO = {
+  id: string
+  name: string
+  font: string
+  size: number
+  color: string
+  hilite: string
+  outline: number
+  group: number
+  bottom: number
+  upper: boolean
+}
+
 export interface PublishOverrides {
   caption?: string
   privacyLevel?: string
@@ -172,7 +187,18 @@ export const api = {
       parCompte: Record<string, number>
       globals: Record<string, string | number>
       polices: [string, string][]
+      styles: SubStyleDTO[]
+      defaultId: string
     }>(`/api/categories${user ? `?user=${encodeURIComponent(user)}` : ''}`),
+  // Bibliotheque de styles de sous-titres, partagee par toutes les categories.
+  subtitleStyles: () =>
+    req<{ styles: SubStyleDTO[]; defaultId: string; polices: [string, string][]; defauts: Record<string, string | number | boolean> }>('/api/subtitle-styles'),
+  saveSubtitleStyle: (s: Partial<SubStyleDTO>) =>
+    post<{ ok: boolean; styles: SubStyleDTO[]; defaultId: string }>('/api/subtitle-styles', s),
+  setDefaultSubtitleStyle: (id: string) =>
+    post<{ ok: boolean; styles: SubStyleDTO[]; defaultId: string }>('/api/subtitle-styles/default', { id }),
+  deleteSubtitleStyle: (id: string) =>
+    req<{ ok: boolean; styles: SubStyleDTO[]; defaultId: string }>(`/api/subtitle-styles/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   /** Apercu des sous-titres : PNG rendu par ffmpeg + libass, comme la video.
    *  Renvoie une URL d'objet — a revoquer par l'appelant. */
   subtitlePreview: async (style: Record<string, string | number>): Promise<string> => {

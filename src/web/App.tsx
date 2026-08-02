@@ -7,7 +7,8 @@ import {
   type ClipDTO,
   type ProgressEvent,
   type ViralIdea,
-  type SavedIdea
+  type SavedIdea,
+  type SubStyleDTO
 } from './api'
 
 type Page = 'dashboard' | 'autopilot' | 'categories' | 'niches' | 'analyse' | 'clipping' | 'genai' | 'ideas' | 'history' | 'clips' | 'providers' | 'settings'
@@ -4243,6 +4244,110 @@ const CAT_MOTS_CLE: Record<string, Record<string, string>> = {
 const CAT_NOMBRES = new Set(['maxScenes', 'speed', 'slides', 'clipCount', 'subSize', 'subOutline', 'subGroup', 'subBottom'])
 /** Champs du style de sous-titres, dans l'ordre envoyé à l'aperçu. */
 const SUB_CLES = ['subFont', 'subSize', 'subColor', 'subHilite', 'subOutline', 'subGroup', 'subBottom', 'subUpper']
+/** Éditeur d'un style de sous-titres, avec le rendu réel à côté des champs. */
+function ModaleStyle({ style, polices, onFerme, onEnregistre }: {
+  style: SubStyleDTO
+  polices: [string, string][]
+  onFerme: () => void
+  onEnregistre: (s: SubStyleDTO) => Promise<void>
+}): JSX.Element {
+  const [s, setS] = useState<SubStyleDTO>(style)
+  const [busy, setBusy] = useState(false)
+  const [url, setUrl] = useState('')
+  const [rendu, setRendu] = useState(false)
+  const ref = useRef('')
+  useEffect(() => () => { if (ref.current) URL.revokeObjectURL(ref.current) }, [])
+
+  const cle = JSON.stringify([s.font, s.size, s.color, s.hilite, s.outline, s.group, s.bottom, s.upper])
+  useEffect(() => {
+    let vivant = true
+    setRendu(true)
+    const t = window.setTimeout(() => {
+      const [font, size, color, hilite, outline, group, bottom, upper] = JSON.parse(cle) as [string, number, string, string, number, number, number, boolean]
+      api.subtitlePreview({ subFont: font, subSize: size, subColor: color, subHilite: hilite, subOutline: outline, subGroup: group, subBottom: bottom, subUpper: upper ? '1' : '0' })
+        .then((u) => {
+          if (!vivant) { URL.revokeObjectURL(u); return }
+          if (ref.current) URL.revokeObjectURL(ref.current)
+          ref.current = u
+          setUrl(u)
+        })
+        .catch(() => undefined)
+        .finally(() => { if (vivant) setRendu(false) })
+    }, 400)
+    return () => { vivant = false; window.clearTimeout(t) }
+  }, [cle])
+
+  const maj = <K extends keyof SubStyleDTO>(k: K, v: SubStyleDTO[K]): void => setS((o) => ({ ...o, [k]: v }))
+  const nb = (k: 'size' | 'outline' | 'group' | 'bottom', label: string, min: number, max: number): JSX.Element => (
+    <div className="cat-f">
+      <label className="cat-lbl">{label}</label>
+      <input className="input-full" type="number" min={min} max={max} value={s[k]} onChange={(e) => maj(k, Number(e.target.value))} />
+    </div>
+  )
+  const coul = (k: 'color' | 'hilite', label: string): JSX.Element => (
+    <div className="cat-f">
+      <label className="cat-lbl">{label}</label>
+      <div className="cat-col">
+        <input type="color" value={`#${s[k]}`} onChange={(e) => maj(k, e.target.value.replace(/^#/, '').toUpperCase())} />
+        <span className="cat-col-hex">#{s[k]}</span>
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="pal-back" onMouseDown={onFerme}>
+      <div className="card sty-modale" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="sty-corps">
+          <div>
+            <div className="cat-f">
+              <label className="cat-lbl">Nom du style</label>
+              <input className="input-full" value={s.name} placeholder="ex. Punchy jaune" onChange={(e) => maj('name', e.target.value)} />
+            </div>
+            <div className="sty-grille">
+              <div className="cat-f">
+                <label className="cat-lbl">Police</label>
+                <select className="input-full" value={s.font} onChange={(e) => maj('font', e.target.value)}>
+                  {polices.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+              </div>
+              {nb('size', 'Taille', 30, 200)}
+              <div className="cat-f">
+                <label className="cat-lbl">Casse</label>
+                <select className="input-full" value={s.upper ? '1' : '0'} onChange={(e) => maj('upper', e.target.value === '1')}>
+                  <option value="1">MAJUSCULES</option>
+                  <option value="0">Normale</option>
+                </select>
+              </div>
+              {nb('group', 'Mots affichés ensemble', 1, 8)}
+              {nb('outline', 'Épaisseur du contour', 0, 20)}
+              {nb('bottom', 'Hauteur depuis le bas', 40, 1500)}
+              {coul('color', 'Couleur du texte')}
+              {coul('hilite', 'Mot prononcé')}
+            </div>
+          </div>
+          <aside className="cat-prev">
+            <div className="cat-prev-t">Aperçu</div>
+            <div className={`cat-prev-box${rendu ? ' load' : ''}`}>
+              {url && <img src={url} alt="Rendu du style" />}
+            </div>
+          </aside>
+        </div>
+        <div className="cat-foot">
+          <span className="cat-count">Ce style pourra être appliqué à n’importe quelle catégorie.</span>
+          <button className="btn ghost-sm" onClick={onFerme}>Annuler</button>
+          <button
+            className="btn primary"
+            disabled={busy || !s.name.trim()}
+            onClick={() => { setBusy(true); void onEnregistre(s).finally(() => setBusy(false)) }}
+          >
+            {busy ? 'Enregistrement…' : 'Enregistrer'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profiles: PubProfile[] }): JSX.Element {
   const [cfg, setCfg] = useState<Record<string, Record<string, string | number>>>({})
   const [globals, setGlobals] = useState<CatGlobals>({})
@@ -4264,6 +4369,48 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
   /** Polices réellement installées côté serveur : la liste vient de lui, sinon
    *  on proposerait une police que fontconfig remplacerait en silence. */
   const [polices, setPolices] = useState<[string, string][]>([])
+  /** Bibliothèque de styles de sous-titres, et celui appliqué par défaut. */
+  const [styles, setStyles] = useState<SubStyleDTO[]>([])
+  const [defaultId, setDefaultId] = useState('')
+  /** Style en cours d'édition dans la modale (`null` = fermée). */
+  const [editStyle, setEditStyle] = useState<SubStyleDTO | null>(null)
+  /** Nouveau style : on part des valeurs du moteur, pas d'un formulaire vide —
+   *  un aperçu à blanc n'apprendrait rien. */
+  const styleVierge = (): SubStyleDTO => ({
+    id: '',
+    name: '',
+    font: String(globals.subFont ?? 'Archivo Black'),
+    size: Number(globals.subSize ?? 86),
+    color: String(globals.subColor ?? 'FFFFFF'),
+    hilite: String(globals.subHilite ?? 'FFFF00'),
+    outline: Number(globals.subOutline ?? 6),
+    group: Number(globals.subGroup ?? 3),
+    bottom: Number(globals.subBottom ?? 430),
+    upper: String(globals.subUpper ?? '1') !== '0'
+  })
+  const enregistreStyle = async (s: SubStyleDTO): Promise<void> => {
+    try {
+      const r = await api.saveSubtitleStyle(s.id ? s : { ...s, id: undefined })
+      setStyles(r.styles); setDefaultId(r.defaultId)
+      setEditStyle(null)
+      toast('Style enregistré ✓')
+    } catch (e) { toast('Erreur : ' + (e as Error).message) }
+  }
+  const majDefaut = async (id: string): Promise<void> => {
+    try {
+      const r = await api.setDefaultSubtitleStyle(id)
+      setStyles(r.styles); setDefaultId(r.defaultId)
+      toast('Style par défaut changé')
+    } catch (e) { toast('Erreur : ' + (e as Error).message) }
+  }
+  const supprimeStyle = async (s: SubStyleDTO): Promise<void> => {
+    if (!window.confirm(`Supprimer le style « ${s.name} » ? Les catégories qui l’utilisaient repasseront au style par défaut.`)) return
+    try {
+      const r = await api.deleteSubtitleStyle(s.id)
+      setStyles(r.styles); setDefaultId(r.defaultId)
+      toast('Style supprimé')
+    } catch (e) { toast('Erreur : ' + (e as Error).message) }
+  }
   /** Aperçu des sous-titres, rendu par le serveur. */
   const [apercuSub, setApercuSub] = useState<{ url: string; err: string } | null>(null)
   const [apercuEnCours, setApercuEnCours] = useState(false)
@@ -4279,6 +4426,8 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
       setInherited(r.inherited ?? {})
       setParCompte(r.parCompte ?? {})
       setPolices(r.polices ?? [])
+      setStyles(r.styles ?? [])
+      setDefaultId(r.defaultId ?? '')
       setGlobals((r as unknown as { globals?: CatGlobals }).globals ?? {})
     }).catch(() => undefined)
   }, [])
@@ -4308,16 +4457,38 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
    *  « Candidats = Incrustés ». */
   const mot = (key: string, v: string): string =>
     CAT_NOMBRES.has(key) ? v : CAT_MOTS_CLE[key]?.[v] ?? CAT_MOTS[v] ?? v
-  /** Ce dont hérite un champ non personnalisé, et d'OÙ. Sur un compte, la couche
-   *  tous comptes s'intercale avant les globaux — dire « Global » alors que la
-   *  valeur vient d'un réglage tous comptes enverrait chercher au mauvais
-   *  endroit pour la changer. */
-  const heriteDe = (cat: string, key: string): { txt: string; src: string } => {
+  /** Style de sous-titres qu'applique une catégorie : celui qu'elle a choisi,
+   *  sinon celui marqué par défaut dans la bibliothèque. */
+  const styleDe = (cat: string): SubStyleDTO | null => {
+    const id = val(cat, 'subStyleId')
+    return (id ? styles.find((s) => s.id === id) : styles.find((s) => s.id === defaultId)) ?? null
+  }
+  /** Correspondance clé de catégorie → champ d'un style nommé. */
+  const CHAMP_STYLE: Record<string, keyof SubStyleDTO> = {
+    subFont: 'font', subSize: 'size', subColor: 'color', subHilite: 'hilite',
+    subOutline: 'outline', subGroup: 'group', subBottom: 'bottom', subUpper: 'upper'
+  }
+  /** Valeur héritée BRUTE (non traduite) et sa provenance. Trois sources
+   *  possibles, de la plus proche à la plus lointaine : le style de sous-titres
+   *  choisi, la couche tous comptes, les réglages globaux. Nommer la mauvaise
+   *  enverrait chercher au mauvais endroit pour la changer. */
+  const heriteBrut = (cat: string, key: string): { v: string; src: string } => {
+    const champ = CHAMP_STYLE[key]
+    if (champ) {
+      const s = styleDe(cat)
+      if (s) {
+        const b = s[champ]
+        return { v: typeof b === 'boolean' ? (b ? '1' : '0') : String(b), src: s.name }
+      }
+    }
     const t = inherited[cat]?.[key]
-    if (t != null && String(t) !== '') return { txt: mot(key, String(t)), src: 'Tous comptes' }
+    if (t != null && String(t) !== '') return { v: String(t), src: 'Tous comptes' }
     const g = globals[key]
-    if (g == null || g === '') return { txt: 'par défaut', src: 'Global' }
-    return { txt: mot(key, String(g)), src: 'Global' }
+    return { v: g == null ? '' : String(g), src: 'Global' }
+  }
+  const heriteDe = (cat: string, key: string): { txt: string; src: string } => {
+    const { v, src } = heriteBrut(cat, key)
+    return { txt: v === '' ? 'par défaut' : mot(key, v), src }
   }
   /** Ce qui SERA appliqué : la personnalisation si elle existe, sinon ce dont
    *  elle hérite. Une tuile qui n'annoncerait que les surcharges laisserait
@@ -4454,6 +4625,22 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
   const blocSousTitres = (cat: string): JSX.Element => (
     <section className="cat-sec">
       <div className="cat-sub">Sous-titres</div>
+      {/* Le style vient en premier : c'est lui qui fixe les huit valeurs, les
+          champs qui suivent ne servent qu'à en dévier ponctuellement. */}
+      {styles.length > 0 && (
+        <div className={`cat-f${val(cat, 'subStyleId') ? ' on' : ''}`}>
+          <label className="cat-lbl">
+            Style
+            {val(cat, 'subStyleId') && <span className="cat-dot" title="Style imposé à cette catégorie" />}
+          </label>
+          <select className="input-full" value={val(cat, 'subStyleId')} onChange={(e) => champ(cat, 'subStyleId', e.target.value)}>
+            <option value="">
+              Par défaut{styles.find((s) => s.id === defaultId) ? ` · ${styles.find((s) => s.id === defaultId)?.name}` : ''}
+            </option>
+            {styles.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </div>
+      )}
       {select(cat, 'subFont', 'Police', polices)}
       {nombre(cat, 'subSize', 'Taille', 30, 200)}
       {select(cat, 'subUpper', 'Casse', [['1', 'MAJUSCULES'], ['0', 'Normale']])}
@@ -4579,7 +4766,7 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
   const cleSub = catSub
     ? JSON.stringify(Object.fromEntries(SUB_CLES.map((k) => {
       const v = val(catSub, k)
-      return [k, v !== '' ? v : String(inherited[catSub]?.[k] ?? globals[k] ?? '')]
+      return [k, v !== '' ? v : heriteBrut(catSub, k).v]
     })))
     : ''
   useEffect(() => {
@@ -4639,6 +4826,57 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
             )
           })}
         </div>
+
+        {/* Bibliothèque de styles de sous-titres : elle vit ici plutôt que dans
+            une catégorie parce qu'un style se réutilise d'un compte à l'autre. */}
+        <div className="sty-bloc">
+          <div className="sty-tete">
+            <div>
+              <div className="cat-title">Styles de sous-titres</div>
+              <div className="muted small">
+                {styles.length === 0
+                  ? 'Aucun style. Sans style, les sous-titres suivent les réglages du moteur.'
+                  : `Le style par défaut s’applique à toute catégorie qui n’en choisit pas d’autre.`}
+              </div>
+            </div>
+            <button className="btn" onClick={() => setEditStyle(styleVierge())}>Nouveau style</button>
+          </div>
+          {styles.length > 0 && (
+            <div className="sty-liste">
+              {styles.map((s) => (
+                <div key={s.id} className={`sty-item${s.id === defaultId ? ' defaut' : ''}`}>
+                  <div className="sty-nom">
+                    {s.name}
+                    {s.id === defaultId && <span className="sty-badge">Par défaut</span>}
+                  </div>
+                  <div className="muted small sty-res">
+                    {s.font} · {s.size} px · {s.group} mot{s.group > 1 ? 's' : ''} · {s.upper ? 'MAJ' : 'normale'}
+                    <span className="sty-pastilles">
+                      <i style={{ background: `#${s.color}` }} title={`Texte #${s.color}`} />
+                      <i style={{ background: `#${s.hilite}` }} title={`Mot prononcé #${s.hilite}`} />
+                    </span>
+                  </div>
+                  <div className="sty-actions">
+                    {s.id !== defaultId && (
+                      <button className="btn xsmall" onClick={() => void majDefaut(s.id)}>Par défaut</button>
+                    )}
+                    <button className="btn xsmall" onClick={() => setEditStyle(s)}>Modifier</button>
+                    <button className="btn xsmall danger" onClick={() => void supprimeStyle(s)}>Supprimer</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {editStyle && (
+          <ModaleStyle
+            style={editStyle}
+            polices={polices}
+            onFerme={() => setEditStyle(null)}
+            onEnregistre={enregistreStyle}
+          />
+        )}
       </>
     )
   }

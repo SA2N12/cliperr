@@ -4929,3 +4929,120 @@ video:-webkit-full-screen {
     animation: none;
   }
 }
+
+/* ── Bibliothèque de styles de sous-titres ─────────────────────────────────
+   Posée sous la grille des comptes : un style se réutilise d'un compte à
+   l'autre, il n'appartient à aucun. */
+.sty-bloc {
+  margin-top: 22px;
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+  animation: rise 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
+  animation-delay: 180ms;
+}
+.sty-tete {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+.sty-tete > div:first-child {
+  flex: 1;
+  min-width: 0;
+}
+.sty-liste {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+  gap: 10px;
+}
+.sty-item {
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--border);
+  background: var(--panel);
+  padding: 11px 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+/* Le style par défaut se repère au liseré, pas seulement à son étiquette :
+   c'est lui qui s'applique partout où rien n'est choisi. */
+.sty-item.defaut {
+  border-left-color: var(--brand);
+}
+.sty-nom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 550;
+  font-size: 13.5px;
+}
+.sty-badge {
+  font-size: 10.5px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 6px;
+  color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--brand) 35%, transparent);
+}
+.sty-res {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+/* Pastilles de couleur : lire « #FFFF00 » ne dit pas de quel jaune il s'agit. */
+.sty-pastilles {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: auto;
+}
+.sty-pastilles i {
+  width: 13px;
+  height: 13px;
+  border: 1px solid var(--border);
+  display: block;
+}
+.sty-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.btn.xsmall.danger {
+  color: var(--bad);
+}
+.btn.xsmall.danger:hover {
+  border-color: var(--bad);
+}
+
+/* Éditeur de style : champs à gauche, rendu réel à droite. */
+.sty-modale {
+  width: min(820px, calc(100vw - 32px));
+  max-height: 86vh;
+  overflow: auto;
+  padding: 18px 20px 14px;
+  border-radius: 0;
+  animation: pal-in 0.14s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.sty-corps {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 210px;
+  gap: 0 24px;
+  align-items: start;
+}
+.sty-grille {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0 16px;
+}
+@media (max-width: 760px) {
+  .sty-corps {
+    grid-template-columns: 1fr;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sty-bloc,
+  .sty-modale {
+    animation: none;
+  }
+}
