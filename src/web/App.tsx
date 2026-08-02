@@ -4502,6 +4502,27 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
   const [imgStylesParCat, setImgStylesParCat] = useState<Record<string, ImgLibDTO>>({})
   const imgLibDe = (cat: string): ImgLibDTO => imgStylesParCat[cat] ?? { styles: [], defaultId: '' }
   const [editImg, setEditImg] = useState<ImgStyleDTO | null>(null)
+  /** Bibliothèque de niches et fiche assignée à chaque compte. La niche est le
+   *  SUJET du compte — commune à ses vidéos et à ses carrousels, elle vit donc
+   *  au niveau de la catégorie et non d'un de ses panneaux. */
+  const [nichesLib, setNichesLib] = useState<{ id: string; name: string; brief: string; hashtags?: string[] }[]>([])
+  const [nicheParCompte, setNicheParCompte] = useState<Record<string, string | null>>({})
+  const chargerNiches = useCallback((): void => {
+    api.niches().then((r) => {
+      setNichesLib(r.niches ?? [])
+      setNicheParCompte(Object.fromEntries((r.comptes ?? []).map((c) => [c.user, c.nicheId])))
+    }).catch(() => undefined)
+  }, [])
+  useEffect(() => { if (compte) chargerNiches() }, [compte, chargerNiches])
+  /** L'assignation prend effet TOUT DE SUITE, comme le bouton « Défaut » des
+   *  styles : ce n'est pas un champ de formulaire, il n'y a rien à valider. */
+  const assigner = async (user: string, id: string): Promise<void> => {
+    try {
+      await api.assignNiche(user, id)
+      setNicheParCompte((m) => ({ ...m, [user]: id || null }))
+      toast(id ? 'Niche assignée ✓' : 'Niche retirée — le compte reprend son texte libre')
+    } catch (e) { toast('Erreur : ' + (e as Error).message) }
+  }
   const enregistreImg = async (cat: string, s: ImgStyleDTO): Promise<void> => {
     try {
       const r = await api.saveImageStyle(cat, s.id ? s : { name: s.name, prompt: s.prompt })
@@ -5259,6 +5280,36 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
               )
             })}
           </div>
+
+          {/* Le SUJET du compte. Il vaut pour ses vidéos comme pour ses
+              carrousels, sa place est donc ici et non dans l'un des panneaux. */}
+          {compte && (
+            <section className="cat-sec sous-titres nic-bande">
+              <div className="cat-sub">Niche du compte</div>
+              <div className="sty-liste">
+                {nichesLib.map((n) => {
+                  const actif = nicheParCompte[compte] === n.id
+                  return (
+                    <div key={n.id} className={`card sty-item${actif ? ' actif' : ''}`}>
+                      <button
+                        className="sty-choix"
+                        title={actif ? 'Niche de ce compte' : 'Assigner à ce compte'}
+                        onClick={() => void assigner(compte, actif ? '' : n.id)}
+                      >
+                        <span className="sty-nom">
+                          {n.name}
+                          {actif && <span className="sty-coche" title="Niche de ce compte"><Icon name="check" size={13} /></span>}
+                        </span>
+                        <span className="muted small sty-res">
+                          <span className="sty-res-t nic-brief">{n.brief || 'Aucun brief — l’IA n’aura que le nom.'}</span>
+                        </span>
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            </section>
+          )}
         </div>
       )
     }

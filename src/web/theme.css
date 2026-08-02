@@ -5340,3 +5340,28 @@ video:-webkit-full-screen {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* ── Bande des niches ──────────────────────────────────────────────────────
+   Meme gabarit que les styles, sans vignette : une niche est un TEXTE, il n y
+   a pas de rendu a montrer. Le brief prend la place liberee. */
+.nic-bande {
+  margin-top: 18px;
+}
+.nic-bande .sty-item {
+  flex-basis: 262px;
+}
+.nic-bande .sty-choix {
+  padding-bottom: 10px;
+}
+.nic-brief {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.35;
+}
+.nic-bande .sty-nom {
+  padding-top: 10px;
+  align-items: flex-start;
+}
