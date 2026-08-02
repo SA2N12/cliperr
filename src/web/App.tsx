@@ -4800,8 +4800,14 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
                   <VignetteStyle s={s} />
                   <span className="sty-nom">
                     {s.name}
-                    {s.id === lib.defaultId && <span className="sty-badge">Défaut</span>}
-                    {actif && <span className="sty-coche"><Icon name="check" size={13} /></span>}
+                    {/* Deux notions distinctes qu'on confond au premier regard :
+                        le badge dit ce que suivent LES AUTRES comptes, la coche
+                        dit ce qui s'applique ICI. Elles coïncident tant que ce
+                        compte n'a rien choisi. */}
+                    {s.id === lib.defaultId && (
+                      <span className="sty-badge" title="Suivi par tous les comptes qui ne choisissent pas de style">Défaut</span>
+                    )}
+                    {actif && <span className="sty-coche" title="Appliqué à ce compte"><Icon name="check" size={13} /></span>}
                   </span>
                   <span className="muted small sty-res">
                     <span className="sty-res-t">
@@ -4897,8 +4903,14 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
                 >
                   <span className="sty-nom">
                     {s.name}
-                    {s.id === lib.defaultId && <span className="sty-badge">Défaut</span>}
-                    {actif && <span className="sty-coche"><Icon name="check" size={13} /></span>}
+                    {/* Deux notions distinctes qu'on confond au premier regard :
+                        le badge dit ce que suivent LES AUTRES comptes, la coche
+                        dit ce qui s'applique ICI. Elles coïncident tant que ce
+                        compte n'a rien choisi. */}
+                    {s.id === lib.defaultId && (
+                      <span className="sty-badge" title="Suivi par tous les comptes qui ne choisissent pas de style">Défaut</span>
+                    )}
+                    {actif && <span className="sty-coche" title="Appliqué à ce compte"><Icon name="check" size={13} /></span>}
                   </span>
                   <span className="muted small sty-res">
                     <span className="sty-res-t">{s.prompt}</span>
