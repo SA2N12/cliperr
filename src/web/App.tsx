@@ -1091,7 +1091,6 @@ function Dashboard({ scope }: { scope: string }): JSX.Element {
             <Avatar url={open.avatarUrl} name={open.profile} size={36} />
             <div>
               <h1 style={{ fontSize: 22 }}>{open.handle ? '@' + open.handle : open.profile}</h1>
-              <p>Détail par vidéo (publiées via Cliperr)</p>
             </div>
           </div>
           <button className="btn" onClick={() => openProfile(open)} disabled={pLoading}><Icon name="refresh" size={15} /> Actualiser</button>
@@ -1166,7 +1165,6 @@ function Dashboard({ scope }: { scope: string }): JSX.Element {
       <div className="page-head">
         <div>
           <h1>Tableau de bord</h1>
-          <p>Performances de tes comptes TikTok (30 derniers jours).</p>
         </div>
       </div>
 
@@ -1648,7 +1646,6 @@ function GenAI({ toast }: { toast: (m: string) => void }): JSX.Element {
       <div className="page-head clip-anim">
         <div>
           <h1>Génération IA</h1>
-          <p>Colle un TikTok, Reel ou Short qui marche — l’IA le reproduit fidèlement en vidéo.</p>
         </div>
       </div>
       <InspireTab toast={toast} />
@@ -1856,7 +1853,6 @@ function Clipage({ sources, clips, progress, onRefresh, toast }: { sources: Sour
       <div className="page-head clip-anim">
         <div>
           <h1>Clipage</h1>
-          <p>Importe une vidéo — Cliperr en extrait les meilleurs moments en clips verticaux.</p>
         </div>
       </div>
 
@@ -2028,7 +2024,6 @@ function History({ sources, clips, onRefresh, toast, goClips }: { sources: Sourc
       <div className="page-head clip-anim">
         <div>
           <h1>Historique</h1>
-          <p>Toutes tes générations de clips — source, statut, nombre de clips.</p>
         </div>
       </div>
 
@@ -2274,7 +2269,6 @@ function Clips({ clips, sources, onRefresh, toast, scope }: { clips: ClipDTO[]; 
       <div className="page-head">
         <div>
           <h1>Clips</h1>
-          <p>Tes clips à valider et publier.</p>
         </div>
         {/* Import direct : la vidéo est DÉJÀ montée, elle ne passe par aucun
             découpage — contrairement à la page Clipage, qui reçoit une source à
@@ -3548,7 +3542,6 @@ function Ideas({ toast, go }: { toast: (m: string) => void; go: (p: Page) => voi
       <div className="page-head">
         <div>
           <h1>Idées virales</h1>
-          <p>Génère des idées et scripts de vidéos par IA, ancrés sur les tendances TikTok. Toutes tes idées sont enregistrées ci-dessous.</p>
         </div>
         <button className="btn" onClick={loadSaved} disabled={loadingSaved}><Icon name="refresh" size={15} /> Actualiser</button>
       </div>
@@ -3739,7 +3732,7 @@ function Autopilot({ toast, ideaVideo, scope }: { toast: (m: string) => void; id
   return (
     <div className="ap-fit">
       <div className="page-head">
-        <div><h1>Pilote automatique</h1><p>Chaque jour, du contenu adapté à chaque compte selon sa niche — généré et publié sans intervention.</p></div>
+        <div><h1>Pilote automatique</h1></div>
         <div className="ap-switch-wrap">
           <button
             className="btn icon-btn"
@@ -3815,7 +3808,6 @@ function Analyse({ toast }: { toast: (m: string) => void }): JSX.Element {
       <div className="page-head">
         <div>
           <h1>Analyse IA</h1>
-          <p>Claude analyse tes vrais chiffres (comptes + vidéos) et te sort un diagnostic + les actions à mener.</p>
         </div>
         {res && <button className="btn" disabled={busy} onClick={() => void run(true)}><Icon name="refresh" size={15} /> Relancer</button>}
       </div>
@@ -3953,7 +3945,6 @@ function Providers({ go }: { go: (p: Page) => void }): JSX.Element {
       <div className="page-head">
         <div>
           <h1>Fournisseurs</h1>
-          <p>Services externes du projet — état et coûts.</p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className="btn primary" onClick={() => void runCheck()} disabled={checking} title="Ping chaque service pour vérifier crédits et clé">
@@ -5236,7 +5227,6 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
             <span className="cat-ico lg"><Icon name={carte.icone} size={21} /></span>
             <div>
               <h1>{carte.titre}</h1>
-              <div className="muted small">{carte.hint}</div>
             </div>
           </div>
           {/* Le SUJET du compte. Il vaut pour ses vidéos comme pour ses
@@ -5324,7 +5314,6 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
           <span className="cat-ico lg"><Icon name={multi ? (pan.icone ?? carte.icone) : carte.icone} size={21} /></span>
           <div>
             <h1>{multi ? `${carte.titre} · ${pan.titre}` : carte.titre}</h1>
-            <div className="muted small">{multi ? pan.hint : carte.hint}</div>
           </div>
           {/* Le repère de saisie en cours vit dans l'en-tête, pas seulement à
               côté du bouton : sur un formulaire haut, le pied peut être sorti
@@ -5510,7 +5499,7 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
 
   return (
     <>
-      <div className="page-head"><div><h1>Réglages</h1><p>Clés, modèle IA, transcription, recadrage, publication et planification.</p></div></div>
+      <div className="page-head"><div><h1>Réglages</h1></div></div>
 
       <div className="set-tabs">
         {SET_TABS.map((t) => (

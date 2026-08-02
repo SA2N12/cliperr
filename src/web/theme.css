@@ -5039,7 +5039,7 @@ video:-webkit-full-screen {
   display: flex;
   gap: 10px;
   overflow-x: auto;
-  padding-bottom: 4px;
+  padding-bottom: 0;
   scroll-snap-type: x proximity;
 }
 .sty-item,
@@ -5047,16 +5047,26 @@ video:-webkit-full-screen {
   flex: 0 0 226px;
   scroll-snap-align: start;
 }
-/* La barre doit RESTER VISIBLE : c est le seul indice qu il y a d autres
-   styles a droite. */
+/* Barre masquee. Elle disait qu il y avait d autres cartes a droite : un
+   degrade sur le bord droit le dit aussi, sans la barre. */
+.sty-liste {
+  scrollbar-width: none;
+}
 .sty-liste::-webkit-scrollbar {
-  height: 6px;
+  display: none;
 }
-.sty-liste::-webkit-scrollbar-thumb {
-  background: var(--border);
+.cat-sec.sous-titres {
+  position: relative;
 }
-.sty-liste::-webkit-scrollbar-thumb:hover {
-  background: var(--muted-2);
+.cat-sec.sous-titres::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 34px;
+  height: 100%;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--panel));
 }
 .sty-item {
   padding: 0;
