@@ -4765,31 +4765,6 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
       </div>
     </section>
   )
-  /** Couleur : le champ natif exige TOUJOURS une valeur, il ne sait pas dire
-   *  « hérité ». On l'initialise donc sur la valeur héritée et on ajoute un
-   *  bouton pour y revenir — sans lui, ouvrir le sélecteur suffirait à figer
-   *  une personnalisation qu'on n'a jamais voulue. */
-  const couleur = (cat: string, key: string, label: string): JSX.Element => {
-    const perso = val(cat, key) !== ''
-    const h = String(inherited[cat]?.[key] ?? globals[key] ?? 'FFFFFF').replace(/^#/, '')
-    const hex = (val(cat, key) || h).replace(/^#/, '').toUpperCase()
-    return (
-      <div className={`cat-f${perso ? ' on' : ''}`}>
-        <label className="cat-lbl">{label}{perso && <span className="cat-dot" title="Personnalisé pour cette catégorie" />}</label>
-        <div className="cat-col">
-          <input type="color" value={`#${hex}`} onChange={(e) => champ(cat, key, e.target.value.replace(/^#/, '').toUpperCase())} />
-          <span className="cat-col-hex">#{hex}</span>
-          {perso && (
-            <button className="cat-col-x" title="Revenir à la valeur héritée" onClick={() => champ(cat, key, '')}>↺</button>
-          )}
-        </div>
-      </div>
-    )
-  }
-  /** Nombre de surcharges de sous-titres posées sur cette catégorie. Sert à
-   *  décider si le repli « ajuster » s'ouvre : une valeur cachée serait une
-   *  valeur appliquée que personne ne peut retrouver. */
-  const nbSurcharges = (cat: string): number => SUB_CLES.filter((k) => val(cat, k) !== '').length
 
   const blocSousTitres = (cat: string): JSX.Element => {
     const lib = libDe(cat)
@@ -4848,39 +4823,6 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
             <span>Nouveau style</span>
           </button>
         </div>
-        {/* Toujours replié : le style porte déjà les huit valeurs, ces champs ne
-            servent qu'à en dévier POUR CE COMPTE. Ouvrir d'office quand il en
-            existe faisait déborder la page ; le compteur sur le résumé suffit à
-            signaler qu'une surcharge s'applique — elle n'est pas oubliable. */}
-        <details className="sty-ajust">
-          <summary>
-            Ajuster pour ce compte seulement
-            {nbSurcharges(cat) > 0 && <span className="sty-nb">{nbSurcharges(cat)}</span>}
-          </summary>
-          {/* L'aperçu vit ICI et non en marge du panneau : chaque carte montre
-              déjà son propre rendu, celui-ci ne sert qu'à voir l'effet des
-              surcharges — donc seulement quand on les ouvre. */}
-          <div className="sty-ajust-in">
-            <div className="sty-champs">
-              {select(cat, 'subFont', 'Police', polices)}
-              {nombre(cat, 'subSize', 'Taille', 30, 200)}
-              {select(cat, 'subUpper', 'Casse', [['1', 'MAJUSCULES'], ['0', 'Normale']])}
-              {nombre(cat, 'subGroup', 'Mots affichés ensemble', 1, 8)}
-              {nombre(cat, 'subOutline', 'Épaisseur du contour', 0, 20)}
-              {nombre(cat, 'subBottom', 'Hauteur depuis le bas', 40, 1500)}
-              {couleur(cat, 'subColor', 'Couleur du texte')}
-              {couleur(cat, 'subHilite', 'Mot prononcé')}
-            </div>
-            <aside className="cat-prev">
-              <div className="cat-prev-t">Résultat</div>
-              <div className={`cat-prev-box${apercuEnCours ? ' load' : ''}`}>
-                {apercuSub?.url && <img src={apercuSub.url} alt="Rendu des sous-titres" />}
-                {apercuSub?.err && <div className="cat-prev-err">{apercuSub.err}</div>}
-              </div>
-              <div className="muted small cat-prev-n">Style + ajustements, rendu par le serveur.</div>
-            </aside>
-          </div>
-        </details>
       </section>
     )
   }
@@ -4943,15 +4885,6 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
             <span>Nouveau style</span>
           </button>
         </div>
-        <details className="sty-ajust" open={val(cat, 'style') !== ''}>
-          <summary>
-            Décrire un style pour ce compte seulement
-            {val(cat, 'style') !== '' && <span className="sty-nb">1</span>}
-          </summary>
-          {/* Cette description PRIME sur le style choisi : c'est la surcharge la
-              plus proche, comme les champs de sous-titres. */}
-          {texte(cat, 'style', 'Consigne de rendu', exemple)}
-        </details>
       </section>
     )
   }
@@ -5085,36 +5018,6 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
 
   const carte = CARTES.find((c) => c.cle === ouvert) ?? null
 
-  // ── Aperçu des sous-titres ────────────────────────────────────────────────
-  // Le style envoyé est le style EFFECTIF (personnalisation, sinon héritage) :
-  // un aperçu qui n'enverrait que les surcharges retomberait sur les défauts du
-  // moteur et montrerait autre chose que ce qui sera incrusté.
-  const catSub = carte && (carte.cle === 'niche' || carte.cle === 'genai') ? carte.cle : null
-  const cleSub = catSub
-    ? JSON.stringify(Object.fromEntries(SUB_CLES.map((k) => {
-      const v = val(catSub, k)
-      return [k, v !== '' ? v : heriteBrut(catSub, k).v]
-    })))
-    : ''
-  useEffect(() => {
-    if (!cleSub) return
-    let vivant = true
-    setApercuEnCours(true)
-    // Débounce : sans lui, glisser le sélecteur de couleur lancerait un ffmpeg
-    // par pixel parcouru.
-    const t = window.setTimeout(() => {
-      api.subtitlePreview(JSON.parse(cleSub) as Record<string, string>)
-        .then((url) => {
-          if (!vivant) { URL.revokeObjectURL(url); return }
-          if (urlApercu.current) URL.revokeObjectURL(urlApercu.current)
-          urlApercu.current = url
-          setApercuSub({ url, err: '' })
-        })
-        .catch((e: Error) => { if (vivant) setApercuSub({ url: '', err: e.message }) })
-        .finally(() => { if (vivant) setApercuEnCours(false) })
-    }, 400)
-    return () => { vivant = false; window.clearTimeout(t) }
-  }, [cleSub])
   const profilCourant = profiles.find((p) => p.username === compte)
   const nomCompte = profilCourant?.handle ? `@${profilCourant.handle}` : (compte ?? '')
 

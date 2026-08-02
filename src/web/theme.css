@@ -5378,3 +5378,24 @@ video:-webkit-full-screen {
   padding-top: 10px;
   align-items: flex-start;
 }
+
+/* Pied des categories : les deux boutons au meme gabarit. « Reinitialiser »
+   heritait de .ghost-sm, plus petit — deux tailles cote a cote se lisent comme
+   deux niveaux d importance alors que ce sont deux actions symetriques. */
+.cat-foot .btn {
+  padding: 7px 14px;
+  font-size: 13px;
+  min-width: 112px;
+  justify-content: center;
+}
+/* Enregistrer en vert de marque : c est l action qui confirme, elle prend la
+   couleur qui signale le succes ailleurs dans l app. */
+.cat-foot .btn.primary {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #06231a;
+}
+.cat-foot .btn.primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--brand) 84%, #000);
+  border-color: color-mix(in srgb, var(--brand) 84%, #000);
+}

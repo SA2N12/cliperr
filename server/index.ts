@@ -3532,6 +3532,10 @@ app.post('/api/categories', (req, res) => {
   setCouleur('subHilite')
   const setNb = (k: 'subSize' | 'subOutline' | 'subGroup' | 'subBottom', min: number, max: number): void => {
     if (!(k in c)) return
+    // Chaîne vide = « suivre l'hérité », JAMAIS zéro. `Number('')` vaut 0, qui
+    // passait le test sur un champ dont le minimum EST 0 : vider « épaisseur du
+    // contour » l'enregistrait à 0, donc sans contour, au lieu de l'effacer.
+    if (String(c[k] ?? '').trim() === '') { delete cur[k]; return }
     const v = Math.round(Number(c[k]))
     if (Number.isFinite(v) && v >= min && v <= max) cur[k] = v
     else delete cur[k]
