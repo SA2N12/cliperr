@@ -4723,15 +4723,28 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
             Ajuster pour ce compte seulement
             {nbSurcharges(cat) > 0 && <span className="sty-nb">{nbSurcharges(cat)}</span>}
           </summary>
-          <div className="sty-champs">
-            {select(cat, 'subFont', 'Police', polices)}
-            {nombre(cat, 'subSize', 'Taille', 30, 200)}
-            {select(cat, 'subUpper', 'Casse', [['1', 'MAJUSCULES'], ['0', 'Normale']])}
-            {nombre(cat, 'subGroup', 'Mots affichés ensemble', 1, 8)}
-            {nombre(cat, 'subOutline', 'Épaisseur du contour', 0, 20)}
-            {nombre(cat, 'subBottom', 'Hauteur depuis le bas', 40, 1500)}
-            {couleur(cat, 'subColor', 'Couleur du texte')}
-            {couleur(cat, 'subHilite', 'Mot prononcé')}
+          {/* L'aperçu vit ICI et non en marge du panneau : chaque carte montre
+              déjà son propre rendu, celui-ci ne sert qu'à voir l'effet des
+              surcharges — donc seulement quand on les ouvre. */}
+          <div className="sty-ajust-in">
+            <div className="sty-champs">
+              {select(cat, 'subFont', 'Police', polices)}
+              {nombre(cat, 'subSize', 'Taille', 30, 200)}
+              {select(cat, 'subUpper', 'Casse', [['1', 'MAJUSCULES'], ['0', 'Normale']])}
+              {nombre(cat, 'subGroup', 'Mots affichés ensemble', 1, 8)}
+              {nombre(cat, 'subOutline', 'Épaisseur du contour', 0, 20)}
+              {nombre(cat, 'subBottom', 'Hauteur depuis le bas', 40, 1500)}
+              {couleur(cat, 'subColor', 'Couleur du texte')}
+              {couleur(cat, 'subHilite', 'Mot prononcé')}
+            </div>
+            <aside className="cat-prev">
+              <div className="cat-prev-t">Résultat</div>
+              <div className={`cat-prev-box${apercuEnCours ? ' load' : ''}`}>
+                {apercuSub?.url && <img src={apercuSub.url} alt="Rendu des sous-titres" />}
+                {apercuSub?.err && <div className="cat-prev-err">{apercuSub.err}</div>}
+              </div>
+              <div className="muted small cat-prev-n">Style + ajustements, rendu par le serveur.</div>
+            </aside>
           </div>
         </details>
       </section>
@@ -4949,22 +4962,8 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
           {dirty && <span className="cat-dirty">Modifications non enregistrées</span>}
         </div>
         <div className="card cat-panel">
-          <div className={`cat-panel-in${catSub ? ' avec-apercu' : ''}`}>
+          <div className="cat-panel-in">
             <div className="cat-body">{carte.corps}</div>
-            {catSub && (
-              <aside className="cat-prev">
-                <div className="cat-prev-t">Aperçu</div>
-                <div className={`cat-prev-box${apercuEnCours ? ' load' : ''}`}>
-                  {apercuSub?.url && <img src={apercuSub.url} alt="Rendu des sous-titres" />}
-                  {apercuSub?.err && <div className="cat-prev-err">{apercuSub.err}</div>}
-                </div>
-                {/* On dit ce que l'image est et ce qu'elle n'est pas : une frame
-                    réelle, prise au moment où le 2e mot est prononcé. */}
-                <div className="muted small cat-prev-n">
-                  Image rendue par le serveur, comme la vidéo. Arrêtée sur le 2<sup>e</sup> mot pour montrer les deux couleurs.
-                </div>
-              </aside>
-            )}
           </div>
           {pied(carte.cats, carte.cle)}
         </div>
