@@ -3443,7 +3443,7 @@ input[type='checkbox'] {
 }
 /* Séparateur entre deux chaînes de génération d'une même carte. */
 .cat-sub {
-  margin-top: 6px;
+  margin-top: 4px;
   margin-bottom: 2px;
   font-size: 11px;
   font-weight: 600;
@@ -5118,7 +5118,7 @@ video:-webkit-full-screen {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 2px 12px 0;
+  padding: 1px 12px 0;
   font-size: 11.5px;
 }
 .sty-res-t {
@@ -5220,9 +5220,9 @@ video:-webkit-full-screen {
 /* Repli d'ajustement : le style porte déjà les huit valeurs, ces champs n'en
    sont que la dérive pour un compte. */
 .sty-ajust {
-  margin-top: 6px;
+  margin-top: 4px;
   border-top: 1px solid var(--border);
-  padding-top: 6px;
+  padding-top: 5px;
 }
 .sty-ajust > summary {
   cursor: pointer;
