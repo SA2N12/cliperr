@@ -20,6 +20,9 @@ export type SubStyleDTO = {
 /** Bibliotheque d'une categorie : ses styles, et celui qui s'applique quand un
  *  compte n'en choisit pas. */
 export type StyleLibDTO = { styles: SubStyleDTO[]; defaultId: string }
+/** Style visuel : une consigne de rendu reinjectee dans chaque prompt d'image. */
+export type ImgStyleDTO = { id: string; name: string; prompt: string }
+export type ImgLibDTO = { styles: ImgStyleDTO[]; defaultId: string }
 
 export interface PublishOverrides {
   caption?: string
@@ -192,7 +195,18 @@ export const api = {
       globals: Record<string, string | number>
       polices: [string, string][]
       stylesParCat: Record<string, StyleLibDTO>
+      imgStylesParCat: Record<string, ImgLibDTO>
     }>(`/api/categories${user ? `?user=${encodeURIComponent(user)}` : ''}`),
+  // Styles VISUELS : meme modele que les sous-titres, une bibliotheque par
+  // categorie. L'apercu, lui, coute une generation d'image reelle.
+  saveImageStyle: (category: string, s: { id?: string; name: string; prompt: string }) =>
+    post<{ ok: boolean; parCategorie: Record<string, ImgLibDTO> }>('/api/image-styles', { ...s, category }),
+  setDefaultImageStyle: (category: string, id: string) =>
+    post<{ ok: boolean; parCategorie: Record<string, ImgLibDTO> }>('/api/image-styles/default', { id, category }),
+  deleteImageStyle: (category: string, id: string) =>
+    req<{ ok: boolean; parCategorie: Record<string, ImgLibDTO> }>(`/api/image-styles/${encodeURIComponent(category)}/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  genImageStylePreview: (category: string, id: string) =>
+    post<{ ok: boolean }>(`/api/image-styles/${encodeURIComponent(category)}/${encodeURIComponent(id)}/preview`, {}),
   // Bibliotheques de styles, une PAR CATEGORIE : le style d'une video de niche
   // n'a rien a faire sur une generation IA. Chacune est partagee par tous les
   // comptes — c'est la categorie qui la porte.

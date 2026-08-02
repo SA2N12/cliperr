@@ -11,7 +11,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { appPaths, config, assertConfig, type AppPaths } from './config'
 import { handleLogin, handleLogout, isAuthed, requireAuth } from './auth'
 import { sseHandler, emitProgress, emitLog, emitIdeaVideo } from './sse'
-import { generateVideoFromIdea, chooseMusicTrack, genImageGemini, ttsPreview, listElevenVoices, OPENAI_VOICES, sceneAss, subStyle, SUB_DEFAUT, type SubStyle } from './video-gen'
+import { generateVideoFromIdea, chooseMusicTrack, genImage, genImageDeepinfra, genImageGemini, ttsPreview, listElevenVoices, OPENAI_VOICES, sceneAss, subStyle, SUB_DEFAUT, type SubStyle } from './video-gen'
 import { veoQuota } from './veo-quota'
 import { generateCarousel } from './carousel-gen'
 import { uploadPostTikTokPhotos } from '../src/main/publish/uploadpost'
@@ -540,7 +540,7 @@ async function runVideoGen(
       // Priorité : style explicite de l'appel → style de la CATÉGORIE → style
       // déduit de la source à l'inspiration. Le réglage doit l'emporter sur une
       // déduction automatique, sinon il ne servirait à rien en mode Inspiration.
-      imageStyle: opts.imageStyle ?? (cat.style || undefined) ?? idea.imageStyle,
+      imageStyle: opts.imageStyle ?? (catImgStyle(cat, catKeyOf(opts.videoType)) || undefined) ?? idea.imageStyle,
       geminiKey: getEncrypted('gemini_key'),
       // Série : planche de personnages fournie. Reproduction : image réelle de la
       // source (bien plus fidèle qu'une description textuelle des personnages).
@@ -878,6 +878,8 @@ export type CategoryCfg = {
   speed?: number
   /** Style de sous-titres choisi dans la bibliothèque. Vide = celui par défaut. */
   subStyleId?: string
+  /** Style VISUEL choisi. Vide = celui par défaut de la catégorie. */
+  imgStyleId?: string
   /** Surcharges ponctuelles par-dessus ce style (cf. SubStyle dans video-gen). */
   subFont?: string
   subSize?: number
@@ -962,6 +964,47 @@ function subtitleStyles(): Record<string, StyleLib> {
 }
 function libDe(cat: string): StyleLib {
   return subtitleStyles()[cat] ?? { styles: [], defaultId: '' }
+}
+
+// ── Styles VISUELS d'images ────────────────────────────────────────────────
+// Même modèle que les sous-titres : une bibliothèque par catégorie, partagée
+// par tous les comptes. Un style est ici une simple consigne de rendu, réinjectée
+// dans chaque prompt d'image.
+export type NamedImgStyle = { id: string; name: string; prompt: string }
+type ImgLib = { styles: NamedImgStyle[]; defaultId: string }
+const CAT_AVEC_IMAGES = ['niche', 'carousel', 'genai']
+function imageStyles(): Record<string, ImgLib> {
+  const vide = (): Record<string, ImgLib> =>
+    Object.fromEntries(CAT_AVEC_IMAGES.map((c) => [c, { styles: [], defaultId: '' }]))
+  try {
+    const o = JSON.parse(repo.getSetting('image_styles') || '{}') as Record<string, Partial<ImgLib>>
+    const out = vide()
+    for (const c of CAT_AVEC_IMAGES) {
+      const l = o[c]
+      if (l && Array.isArray(l.styles)) out[c] = { styles: l.styles, defaultId: String(l.defaultId ?? '') }
+    }
+    return out
+  } catch {
+    return vide()
+  }
+}
+function imgLibDe(cat: string): ImgLib {
+  return imageStyles()[cat] ?? { styles: [], defaultId: '' }
+}
+/** Consigne de rendu appliquée : la description libre du compte si elle existe,
+ *  sinon le style choisi, sinon celui par défaut de la catégorie. */
+function catImgStyle(c: CategoryCfg, catKey: string): string {
+  if (c.style) return c.style
+  const lib = imgLibDe(catKey)
+  const voulu = c.imgStyleId
+    ? lib.styles.find((s) => s.id === c.imgStyleId)
+    : lib.styles.find((s) => s.id === lib.defaultId)
+  return voulu?.prompt ?? ''
+}
+/** Fichier d'aperçu d'un style visuel. Généré à la demande — contrairement aux
+ *  sous-titres, rendre une image coûte un appel payant au fournisseur. */
+function imgStylePreviewPath(id: string): string {
+  return join(paths.downloads, 'imgstyles', `${id.replace(/[^a-z0-9]/gi, '')}.png`)
 }
 /** Style qu'une catégorie applique AVANT ses propres surcharges : celui qu'elle
  *  a choisi, sinon le style par défaut de SA bibliothèque, sinon rien. */
@@ -1494,7 +1537,7 @@ async function runAutopilotTick(force = false): Promise<void> {
         cta: ctaMapForProfile(user).niche ?? '',
         // Nombre de diapos et style visuel : catégorie « Niches ».
         slides: catCfg('carousel', user).slides,
-        style: catCfg('carousel', user).style,
+        style: catImgStyle(catCfg('carousel', user), 'carousel'),
         // Anti-répétition, comme pour les vidéos : sans l'historique du compte,
         // l'IA repropose ses sujets favoris (« La règle des 2 minutes » ×3).
         recentTitles: repo
@@ -3187,7 +3230,8 @@ app.get('/api/categories', (req, res) => {
       subUpper: SUB_DEFAUT.upper ? '1' : '0'
     },
     polices: SUB_POLICES,
-    stylesParCat: subtitleStyles()
+    stylesParCat: subtitleStyles(),
+    imgStylesParCat: imageStyles()
   })
 })
 // ── Bibliothèque de styles de sous-titres ──────────────────────────────────
@@ -3271,6 +3315,97 @@ app.delete('/api/subtitle-styles/:category/:id', (req, res) => {
   res.json({ ok: true, parCategorie: toutes })
 })
 
+// ── Bibliothèque de styles visuels ─────────────────────────────────────────
+app.get('/api/image-styles', (_req, res) => {
+  res.json({ parCategorie: imageStyles() })
+})
+app.post('/api/image-styles', (req, res) => {
+  const b = (req.body ?? {}) as Record<string, unknown>
+  const cat = String(b.category ?? '')
+  if (!CAT_AVEC_IMAGES.includes(cat)) return res.status(400).json({ error: 'Catégorie sans styles visuels' })
+  const nom = String(b.name ?? '').trim().slice(0, 60)
+  const prompt = String(b.prompt ?? '').trim().slice(0, 600)
+  if (!nom) return res.status(400).json({ error: 'Nom requis' })
+  if (!prompt) return res.status(400).json({ error: 'Description requise' })
+  const toutes = imageStyles()
+  const lib = toutes[cat]
+  const id = String(b.id ?? '').trim() || `i${Date.now().toString(36)}${randomBytes(3).toString('hex')}`
+  const style: NamedImgStyle = { id, name: nom, prompt }
+  const i = lib.styles.findIndex((s) => s.id === id)
+  if (i >= 0) lib.styles[i] = style
+  else lib.styles.push(style)
+  if (!lib.styles.some((s) => s.id === lib.defaultId)) lib.defaultId = lib.styles[0].id
+  repo.setSetting('image_styles', JSON.stringify(toutes))
+  res.json({ ok: true, parCategorie: toutes })
+})
+app.post('/api/image-styles/default', (req, res) => {
+  const b = (req.body ?? {}) as { id?: unknown; category?: unknown }
+  const cat = String(b.category ?? '')
+  if (!CAT_AVEC_IMAGES.includes(cat)) return res.status(400).json({ error: 'Catégorie sans styles visuels' })
+  const id = String(b.id ?? '')
+  const toutes = imageStyles()
+  if (!toutes[cat].styles.some((s) => s.id === id)) return res.status(400).json({ error: 'Style inconnu' })
+  toutes[cat].defaultId = id
+  repo.setSetting('image_styles', JSON.stringify(toutes))
+  res.json({ ok: true, parCategorie: toutes })
+})
+app.delete('/api/image-styles/:category/:id', async (req, res) => {
+  const cat = String(req.params.category ?? '')
+  if (!CAT_AVEC_IMAGES.includes(cat)) return res.status(400).json({ error: 'Catégorie sans styles visuels' })
+  const id = String(req.params.id ?? '')
+  const toutes = imageStyles()
+  const lib = toutes[cat]
+  lib.styles = lib.styles.filter((s) => s.id !== id)
+  if (!lib.styles.some((s) => s.id === lib.defaultId)) lib.defaultId = lib.styles[0]?.id ?? ''
+  repo.setSetting('image_styles', JSON.stringify(toutes))
+  await unlink(imgStylePreviewPath(id)).catch(() => undefined)
+  // Même nettoyage que pour les sous-titres : une référence morte ferait
+  // basculer les comptes sur le défaut sans que rien ne l'explique.
+  const nettoie = (m: Record<string, CategoryCfg>): boolean => {
+    let touche = false
+    for (const c of Object.values(m)) if (c.imgStyleId === id) { delete c.imgStyleId; touche = true }
+    return touche
+  }
+  const tous = categorySettings()
+  if (nettoie(tous)) repo.setSetting('category_settings', JSON.stringify(tous))
+  const parUser = categorySettingsByUser()
+  let bouge = false
+  for (const m of Object.values(parUser)) if (nettoie(m)) bouge = true
+  if (bouge) repo.setSetting('category_settings_by_user', JSON.stringify(parUser))
+  res.json({ ok: true, parCategorie: toutes })
+})
+/** Aperçu d'un style visuel : une image RÉELLE, générée par la même chaîne que
+ *  les vidéos. Elle coûte un appel payant (~0,013 $), donc elle est produite à
+ *  la demande et conservée — pas régénérée à chaque affichage. */
+app.post('/api/image-styles/:category/:id/preview', async (req, res) => {
+  const cat = String(req.params.category ?? '')
+  const id = String(req.params.id ?? '')
+  const style = imgLibDe(cat).styles.find((s) => s.id === id)
+  if (!style) return res.status(404).json({ error: 'Style inconnu' })
+  const dest = imgStylePreviewPath(id)
+  try {
+    await mkdir(join(paths.downloads, 'imgstyles'), { recursive: true })
+    // MÊME scène pour tous les styles : la seule différence visible entre deux
+    // aperçus doit être le style, pas le sujet.
+    const scene = 'A young woman sitting alone at a small café table by a rainy window, holding a cup, looking outside'
+    // Même chaîne que la production : DeepInfra en tête, OpenAI en repli.
+    const di = getEncrypted('deepinfra_key')
+    const oa = getEncrypted('openai_key')
+    if (di) await genImageDeepinfra(di, `${scene}. ${style.prompt}. Vertical 9:16 composition, no text, no watermark.`, dest)
+    else if (oa) await genImage(oa, `${scene}. ${style.prompt}`, dest, undefined, true)
+    else throw new Error('Aucun fournisseur d’images configuré')
+    res.json({ ok: true })
+  } catch (e) {
+    res.status(500).json({ error: e instanceof Error ? e.message : String(e) })
+  }
+})
+app.get('/api/image-styles/preview/:id', (req, res) => {
+  const f = imgStylePreviewPath(String(req.params.id ?? ''))
+  if (!existsSync(f)) return res.status(404).end()
+  res.setHeader('Cache-Control', 'no-cache')
+  res.sendFile(f)
+})
+
 // Aperçu des sous-titres. Rendu par le MÊME `sceneAss` et le même libass que la
 // vidéo : une imitation en CSS se tromperait sur les métriques de police, le
 // contour et le retour à la ligne — donc montrerait autre chose que le résultat.
@@ -3340,7 +3475,7 @@ app.post('/api/categories', (req, res) => {
   // Chaîne vide / null = « suivre le réglage global » : on EFFACE la clé plutôt
   // que d'enregistrer une valeur vide, sinon on ne distinguerait plus « non
   // réglé » de « réglé à vide ».
-  const setStr = (k: 'quality' | 'engine' | 'lang' | 'subtitles' | 'reframe' | 'subFont' | 'subUpper' | 'subStyleId', autorises?: string[]): void => {
+  const setStr = (k: 'quality' | 'engine' | 'lang' | 'subtitles' | 'reframe' | 'subFont' | 'subUpper' | 'subStyleId' | 'imgStyleId', autorises?: string[]): void => {
     if (!(k in c)) return
     const v = String(c[k] ?? '').trim()
     if (!v || (autorises && !autorises.includes(v))) delete cur[k]
@@ -3379,6 +3514,7 @@ app.post('/api/categories', (req, res) => {
   // Le style doit exister DANS LA BIBLIOTHÈQUE DE CETTE CATÉGORIE : un style de
   // niche n'a rien à faire sur une génération IA.
   setStr('subStyleId', libDe(cat).styles.map((s) => s.id))
+  setStr('imgStyleId', imgLibDe(cat).styles.map((s) => s.id))
   const setCouleur = (k: 'subColor' | 'subHilite'): void => {
     if (!(k in c)) return
     // On accepte « #FFCC00 » comme « ffcc00 » : le champ web envoie l'un, une

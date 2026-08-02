@@ -9,7 +9,9 @@ import {
   type ViralIdea,
   type SavedIdea,
   type SubStyleDTO,
-  type StyleLibDTO
+  type StyleLibDTO,
+  type ImgStyleDTO,
+  type ImgLibDTO
 } from './api'
 
 type Page = 'dashboard' | 'autopilot' | 'categories' | 'niches' | 'analyse' | 'clipping' | 'genai' | 'ideas' | 'history' | 'clips' | 'providers' | 'settings'
@@ -4278,6 +4280,92 @@ function VignetteStyle({ s }: { s: SubStyleDTO }): JSX.Element {
   )
 }
 
+/** Vignette d'un style visuel. L'image n'existe que si on l'a demandée : la
+ *  générer coûte un appel payant, on ne le fait pas dans le dos de l'utilisateur. */
+function VignetteImage({ s, cat, onGen }: { s: ImgStyleDTO; cat: string; onGen: (id: string) => Promise<void> }): JSX.Element {
+  // `v` force le navigateur à recharger l'image après une régénération : sans
+  // lui, l'URL ne changeant pas, il resservirait l'ancienne depuis son cache.
+  const [v, setV] = useState(0)
+  const [busy, setBusy] = useState(false)
+  const [absent, setAbsent] = useState(false)
+  return (
+    <div className="sty-vign img">
+      {!absent && <img src={`/api/image-styles/preview/${s.id}?v=${v}`} alt={`Aperçu de ${s.name}`} onError={() => setAbsent(true)} />}
+      {absent && (
+        <button
+          className="img-gen"
+          disabled={busy}
+          onClick={(e) => {
+            e.stopPropagation()
+            setBusy(true)
+            void onGen(s.id).then(() => { setAbsent(false); setV((x) => x + 1) }).finally(() => setBusy(false))
+          }}
+        >
+          {busy ? 'Génération…' : 'Générer l’aperçu'}
+        </button>
+      )}
+      {!absent && (
+        <button
+          className="img-regen"
+          title="Régénérer l’aperçu (coûte une image)"
+          disabled={busy}
+          onClick={(e) => {
+            e.stopPropagation()
+            setBusy(true)
+            void onGen(s.id).then(() => setV((x) => x + 1)).finally(() => setBusy(false))
+          }}
+        >
+          <Icon name="refresh" size={12} />
+        </button>
+      )}
+    </div>
+  )
+}
+
+/** Éditeur d'un style visuel : un nom et une consigne de rendu. */
+function ModaleImgStyle({ style, onFerme, onEnregistre }: {
+  style: ImgStyleDTO
+  onFerme: () => void
+  onEnregistre: (s: ImgStyleDTO) => Promise<void>
+}): JSX.Element {
+  const [s, setS] = useState<ImgStyleDTO>(style)
+  const [busy, setBusy] = useState(false)
+  return (
+    <div className="pal-back" onMouseDown={onFerme}>
+      <div className="card sty-modale etroite" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="cat-f">
+          <label className="cat-lbl">Nom du style</label>
+          <input className="input-full" value={s.name} placeholder="ex. Cinéma nocturne" onChange={(e) => setS((o) => ({ ...o, name: e.target.value }))} />
+        </div>
+        <div className="cat-f">
+          <label className="cat-lbl">Consigne de rendu</label>
+          <textarea
+            className="input-full cat-ta" rows={4}
+            placeholder="ex. photographie cinématographique, lumière rasante, grain argentique, palette ocre"
+            value={s.prompt}
+            onChange={(e) => setS((o) => ({ ...o, prompt: e.target.value }))}
+          />
+        </div>
+        <div className="muted small cat-note" style={{ maxWidth: 'none' }}>
+          Décris une TECHNIQUE de rendu, jamais un lieu : la consigne est réinjectée dans chaque scène,
+          un décor qui s’y glisserait collerait le même fond à toute la vidéo.
+        </div>
+        <div className="cat-foot">
+          <span className="cat-count">L’aperçu se génère depuis la carte, une fois le style enregistré.</span>
+          <button className="btn ghost-sm" onClick={onFerme}>Annuler</button>
+          <button
+            className="btn primary"
+            disabled={busy || !s.name.trim() || !s.prompt.trim()}
+            onClick={() => { setBusy(true); void onEnregistre(s).finally(() => setBusy(false)) }}
+          >
+            {busy ? 'Enregistrement…' : 'Enregistrer'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /** Éditeur d'un style de sous-titres, avec le rendu réel à côté des champs. */
 function ModaleStyle({ style, polices, onFerme, onEnregistre }: {
   style: SubStyleDTO
@@ -4410,6 +4498,32 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
   /** Bibliothèques de styles, une par catégorie. */
   const [stylesParCat, setStylesParCat] = useState<Record<string, StyleLibDTO>>({})
   const libDe = (cat: string): StyleLibDTO => stylesParCat[cat] ?? { styles: [], defaultId: '' }
+  /** Bibliothèques de styles VISUELS, une par catégorie. */
+  const [imgStylesParCat, setImgStylesParCat] = useState<Record<string, ImgLibDTO>>({})
+  const imgLibDe = (cat: string): ImgLibDTO => imgStylesParCat[cat] ?? { styles: [], defaultId: '' }
+  const [editImg, setEditImg] = useState<ImgStyleDTO | null>(null)
+  const enregistreImg = async (cat: string, s: ImgStyleDTO): Promise<void> => {
+    try {
+      const r = await api.saveImageStyle(cat, s.id ? s : { name: s.name, prompt: s.prompt })
+      setImgStylesParCat(r.parCategorie)
+      setEditImg(null)
+      toast('Style visuel enregistré ✓')
+    } catch (e) { toast('Erreur : ' + (e as Error).message) }
+  }
+  const majDefautImg = async (cat: string, id: string): Promise<void> => {
+    try { setImgStylesParCat((await api.setDefaultImageStyle(cat, id)).parCategorie); toast('Style visuel par défaut changé') }
+    catch (e) { toast('Erreur : ' + (e as Error).message) }
+  }
+  const supprimeImg = async (cat: string, s: ImgStyleDTO): Promise<void> => {
+    if (!window.confirm(`Supprimer le style visuel « ${s.name} » ? Les comptes qui l’utilisaient repasseront au style par défaut.`)) return
+    try { setImgStylesParCat((await api.deleteImageStyle(cat, s.id)).parCategorie); toast('Style visuel supprimé') }
+    catch (e) { toast('Erreur : ' + (e as Error).message) }
+  }
+  /** Génère l'aperçu d'un style visuel. Coûte une image — d'où le message. */
+  const genApercuImg = async (cat: string, id: string): Promise<void> => {
+    try { await api.genImageStylePreview(cat, id); toast('Aperçu généré ✓') }
+    catch (e) { toast('Aperçu impossible : ' + (e as Error).message) }
+  }
   /** Style en cours d'édition dans la modale (`null` = fermée). */
   const [editStyle, setEditStyle] = useState<SubStyleDTO | null>(null)
   /** Nouveau style : on part des valeurs du moteur, pas d'un formulaire vide —
@@ -4465,6 +4579,7 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
       setParCompte(r.parCompte ?? {})
       setPolices(r.polices ?? [])
       setStylesParCat(r.stylesParCat ?? {})
+      setImgStylesParCat(r.imgStylesParCat ?? {})
       setGlobals((r as unknown as { globals?: CatGlobals }).globals ?? {})
     }).catch(() => undefined)
   }, [])
@@ -4761,12 +4876,67 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
       {nombre(cat, 'speed', 'Débit de parole', 0.5, 2, '0.05')}
       {select(cat, 'lang', 'Langue', [['fr', 'Français'], ['en', 'Anglais']])}
       {select(cat, 'subtitles', 'Sous-titres', [['1', 'Incrustés'], ['0', 'Aucun']])}
-      {/* Exemple court : dans la carte « Vidéos », plus étroite depuis que les
-          carrousels ont la leur, un texte long débordait des deux lignes et
-          faisait apparaître une barre de défilement dans le champ. */}
-      {texte(cat, 'style', 'Style visuel des images', 'ex. photographie cinématographique, lumière rasante, grain argentique')}
     </>
   )
+
+  /** Styles visuels : même modèle que les sous-titres. La différence tient à
+   *  l'aperçu — il coûte une image, donc il se demande au lieu de s'afficher. */
+  const blocStyleVisuel = (cat: string, titre: string, exemple: string): JSX.Element => {
+    const lib = imgLibDe(cat)
+    const choisi = val(cat, 'imgStyleId')
+    return (
+      <section className="cat-sec sous-titres">
+        <div className="cat-sub">{titre}</div>
+        <div className="muted small sty-intro">
+          Styles propres à cette catégorie, partagés par tous les comptes ; « Défaut » s’applique à ceux qui ne choisissent pas.
+        </div>
+        <div className="sty-liste">
+          {lib.styles.map((s) => {
+            const actif = choisi ? s.id === choisi : s.id === lib.defaultId
+            return (
+              <div key={s.id} className={`card sty-item${actif ? ' actif' : ''}`}>
+                <VignetteImage s={s} cat={cat} onGen={(id) => genApercuImg(cat, id)} />
+                <button
+                  className="sty-choix"
+                  title={actif ? 'Style appliqué ici' : 'Appliquer à cette catégorie'}
+                  onClick={() => champ(cat, 'imgStyleId', s.id === choisi ? '' : s.id)}
+                >
+                  <span className="sty-nom">
+                    {s.name}
+                    {s.id === lib.defaultId && <span className="sty-badge">Défaut</span>}
+                    {actif && <span className="sty-coche"><Icon name="check" size={13} /></span>}
+                  </span>
+                  <span className="muted small sty-res">
+                    <span className="sty-res-t">{s.prompt}</span>
+                  </span>
+                </button>
+                <div className="sty-actions">
+                  {s.id !== lib.defaultId && (
+                    <button className="btn xsmall" onClick={() => void majDefautImg(cat, s.id)}>Défaut</button>
+                  )}
+                  <button className="btn xsmall" onClick={() => setEditImg(s)}>Modifier</button>
+                  <button className="btn xsmall danger" onClick={() => void supprimeImg(cat, s)}>Supprimer</button>
+                </div>
+              </div>
+            )
+          })}
+          <button className="card sty-ajout" onClick={() => setEditImg({ id: '', name: '', prompt: '' })}>
+            <span className="sty-plus">+</span>
+            <span>Nouveau style</span>
+          </button>
+        </div>
+        <details className="sty-ajust" open={val(cat, 'style') !== ''}>
+          <summary>
+            Décrire un style pour ce compte seulement
+            {val(cat, 'style') !== '' && <span className="sty-nb">1</span>}
+          </summary>
+          {/* Cette description PRIME sur le style choisi : c'est la surcharge la
+              plus proche, comme les champs de sous-titres. */}
+          {texte(cat, 'style', 'Consigne de rendu', exemple)}
+        </details>
+      </section>
+    )
+  }
 
   /** Pied commun : compteur, remise à zéro, enregistrement. */
   const pied = (cats: string[], cle: string): JSX.Element => {
@@ -4831,6 +5001,7 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
           corps: (
             <>
               <section className="cat-sec">{blocVideo('niche')}</section>
+              {blocStyleVisuel('niche', 'Style visuel des images', 'ex. photographie cinématographique, lumière rasante, grain argentique')}
               {blocSousTitres('niche')}
             </>
           )
@@ -4844,10 +5015,10 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
             ['Style visuel', { txt: val('carousel', 'style') ? 'personnalisé' : 'libre', perso: val('carousel', 'style') !== '' }]
           ],
           corps: (
-            <section className="cat-sec">
-              {nombre('carousel', 'slides', 'Nombre de diapos', 3, 10)}
-              {texte('carousel', 'style', 'Style visuel des diapos', 'ex. illustration vectorielle épurée, aplats de couleur, fond uni sombre')}
-            </section>
+            <>
+              <section className="cat-sec">{nombre('carousel', 'slides', 'Nombre de diapos', 3, 10)}</section>
+              {blocStyleVisuel('carousel', 'Style visuel des diapos', 'ex. illustration vectorielle épurée, aplats de couleur, fond uni sombre')}
+            </>
           )
         }
       ]
@@ -4885,6 +5056,7 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
         corps: (
           <>
             <section className="cat-sec">{blocVideo('genai')}</section>
+            {blocStyleVisuel('genai', 'Style visuel des images', 'ex. photographie cinématographique, lumière rasante, grain argentique')}
             {blocSousTitres('genai')}
             {blocRepro('genai')}
           </>
@@ -5005,13 +5177,27 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
       ? carte.panneaux[0]
       : carte.panneaux.find((p) => p.cle === ouvertPan) ?? null
 
-    const modale = editStyle && (
-      <ModaleStyle
-        style={editStyle}
-        polices={polices}
-        onFerme={() => setEditStyle(null)}
-        onEnregistre={(s) => enregistreStyle(carte.cle, s)}
-      />
+    // Les styles VISUELS appartiennent au panneau ouvert : sur les niches, la
+    // bibliothèque des vidéos n'est pas celle des carrousels.
+    const catImg = ouvertPan === 'c' ? 'carousel' : carte.cle
+    const modale = (
+      <>
+        {editStyle && (
+          <ModaleStyle
+            style={editStyle}
+            polices={polices}
+            onFerme={() => setEditStyle(null)}
+            onEnregistre={(s) => enregistreStyle(carte.cle, s)}
+          />
+        )}
+        {editImg && (
+          <ModaleImgStyle
+            style={editImg}
+            onFerme={() => setEditImg(null)}
+            onEnregistre={(s) => enregistreImg(catImg, s)}
+          />
+        )}
+      </>
     )
 
     // ── Choix du panneau ────────────────────────────────────────────────────

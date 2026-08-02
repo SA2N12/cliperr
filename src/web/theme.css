@@ -5260,3 +5260,64 @@ video:-webkit-full-screen {
 }
 
 
+
+/* ── Vignette d un style VISUEL ────────────────────────────────────────────
+   Contrairement aux sous-titres, l image n existe que si on l a demandee :
+   la produire coute un appel payant au fournisseur. */
+.sty-vign.img {
+  position: relative;
+  height: 104px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sty-vign.img img {
+  object-position: center 40%;
+}
+.img-gen {
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: 0;
+  padding: 5px 10px;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.img-gen:hover:not(:disabled) {
+  border-color: var(--brand);
+  color: var(--brand);
+}
+.img-gen:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+/* Regeneration : discrete, en surimpression — elle recoute une image. */
+.img-regen {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  display: inline-flex;
+  padding: 4px;
+  border: 0;
+  border-radius: 0;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.sty-item:hover .img-regen {
+  opacity: 1;
+}
+.sty-modale.etroite {
+  width: min(560px, calc(100vw - 32px));
+}
+/* La consigne de rendu peut etre longue : deux lignes, puis coupe. */
+.sty-item .sty-res-t {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
