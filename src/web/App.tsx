@@ -4882,7 +4882,11 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
                   {s.id === defaultId && <span className="sty-badge">Par défaut</span>}
                 </div>
                 <div className="muted small sty-res">
-                  {s.font} · {s.size} px · {s.group} mot{s.group > 1 ? 's' : ''} · {s.upper ? 'MAJ' : 'normale'}
+                  {/* Le texte est tronqué plutôt que renvoyé à la ligne : sinon
+                      les pastilles, calées à droite, atterrissent au milieu. */}
+                  <span className="sty-res-t">
+                    {s.font} · {s.size} px · {s.group} mot{s.group > 1 ? 's' : ''} · {s.upper ? 'MAJ' : 'normale'}
+                  </span>
                   <span className="sty-pastilles">
                     <i style={{ background: `#${s.color}` }} title={`Texte #${s.color}`} />
                     <i style={{ background: `#${s.hilite}` }} title={`Mot prononcé #${s.hilite}`} />
@@ -4890,7 +4894,7 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
                 </div>
                 <div className="sty-actions">
                   {s.id !== defaultId && (
-                    <button className="btn xsmall" onClick={() => void majDefaut(s.id)}>Par défaut</button>
+                    <button className="btn xsmall" title="Appliquer partout où rien n’est choisi" onClick={() => void majDefaut(s.id)}>Défaut</button>
                   )}
                   <button className="btn xsmall" onClick={() => setEditStyle(s)}>Modifier</button>
                   <button className="btn xsmall danger" onClick={() => void supprimeStyle(s)}>Supprimer</button>
