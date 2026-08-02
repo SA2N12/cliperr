@@ -4712,8 +4712,8 @@ video:-webkit-full-screen {
   border-top: 2px solid var(--cat, var(--border));
 }
 .cat-panel .cat-foot {
-  margin-top: 10px;
-  padding-top: 10px;
+  margin-top: 6px;
+  padding-top: 8px;
 }
 .cat-detail .cat-dhead {
   margin-bottom: 12px;
