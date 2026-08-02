@@ -5301,7 +5301,7 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
                           {actif && <span className="sty-coche" title="Niche de ce compte"><Icon name="check" size={13} /></span>}
                         </span>
                         <span className="muted small sty-res">
-                          <span className="sty-res-t nic-brief">{n.brief || 'Aucun brief — l’IA n’aura que le nom.'}</span>
+                          <span className="sty-res-t nic-resume">{n.brief || 'Aucun brief — l’IA n’aura que le nom.'}</span>
                         </span>
                       </button>
                     </div>
