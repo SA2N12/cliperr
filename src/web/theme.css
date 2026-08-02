@@ -5048,7 +5048,10 @@ video:-webkit-full-screen {
   border-top-color: var(--brand);
 }
 .sty-vign {
-  height: 92px;
+  /* 70 et non 92 : la vignette montre une bande de sous-titres, pas une
+     scene — la rallonger ne montre que du fond et pousse le panneau hors
+     de l ecran. */
+  height: 70px;
   background: var(--panel-2);
   border-bottom: 1px solid var(--border);
   overflow: hidden;
@@ -5121,7 +5124,7 @@ video:-webkit-full-screen {
 
 /* Carte d'ajout : même gabarit que les autres, en pointillés. */
 .sty-ajout {
-  min-height: 150px;
+  min-height: 132px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -5152,7 +5155,7 @@ video:-webkit-full-screen {
   grid-column: 1 / -1;
 }
 .sty-intro {
-  margin-bottom: 9px;
+  margin-bottom: 6px;
   line-height: 1.35;
   max-width: 78ch;
 }
@@ -5193,9 +5196,9 @@ video:-webkit-full-screen {
 /* Repli d'ajustement : le style porte déjà les huit valeurs, ces champs n'en
    sont que la dérive pour un compte. */
 .sty-ajust {
-  margin-top: 12px;
+  margin-top: 9px;
   border-top: 1px solid var(--border);
-  padding-top: 10px;
+  padding-top: 8px;
 }
 .sty-ajust > summary {
   cursor: pointer;
@@ -5233,7 +5236,8 @@ video:-webkit-full-screen {
 }
 .sty-champs {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  /* 170 : les huit champs tiennent alors sur une seule rangee. */
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: 0 20px;
   margin-top: 4px;
 }

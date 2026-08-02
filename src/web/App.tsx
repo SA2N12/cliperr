@@ -4668,8 +4668,7 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
       <section className="cat-sec sous-titres">
         <div className="cat-sub">Sous-titres</div>
         <div className="muted small sty-intro">
-          Ces styles appartiennent à cette catégorie et sont partagés par tous les comptes.
-          {lib.styles.length > 0 && ' Celui marqué « par défaut » s’applique aux comptes qui n’en choisissent pas.'}
+          Styles propres à cette catégorie, partagés par tous les comptes ; « Défaut » s’applique à ceux qui ne choisissent pas.
         </div>
         <div className="sty-liste">
           {lib.styles.map((s) => {
