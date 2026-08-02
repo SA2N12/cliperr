@@ -4630,8 +4630,7 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
       ])}
       {nombre(cat, 'maxScenes', 'Scènes max', 1, 60)}
       <div className="muted small cat-note">
-        N’agissent que sur les vidéos reproduites depuis une source, seules à avoir des scènes animées.
-        Une idée lancée normalement donne des images fixes en 4 à 5 scènes, sans moteur vidéo.
+        N’agissent que sur les vidéos reproduites depuis une source — seules à avoir des scènes animées.
       </div>
     </section>
   )
@@ -4715,10 +4714,11 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
             <span>Nouveau style</span>
           </button>
         </div>
-        {/* Replié par défaut : le style porte déjà les huit valeurs, ces champs
-            ne servent qu'à en dévier POUR CE COMPTE. Ouvert d'office s'il en
-            existe, une surcharge invisible étant une surcharge introuvable. */}
-        <details className="sty-ajust" open={nbSurcharges(cat) > 0}>
+        {/* Toujours replié : le style porte déjà les huit valeurs, ces champs ne
+            servent qu'à en dévier POUR CE COMPTE. Ouvrir d'office quand il en
+            existe faisait déborder la page ; le compteur sur le résumé suffit à
+            signaler qu'une surcharge s'applique — elle n'est pas oubliable. */}
+        <details className="sty-ajust">
           <summary>
             Ajuster pour ce compte seulement
             {nbSurcharges(cat) > 0 && <span className="sty-nb">{nbSurcharges(cat)}</span>}

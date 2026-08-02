@@ -4747,7 +4747,9 @@ video:-webkit-full-screen {
 }
 .cat-note {
   grid-column: 1 / -1;
-  max-width: 60ch;
+  /* Pas de bride a 60ch : le panneau fait toute la largeur, une note bridee
+     se cassait en trois lignes et coutait 54 px pour rien. */
+  max-width: 120ch;
 }
 @media (max-width: 620px) {
   .cat-f.wide {
