@@ -3443,7 +3443,7 @@ input[type='checkbox'] {
 }
 /* Séparateur entre deux chaînes de génération d'une même carte. */
 .cat-sub {
-  margin-top: 10px;
+  margin-top: 6px;
   margin-bottom: 2px;
   font-size: 11px;
   font-weight: 600;
@@ -5036,7 +5036,7 @@ video:-webkit-full-screen {
   display: grid;
   /* 250 : en dessous, les trois boutons d'action passaient à la ligne. */
   grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 12px;
+  gap: 10px;
   align-items: stretch;
 }
 .sty-item {
@@ -5056,7 +5056,7 @@ video:-webkit-full-screen {
   /* 70 et non 92 : la vignette montre une bande de sous-titres, pas une
      scene — la rallonger ne montre que du fond et pousse le panneau hors
      de l ecran. */
-  height: 62px;
+  height: 52px;
   background: var(--panel-2);
   border-bottom: 1px solid var(--border);
   overflow: hidden;
@@ -5081,7 +5081,7 @@ video:-webkit-full-screen {
   gap: 8px;
   font-weight: 550;
   font-size: 13.5px;
-  padding: 10px 12px 0;
+  padding: 7px 12px 0;
 }
 .sty-badge {
   margin-left: auto;
@@ -5201,9 +5201,9 @@ video:-webkit-full-screen {
 /* Repli d'ajustement : le style porte déjà les huit valeurs, ces champs n'en
    sont que la dérive pour un compte. */
 .sty-ajust {
-  margin-top: 9px;
+  margin-top: 6px;
   border-top: 1px solid var(--border);
-  padding-top: 8px;
+  padding-top: 6px;
 }
 .sty-ajust > summary {
   cursor: pointer;
@@ -5266,7 +5266,7 @@ video:-webkit-full-screen {
    la produire coute un appel payant au fournisseur. */
 .sty-vign.img {
   position: relative;
-  height: 84px;
+  height: 72px;
   display: flex;
   align-items: center;
   justify-content: center;
