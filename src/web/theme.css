@@ -1956,7 +1956,7 @@ textarea:focus {
 }
 .clip-mini-thumb {
   width: 34px;
-  height: 46px;
+  height: 42px;
   flex-shrink: 0;
   background: #000;
   display: flex;
@@ -5037,7 +5037,7 @@ video:-webkit-full-screen {
    styles. Une seule rangee qui defile tient quel que soit leur nombre. */
 .sty-liste {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   overflow-x: auto;
   padding-bottom: 0;
   scroll-snap-type: x proximity;
@@ -5295,7 +5295,7 @@ video:-webkit-full-screen {
    la produire coute un appel payant au fournisseur. */
 .sty-vign.img {
   position: relative;
-  height: 56px;
+  height: 50px;
   display: flex;
   align-items: center;
   justify-content: center;
