@@ -5123,7 +5123,7 @@ video:-webkit-full-screen {
   display: flex;
   gap: 5px;
   flex-wrap: wrap;
-  padding: 10px 12px 11px;
+  padding: 8px 12px 9px;
   margin-top: auto;
 }
 
@@ -5266,7 +5266,7 @@ video:-webkit-full-screen {
    la produire coute un appel payant au fournisseur. */
 .sty-vign.img {
   position: relative;
-  height: 104px;
+  height: 84px;
   display: flex;
   align-items: center;
   justify-content: center;

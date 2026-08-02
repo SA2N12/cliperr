@@ -4785,9 +4785,6 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
     return (
       <section className="cat-sec sous-titres">
         <div className="cat-sub">Sous-titres</div>
-        <div className="muted small sty-intro">
-          Styles propres à cette catégorie, partagés par tous les comptes ; « Défaut » s’applique à ceux qui ne choisissent pas.
-        </div>
         <div className="sty-liste">
           {lib.styles.map((s) => {
             const actif = choisi ? s.id === choisi : s.id === lib.defaultId
@@ -4887,9 +4884,6 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
     return (
       <section className="cat-sec sous-titres">
         <div className="cat-sub">{titre}</div>
-        <div className="muted small sty-intro">
-          Styles propres à cette catégorie, partagés par tous les comptes ; « Défaut » s’applique à ceux qui ne choisissent pas.
-        </div>
         <div className="sty-liste">
           {lib.styles.map((s) => {
             const actif = choisi ? s.id === choisi : s.id === lib.defaultId
