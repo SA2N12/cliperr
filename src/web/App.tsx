@@ -4757,7 +4757,10 @@ function CategoriesPage({ toast, profiles }: { toast: (m: string) => void; profi
       {nombre(cat, 'speed', 'Débit de parole', 0.5, 2, '0.05')}
       {select(cat, 'lang', 'Langue', [['fr', 'Français'], ['en', 'Anglais']])}
       {select(cat, 'subtitles', 'Sous-titres', [['1', 'Incrustés'], ['0', 'Aucun']])}
-      {texte(cat, 'style', 'Style visuel des images', 'ex. photographie cinématographique, lumière chaude et rasante, grain argentique, palette ocre — tenu sur toutes les scènes')}
+      {/* Exemple court : dans la carte « Vidéos », plus étroite depuis que les
+          carrousels ont la leur, un texte long débordait des deux lignes et
+          faisait apparaître une barre de défilement dans le champ. */}
+      {texte(cat, 'style', 'Style visuel des images', 'ex. photographie cinématographique, lumière rasante, grain argentique')}
     </>
   )
 
