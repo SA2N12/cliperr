@@ -40,7 +40,7 @@ import { isLocalFile, fetchMetadata, downloadVideo } from '../src/main/pipeline/
 import { killActiveChildren } from '../src/main/pipeline/context'
 import { downloadViaApi, isYouTubeUrl, searchYouTubeVideos, probeDownloadable, type SourceMetaApi } from './ytdl-api'
 import { listUploadPostProfiles, type UploadPostProfile } from '../src/main/publish/uploadpost'
-import { generateViralIdeas, generateEpisodeIdea, generateInspiredIdea, fetchTikTokTrends, type SeriesState } from './ideas'
+import { generateViralIdeas, generateProductIdeas, generateEpisodeIdea, generateInspiredIdea, fetchTikTokTrends, type SeriesState } from './ideas'
 import { run, type PipelineContext } from '../src/main/pipeline/context'
 import { probeDuration } from '../src/main/pipeline/extract'
 import type { Usage } from '../src/main/pipeline/highlights'
@@ -449,7 +449,7 @@ Garde le ton et l'impact. N'invente pas de contenu nouveau.`
 let videoChain: Promise<void> = Promise.resolve()
 async function runVideoGen(
   ideaId: number,
-  opts: { profile?: string; autoPublish?: boolean; imageStyle?: string; characterRefPath?: string; animateScenes?: boolean; dialogue?: boolean; noMusic?: boolean; videoType?: string; music?: string; lang?: 'fr' | 'en'; quality?: 'wan' | 'seedance' | 'veo' } = {}
+  opts: { profile?: string; autoPublish?: boolean; imageStyle?: string; characterRefPath?: string; productRef?: { name: string }; animateScenes?: boolean; dialogue?: boolean; noMusic?: boolean; videoType?: string; music?: string; lang?: 'fr' | 'en'; quality?: 'wan' | 'seedance' | 'veo' } = {}
 ): Promise<number | null> {
   const idea = repo.getIdea(ideaId)
   if (!idea) return null
@@ -554,6 +554,9 @@ async function runVideoGen(
       // Série : planche de personnages fournie. Reproduction : image réelle de la
       // source (bien plus fidèle qu'une description textuelle des personnages).
       characterRefPath: opts.characterRefPath ?? (idea.refImage && existsSync(idea.refImage) ? idea.refImage : undefined),
+      // Photo de produit : le contrat de reproduction est bien plus strict que
+      // pour un personnage, d'où un champ distinct plutôt qu'un drapeau.
+      productRef: opts.productRef,
       falKey: getEncrypted('fal_key'),
       falVideoModel: repo.getSetting('fal_video_model') || undefined,
       falLipsyncModel: repo.getSetting('fal_lipsync_model') || undefined,
@@ -3208,6 +3211,49 @@ app.get('/api/products/photo/:nom', (req, res) => {
   if (!connu) return res.status(404).end()
   res.sendFile(join(paths.uploads, nom))
 })
+/** Génère une vidéo promotionnelle pour un produit. Trois différences avec une
+ *  vidéo de niche : les angles viennent du générateur de vente, la PHOTO du
+ *  produit sert de référence image-à-image, et la légende rappelle prix et lien. */
+app.post('/api/products/:id/video', wrap(async (req, res) => {
+  const apiKey = getApiKey()
+  if (!apiKey) return res.status(400).json({ error: 'Configure d’abord ta clé API Claude dans les Réglages.' })
+  const p = productLibrary()[String(req.params.id)]
+  if (!p) return res.status(404).json({ error: 'Produit inconnu' })
+  // Sans photo, l'IA inventerait un produit : autant refuser franchement plutôt
+  // que de livrer une vidéo qui montre autre chose que ce qu'on vend.
+  const photo = p.photos.map((f) => join(paths.uploads, f)).find((f) => existsSync(f))
+  if (!photo) return res.status(400).json({ error: 'Ajoute au moins une photo au produit : sans référence, la vidéo montrerait un produit inventé.' })
+
+  const model = scriptModel()
+  const { ideas, usage } = await generateProductIdeas({
+    apiKey,
+    model,
+    product: { name: p.name, pitch: p.pitch, benefits: p.benefits, price: p.price },
+    count: 1,
+    recentTitles: repo.listIdeas().filter((i) => i.niche === p.name).slice(0, 30).map((i) => i.title)
+  })
+  if (usage) addSpend(model, usage)
+  if (!ideas.length) return res.status(502).json({ error: 'Aucun angle généré — réessaie.' })
+
+  const idee = ideas[0]
+  // Le CTA vit dans les hashtags/légende plutôt que dans le script : une voix
+  // qui récite un prix vieillit mal, une description se corrige en deux clics.
+  const rappel = [p.price ? `${p.name} — ${p.price}` : p.name, p.url ? `👉 ${p.url}` : 'Lien dans la vidéo 👆']
+    .filter(Boolean)
+    .join('\n')
+  const saved = repo.createIdea(p.name, { ...idee, hook: `${idee.hook}\n\n${rappel}` })
+
+  videoChain = videoChain
+    .then(() => runVideoGen(saved.id, {
+      videoType: 'genai',
+      characterRefPath: photo,
+      productRef: { name: p.name },
+      profile: String((req.body as { user?: unknown })?.user ?? '') || undefined
+    }))
+    .then(() => undefined, () => undefined)
+  res.json({ ok: true, ideaId: saved.id, title: saved.title })
+}))
+
 app.delete('/api/products/:id', wrap(async (req, res) => {
   const m = productLibrary()
   const p = m[String(req.params.id ?? '')]

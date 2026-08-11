@@ -52,6 +52,10 @@ export interface VideoGenOptions {
   geminiKey?: string | null
   /** Planche de référence des personnages (png) — utilisée par Nano Banana à chaque scène. */
   characterRefPath?: string
+  /** La référence est une PHOTO DE PRODUIT, pas une planche de personnages. Le
+   *  contrat change du tout au tout : on veut l'objet reproduit à l'identique
+   *  dans une scène nouvelle, sans qu'il soit redessiné ni « amélioré ». */
+  productRef?: { name: string }
   /** Clé fal.ai : anime chaque scène (image → clip vidéo) au lieu du zoom Ken Burns. */
   falKey?: string | null
   /** Modèle fal.ai (image-to-video) — défaut Seedance lite. */
@@ -1373,9 +1377,17 @@ export async function generateVideoFromIdea(
       // ⚠️ La référence peut être une image RÉELLE de la source (reproduction) :
       // elle porte donc souvent des sous-titres incrustés, un logo ou un pseudo —
       // à ne SURTOUT pas recopier, sinon on hérite du texte de l'original.
-      const refPrompt = learntRef
+      // Contenu promotionnel : la référence est le VRAI produit. Le modèle a une
+      // tendance forte à « embellir » un objet — changer sa forme, ajouter un
+      // logo, modifier ses couleurs — ce qui donnerait une vidéo montrant autre
+      // chose que ce que le client recevra. D'où une consigne d'exactitude bien
+      // plus stricte que pour un personnage.
+      const refPromptProduit = opts.productRef
+        ? `The reference image shows a REAL PRODUCT: ${opts.productRef.name}. Reproduce this EXACT product — identical shape, proportions, colors, materials, markings and details — and place it, in use, into this new scene: ${sc.imagePrompt}. Do NOT redesign, restyle, simplify or "improve" the product in any way. Do NOT add any logo, brand name, text or label that is not on the reference. The product must remain clearly recognizable as the same object a customer would receive. Photorealistic, vertical 9:16 composition, natural lighting, the product in sharp focus. The output must contain NO text of any kind.`
+        : ''
+      const refPrompt = refPromptProduit || (learntRef
         ? `The reference image shows the SAME CHARACTER as the one speaking in this scene. Reuse them EXACTLY (identical face, head shape, colors, hair, outfit, proportions) and place them in this new scene: ${sc.imagePrompt}. Keep the SAME rendering technique${opts.imageStyle ? `: ${opts.imageStyle}` : ''}. Vertical 9:16, vivid saturated colors, expressive. The output must contain NO text of any kind.`
-        : `The reference image is a CONTACT SHEET: a grid of several stills from the same source video, showing its cast and art style. Using EXACTLY these characters (same faces, colors, outfits, designs — pick the ones relevant to this scene), create ONE new single scene (not a grid): ${sc.imagePrompt}. Keep the SAME rendering technique as the reference — do not turn it into a flat 2D illustration${opts.imageStyle ? `: ${opts.imageStyle}` : ''}. Vertical 9:16 composition, vivid saturated colors, expressive, dynamic. IGNORE and REMOVE any text, subtitle, caption, username, logo or watermark visible in the reference image — the output must contain NO text of any kind.`
+        : `The reference image is a CONTACT SHEET: a grid of several stills from the same source video, showing its cast and art style. Using EXACTLY these characters (same faces, colors, outfits, designs — pick the ones relevant to this scene), create ONE new single scene (not a grid): ${sc.imagePrompt}. Keep the SAME rendering technique as the reference — do not turn it into a flat 2D illustration${opts.imageStyle ? `: ${opts.imageStyle}` : ''}. Vertical 9:16 composition, vivid saturated colors, expressive, dynamic. IGNORE and REMOVE any text, subtitle, caption, username, logo or watermark visible in the reference image — the output must contain NO text of any kind.`)
       let imgDone = false
       if (opts.deepinfraKey) {
         try {

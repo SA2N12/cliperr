@@ -4054,6 +4054,13 @@ function ProduitsPage({ toast }: { toast: (m: string) => void }): JSX.Element {
     try { const r = await api.addProductPhoto(ouvert.id, f); setOuvert(r.product); charger() }
     catch (e) { toast('Erreur : ' + (e as Error).message) } finally { setBusy(false) }
   }
+  const genererVideo = async (p: ProductDTO): Promise<void> => {
+    setBusy(true)
+    try {
+      const r = await api.genProductVideo(p.id)
+      toast(`Vidéo lancée : « ${r.title} » — suis l’avancement dans la Console`)
+    } catch (e) { toast('Erreur : ' + (e as Error).message) } finally { setBusy(false) }
+  }
   const retirerPhoto = async (nom: string): Promise<void> => {
     if (!ouvert?.id) return
     try { const r = await api.deleteProductPhoto(ouvert.id, nom); setOuvert(r.product) }
@@ -4134,8 +4141,23 @@ function ProduitsPage({ toast }: { toast: (m: string) => void }): JSX.Element {
             </section>
           </div>
           <div className="cat-foot">
-            <span className="cat-count">{ouvert.id ? '' : 'Enregistre d’abord la fiche pour pouvoir y ajouter des photos.'}</span>
+            <span className="cat-count">
+              {!ouvert.id
+                ? 'Enregistre d’abord la fiche pour pouvoir y ajouter des photos.'
+                : ouvert.photos.length === 0
+                  ? 'Ajoute une photo : sans référence, la vidéo montrerait un produit inventé.'
+                  : ''}
+            </span>
             <button className="btn ghost-sm danger" onClick={() => void supprimer(ouvert)} disabled={!ouvert.id}>Supprimer</button>
+            {/* Générer n'a de sens qu'avec une photo : c'est elle qui fait
+                apparaître le VRAI produit dans les plans. */}
+            <button
+              className="btn"
+              disabled={busy || !ouvert.id || ouvert.photos.length === 0}
+              onClick={() => void genererVideo(ouvert)}
+            >
+              {busy ? 'Génération…' : 'Générer une vidéo'}
+            </button>
             <button className="btn primary" disabled={busy || !ouvert.name.trim()} onClick={() => void enregistrer()}>
               {busy ? 'Enregistrement…' : 'Enregistrer'}
             </button>

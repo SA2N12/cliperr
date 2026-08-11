@@ -167,6 +167,138 @@ Sois concret et actionnable. Réponds en français, uniquement via l'outil propo
   return { ideas, usage: hasUsage ? { input_tokens: usageIn, output_tokens: usageOut } : null }
 }
 
+// ── Contenu promotionnel : angles de vente pour un produit de la boutique ──
+// Ce générateur ne cherche PAS la viralité pour elle-même : une vidéo qui fait
+// des vues sans faire cliquer le panier n'a servi à rien. Il cherche l'angle qui
+// donne envie d'ACHETER — ce qui suppose de montrer le produit en action, pas
+// d'en parler.
+
+export interface ProductIdeaOptions {
+  apiKey: string
+  model?: string
+  /** Fiche produit : c'est la seule source de vérité, l'IA n'invente rien. */
+  product: { name: string; pitch: string; benefits: string[]; price?: string }
+  count: number
+  /** Titres déjà publiés pour ce produit — vingt vidéos identiques plafonnent. */
+  recentTitles?: string[]
+}
+
+/** Angles de vente éprouvés en vidéo courte. On les impose plutôt que de laisser
+ *  l'IA choisir : sans cadre, elle produit vingt fois la même démonstration
+ *  neutre, et TikTok traite les doublons de forme comme des doublons. */
+const ANGLES_VENTE = [
+  "PROBLÈME/SOLUTION — montre d'abord l'agacement quotidien que le produit supprime, sans le nommer ; le produit n'apparaît qu'à la résolution",
+  "AVANT/APRÈS — la situation avant, puis après, sans commentaire superflu ; laisse l'écart parler",
+  'DÉMONSTRATION CHRONOMÉTRÉE — un défi ou un compte à rebours pendant lequel le produit fait son effet',
+  "TROIS RAISONS — trois usages différents et concrets, un par plan, rythme rapide",
+  "OBJECTION RENVERSÉE — pars de ce qu'on reproche à ce type de produit, et montre pourquoi celui-ci y répond",
+  "USAGE INATTENDU — une utilisation à laquelle l'acheteur n'aurait pas pensé, qui élargit l'intérêt",
+  "COMPARAISON DE MÉTHODE — la façon dont on fait sans le produit, puis avec ; jamais de comparaison à une marque nommée"
+]
+
+export async function generateProductIdeas(
+  opts: ProductIdeaOptions
+): Promise<{ ideas: ViralIdea[]; usage: Usage | null }> {
+  const model = opts.model ?? 'claude-haiku-4-5'
+  const client = new Anthropic({ apiKey: opts.apiKey, maxRetries: 5 })
+  const count = Math.min(8, Math.max(1, Math.round(opts.count)))
+  const p = opts.product
+
+  const tool = {
+    name: 'propose_ideas',
+    description: 'Propose des vidéos TikTok qui font vendre un produit précis.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        ideas: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              title: { type: 'string', description: 'Titre court et accrocheur, centré sur le bénéfice — jamais sur la fiche technique' },
+              hook: { type: 'string', description: "Les 3 premières secondes : le moment qui retient, montré et non annoncé" },
+              angle: { type: 'string', description: "L'angle de vente retenu et pourquoi il déclenche l'achat" },
+              script: {
+                type: 'array',
+                items: { type: 'string' },
+                description:
+                  "Déroulé plan par plan, 4 à 7 étapes. Le PRODUIT doit être VISIBLE et EN ACTION dans la majorité des plans. La dernière étape est l'appel à l'action vers la boutique."
+              },
+              format: { type: 'string', description: 'Durée conseillée et rythme' },
+              hashtags: { type: 'array', items: { type: 'string' }, description: '5 à 8 hashtags, dont ceux du besoin résolu' }
+            },
+            required: ['title', 'hook', 'angle', 'script', 'format', 'hashtags']
+          }
+        }
+      },
+      required: ['ideas']
+    }
+  } satisfies Anthropic.Tool
+
+  const dejaVu = opts.recentTitles?.length
+    ? `\n\n⛔ DÉJÀ PUBLIÉ POUR CE PRODUIT :\n${opts.recentTitles.slice(0, 30).map((t) => `- ${t}`).join('\n')}\nChange d'ANGLE et de FORME, pas seulement de mots : TikTok plafonne les vidéos bâties sur le même moule.`
+    : ''
+
+  const prompt = `Tu écris des vidéos TikTok qui font VENDRE un produit précis, sur une boutique TikTok Shop.
+
+PRODUIT
+Nom : ${p.name}
+Ce qu'il fait : ${p.pitch}
+${p.benefits.length ? `Bénéfices :\n${p.benefits.map((b) => `- ${b}`).join('\n')}` : ''}
+${p.price ? `Prix : ${p.price}` : ''}
+
+Propose ${count} idées, chacune sur un ANGLE DIFFÉRENT pris dans cette liste :
+${ANGLES_VENTE.map((a, i) => `${i + 1}. ${a}`).join('\n')}${dejaVu}
+
+RÈGLE CENTRALE — on MONTRE, on n'explique pas.
+Le spectateur doit comprendre l'intérêt du produit sans le son et sans lire. Chaque
+plan décrit une ACTION visible, pas un argument. « La molette tourne, le chiffre
+passe de 5 à 60 » est un plan ; « le produit est réglable » n'en est pas un.
+Le produit doit être VISIBLE et UTILISÉ dans la majorité des plans.
+
+Les trois premières secondes décident de tout : commence par le moment le plus
+frappant, jamais par une présentation ni par « aujourd'hui je vous montre ».
+
+La DERNIÈRE étape du script est l'appel à l'action : renvoyer vers la boutique
+(panier de la vidéo), formulé simplement et sans insistance.
+
+⚠️ INTERDITS — ce sont des motifs de retrait de la vidéo, de la fiche produit, voire du compte :
+- AUCUNE allégation de santé, de soin, de guérison, de rééducation ni de perte de poids.
+- AUCUNE promesse chiffrée de résultat (« +30 % en 3 semaines », « en 7 jours »).
+- AUCUNE comparaison à une marque nommée, ni dénigrement d'un concurrent.
+- AUCUNE affirmation invérifiable sur le produit : tiens-t'en STRICTEMENT à ce que
+  la fiche ci-dessus déclare. N'invente ni matière, ni norme, ni certification, ni chiffre.
+- AUCUNE urgence mensongère (« plus que 3 en stock », « dernier jour ») si ce n'est pas vrai.
+
+Reste factuel et concret : c'est la démonstration qui convainc, pas l'emphase.
+Réponds en français, uniquement via l'outil propose_ideas.`
+
+  let ideas: ViralIdea[] = []
+  let usageIn = 0
+  let usageOut = 0
+  let hasUsage = false
+  for (let attempt = 0; attempt < 3 && !ideas.length; attempt++) {
+    const msg = await client.messages.create({
+      model,
+      max_tokens: 4000,
+      tools: [tool],
+      tool_choice: { type: 'tool', name: 'propose_ideas' },
+      messages: [{ role: 'user', content: prompt }]
+    })
+    if (msg.usage) {
+      usageIn += msg.usage.input_tokens
+      usageOut += msg.usage.output_tokens
+      hasUsage = true
+    }
+    const block = msg.content.find((b) => b.type === 'tool_use')
+    if (!block || block.type !== 'tool_use') continue
+    const parsed = IdeasSchema.safeParse(block.input)
+    if (!parsed.success) continue
+    ideas = parsed.data.ideas.map((i) => ({ ...i, hashtags: i.hashtags.map(normTag).filter(Boolean) }))
+  }
+  return { ideas, usage: hasUsage ? { input_tokens: usageIn, output_tokens: usageOut } : null }
+}
+
 // ── Mode inspiration : vidéo ORIGINALE calquée sur la mécanique d'un TikTok qui marche ──
 
 export interface InspireOptions {

@@ -260,6 +260,8 @@ export const api = {
   products: () => req<{ products: ProductDTO[] }>('/api/products'),
   saveProduct: (p: { id?: string; name: string; pitch: string; benefits: string; price?: string; url?: string }) =>
     post<{ ok: boolean; product: ProductDTO }>('/api/products', p),
+  genProductVideo: (id: string, user?: string) =>
+    post<{ ok: boolean; ideaId: number; title: string }>(`/api/products/${encodeURIComponent(id)}/video`, { user }),
   deleteProduct: (id: string) => req<{ ok: boolean }>(`/api/products/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   addProductPhoto: async (id: string, file: File): Promise<{ ok: boolean; product: ProductDTO }> => {
     const fd = new FormData()
