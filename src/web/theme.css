@@ -5420,3 +5420,35 @@ video:-webkit-full-screen {
 .sty-item .nic-resume {
   -webkit-line-clamp: 2;
 }
+
+/* ── Catalogue produits ────────────────────────────────────────────────────
+   La photo remplace l icone sur la tuile : un produit se reconnait a son image,
+   pas a un pictogramme generique. */
+.prod-vign {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  display: block;
+}
+.prod-vign img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+/* Carte d ajout du catalogue : meme gabarit que les tuiles voisines. */
+.prod-ajout {
+  min-height: 148px;
+  flex: initial;
+}
+.sty-ajout.occupe {
+  opacity: 0.6;
+  cursor: default;
+}
+/* Les photos gardent leur proportion : une chaussure ecrasee ne dit rien. */
+.sty-vign.img img[alt^="Photo"] {
+  object-fit: contain;
+  background: var(--panel-2);
+}

@@ -26,6 +26,18 @@ export type ImgLibDTO = { styles: ImgStyleDTO[]; defaultId: string }
 /** Reglage nomme : un jeu de parametres d'une categorie, reutilisable. */
 export type PresetDTO = { id: string; name: string } & Record<string, string | number>
 export type PresetLibDTO = { presets: PresetDTO[]; defaultId: string }
+/** Produit du catalogue. `photos` porte des NOMS de fichiers, servis par
+ *  /api/products/photo/<nom>. */
+export type ProductDTO = {
+  id: string
+  name: string
+  pitch: string
+  benefits: string[]
+  price?: string
+  url?: string
+  photos: string[]
+  createdAt: number
+}
 
 export interface PublishOverrides {
   caption?: string
@@ -243,6 +255,21 @@ export const api = {
   saveCategory: (category: string, cfg: Record<string, string | number | null>, user?: string) =>
     post<{ ok: boolean; settings: Record<string, Record<string, string | number>> }>('/api/categories', { category, cfg, user: user ?? '' }),
   // Bibliotheque de niches : fiches reutilisables assignees aux comptes.
+  // Catalogue produits (TikTok Shop). Les PHOTOS sont l'essentiel : elles
+  // servent de reference image-a-image pour que le vrai produit apparaisse.
+  products: () => req<{ products: ProductDTO[] }>('/api/products'),
+  saveProduct: (p: { id?: string; name: string; pitch: string; benefits: string; price?: string; url?: string }) =>
+    post<{ ok: boolean; product: ProductDTO }>('/api/products', p),
+  deleteProduct: (id: string) => req<{ ok: boolean }>(`/api/products/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  addProductPhoto: async (id: string, file: File): Promise<{ ok: boolean; product: ProductDTO }> => {
+    const fd = new FormData()
+    fd.append('file', file)
+    const r = await fetch(`/api/products/${encodeURIComponent(id)}/photo`, { method: 'POST', body: fd, credentials: 'include' })
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error ?? `HTTP ${r.status}`)
+    return r.json() as Promise<{ ok: boolean; product: ProductDTO }>
+  },
+  deleteProductPhoto: (id: string, nom: string) =>
+    req<{ ok: boolean; product: ProductDTO }>(`/api/products/${encodeURIComponent(id)}/photo/${encodeURIComponent(nom)}`, { method: 'DELETE' }),
   niches: () =>
     req<{ niches: { id: string; name: string; brief: string; hashtags?: string[]; createdAt: number }[]; comptes: { user: string; nicheId: string | null; libre: string; effective: string }[] }>('/api/niches'),
   saveNiche: (n: { id?: string; name: string; brief: string; hashtags?: string[] }) =>

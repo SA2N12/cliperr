@@ -734,6 +734,40 @@ function nicheLibrary(): Record<string, Niche> {
     return {}
   }
 }
+// ── Catalogue produits (TikTok Shop) ───────────────────────────────────────
+// Un produit joue pour le contenu promotionnel le rôle que la niche joue pour
+// le tout-venant : il fournit le SUJET. Deux différences décisives :
+//   · il porte des PHOTOS RÉELLES, réinjectées comme référence image-à-image —
+//     un produit inventé par l'IA ne vend rien et trompe l'acheteur ;
+//   · il porte un prix et un lien, que la description doit rappeler.
+export type Product = {
+  id: string
+  /** Nom commercial, tel qu'il apparaît dans la boutique. */
+  name: string
+  /** Ce que le produit fait et pour qui — base des angles de vente. */
+  pitch: string
+  /** Bénéfices concrets, un par ligne : matière première des accroches. */
+  benefits: string[]
+  /** Prix affiché, texte libre (devise, promo…). Vide = non mentionné. */
+  price?: string
+  /** Lien boutique, rappelé en description. */
+  url?: string
+  /** Photos réelles, dans `paths.uploads`. La première sert de référence. */
+  photos: string[]
+  createdAt: number
+}
+function productLibrary(): Record<string, Product> {
+  try {
+    const o = JSON.parse(repo.getSetting('product_library') || '{}') as Record<string, Product>
+    return o && typeof o === 'object' ? o : {}
+  } catch {
+    return {}
+  }
+}
+function saveProducts(m: Record<string, Product>): void {
+  repo.setSetting('product_library', JSON.stringify(m))
+}
+
 /** Fiche assignée à chaque compte : { [username]: nicheId }. */
 function nicheAssign(): Record<string, string> {
   try {
@@ -3120,6 +3154,71 @@ app.post('/api/autopilot/run-now', wrap((_req, res) => {
 // Planning du jour : vidéos DÉJÀ publiées (heure réelle) + À VENIR, aux heures
 // FIXES du planning (dailySchedule) — la même source que le pilote.
 // ── Bibliothèque de niches ─────────────────────────────────────────────────
+// ── Catalogue produits ─────────────────────────────────────────────────────
+app.get('/api/products', (_req, res) => {
+  const l = Object.values(productLibrary()).sort((a, b) => a.createdAt - b.createdAt)
+  res.json({ products: l })
+})
+app.post('/api/products', (req, res) => {
+  const b = (req.body ?? {}) as Record<string, unknown>
+  const nom = String(b.name ?? '').trim().slice(0, 120)
+  if (!nom) return res.status(400).json({ error: 'Nom requis' })
+  const m = productLibrary()
+  const id = String(b.id ?? '').trim() || `pr${Date.now().toString(36)}${randomBytes(3).toString('hex')}`
+  const av = m[id]
+  m[id] = {
+    id,
+    name: nom,
+    pitch: String(b.pitch ?? '').trim().slice(0, 800),
+    // Un bénéfice par ligne : c'est la forme dans laquelle on les saisit et
+    // celle dans laquelle l'IA les reprendra.
+    benefits: String(b.benefits ?? '').split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 12),
+    price: String(b.price ?? '').trim().slice(0, 40) || undefined,
+    url: String(b.url ?? '').trim().slice(0, 500) || undefined,
+    photos: av?.photos ?? [],
+    createdAt: av?.createdAt ?? Date.now()
+  }
+  saveProducts(m)
+  res.json({ ok: true, product: m[id] })
+})
+app.post('/api/products/:id/photo', upload.single('file'), wrap((req, res) => {
+  const m = productLibrary()
+  const p = m[String(req.params.id ?? '')]
+  if (!p) return res.status(404).json({ error: 'Produit inconnu' })
+  if (!req.file) return res.status(400).json({ error: 'Fichier manquant' })
+  p.photos.push(req.file.filename)
+  saveProducts(m)
+  res.json({ ok: true, product: p })
+}))
+app.delete('/api/products/:id/photo/:nom', wrap(async (req, res) => {
+  const m = productLibrary()
+  const p = m[String(req.params.id ?? '')]
+  if (!p) return res.status(404).json({ error: 'Produit inconnu' })
+  const nom = String(req.params.nom ?? '')
+  p.photos = p.photos.filter((x) => x !== nom)
+  saveProducts(m)
+  await unlink(join(paths.uploads, nom)).catch(() => undefined)
+  res.json({ ok: true, product: p })
+}))
+/** Sert une photo produit. Le nom est vérifié contre le catalogue plutôt que
+ *  nettoyé : une comparaison exacte ferme la traversée de répertoire. */
+app.get('/api/products/photo/:nom', (req, res) => {
+  const nom = String(req.params.nom ?? '')
+  const connu = Object.values(productLibrary()).some((p) => p.photos.includes(nom))
+  if (!connu) return res.status(404).end()
+  res.sendFile(join(paths.uploads, nom))
+})
+app.delete('/api/products/:id', wrap(async (req, res) => {
+  const m = productLibrary()
+  const p = m[String(req.params.id ?? '')]
+  if (p) {
+    for (const f of p.photos) await unlink(join(paths.uploads, f)).catch(() => undefined)
+    delete m[p.id]
+    saveProducts(m)
+  }
+  res.json({ ok: true })
+}))
+
 app.get('/api/niches', (_req, res) => {
   const lib = nicheLibrary()
   const assign = nicheAssign()

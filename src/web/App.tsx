@@ -13,10 +13,11 @@ import {
   type ImgStyleDTO,
   type ImgLibDTO,
   type PresetDTO,
-  type PresetLibDTO
+  type PresetLibDTO,
+  type ProductDTO
 } from './api'
 
-type Page = 'dashboard' | 'autopilot' | 'categories' | 'niches' | 'analyse' | 'clipping' | 'genai' | 'ideas' | 'history' | 'clips' | 'providers' | 'settings'
+type Page = 'dashboard' | 'autopilot' | 'categories' | 'niches' | 'produits' | 'analyse' | 'clipping' | 'genai' | 'ideas' | 'history' | 'clips' | 'providers' | 'settings'
 
 const ICONS: Record<string, string> = {
   dashboard: 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z',
@@ -595,6 +596,9 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
       // Les niches alimentent la génération : leur place est dans ce groupe,
       // pas avec les réglages du pilote.
       { id: 'niches', label: 'Niches', icon: 'bulb' },
+      // Le catalogue alimente le contenu promotionnel, au meme titre que les
+      // niches alimentent le tout-venant.
+      { id: 'produits', label: 'Produits', icon: 'sources' },
       { id: 'clips', label: 'Clips', icon: 'clips' }
     ],
     [
@@ -786,6 +790,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
         {page === 'autopilot' && <Autopilot toast={showToast} ideaVideo={ideaVideo} scope={scope} />}
         {page === 'categories' && <CategoriesPage toast={showToast} profiles={pub?.profiles ?? []} />}
         {page === 'niches' && <NichesPage toast={showToast} />}
+        {page === 'produits' && <ProduitsPage toast={showToast} />}
         {page === 'clipping' && <Clipage sources={sources} clips={clips} progress={progress} onRefresh={refresh} toast={showToast} />}
         {page === 'genai' && <GenAI toast={showToast} />}
         {page === 'history' && <History sources={sources} clips={clips} progress={progress} onRefresh={refresh} toast={showToast} goClips={() => setPage('clips')} />}
@@ -4006,6 +4011,188 @@ function Providers({ go }: { go: (p: Page) => void }): JSX.Element {
 // tourner sur son texte libre — rien ne casse.
 type NicheT = { id: string; name: string; brief: string; hashtags?: string[]; createdAt: number }
 type CompteT = { user: string; nicheId: string | null; libre: string; effective: string }
+
+/** Catalogue produits. Un produit est au contenu promotionnel ce qu'une niche
+ *  est au tout-venant : le sujet. Avec une différence décisive — ses PHOTOS,
+ *  réinjectées comme référence image-à-image pour que le vrai produit
+ *  apparaisse. Un produit inventé par l'IA ne vend rien et trompe l'acheteur. */
+function ProduitsPage({ toast }: { toast: (m: string) => void }): JSX.Element {
+  const [produits, setProduits] = useState<ProductDTO[]>([])
+  const [ouvert, setOuvert] = useState<ProductDTO | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const charger = useCallback((): void => {
+    api.products().then((r) => setProduits(r.products ?? [])).catch(() => undefined)
+  }, [])
+  useEffect(() => { charger() }, [charger])
+
+  const enregistrer = async (): Promise<void> => {
+    if (!ouvert?.name.trim()) { toast('Donne un nom au produit'); return }
+    setBusy(true)
+    try {
+      const r = await api.saveProduct({
+        id: ouvert.id || undefined,
+        name: ouvert.name,
+        pitch: ouvert.pitch,
+        benefits: ouvert.benefits.join('\n'),
+        price: ouvert.price,
+        url: ouvert.url
+      })
+      setOuvert(r.product)
+      charger()
+      toast('Produit enregistré ✓')
+    } catch (e) { toast('Erreur : ' + (e as Error).message) } finally { setBusy(false) }
+  }
+  const supprimer = async (p: ProductDTO): Promise<void> => {
+    if (!window.confirm(`Supprimer « ${p.name} » et ses photos ?`)) return
+    try { await api.deleteProduct(p.id); setOuvert(null); charger(); toast('Produit supprimé') }
+    catch (e) { toast('Erreur : ' + (e as Error).message) }
+  }
+  const ajouterPhoto = async (f: File): Promise<void> => {
+    if (!ouvert?.id) { toast('Enregistre le produit avant d’ajouter des photos'); return }
+    setBusy(true)
+    try { const r = await api.addProductPhoto(ouvert.id, f); setOuvert(r.product); charger() }
+    catch (e) { toast('Erreur : ' + (e as Error).message) } finally { setBusy(false) }
+  }
+  const retirerPhoto = async (nom: string): Promise<void> => {
+    if (!ouvert?.id) return
+    try { const r = await api.deleteProductPhoto(ouvert.id, nom); setOuvert(r.product) }
+    catch (e) { toast('Erreur : ' + (e as Error).message) }
+  }
+
+  // ── Fiche d'un produit ────────────────────────────────────────────────────
+  if (ouvert) {
+    const maj = <K extends keyof ProductDTO>(k: K, v: ProductDTO[K]): void =>
+      setOuvert((o) => (o ? { ...o, [k]: v } : o))
+    return (
+      <>
+        <div className="cat-fil">
+          <button onClick={() => setOuvert(null)}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+            Produits
+          </button>
+          <span className="cat-fil-seg"><span className="cat-fil-sep">/</span><span className="cat-fil-ici">{ouvert.name.trim() || 'Nouveau produit'}</span></span>
+        </div>
+        <div className="page-head"><div><h1>{ouvert.name.trim() || 'Nouveau produit'}</h1></div></div>
+        <div className="card cat-panel">
+          <div className="cat-body">
+            <section className="cat-sec">
+              <div className="cat-f">
+                <label className="cat-lbl">Nom du produit</label>
+                <input className="input-full" value={ouvert.name} placeholder="tel qu’il apparaît dans la boutique" onChange={(e) => maj('name', e.target.value)} />
+              </div>
+              <div className="cat-f">
+                <label className="cat-lbl">Prix affiché</label>
+                <input className="input-full" value={ouvert.price ?? ''} placeholder="ex. 24,90 € — au lieu de 39,90 €" onChange={(e) => maj('price', e.target.value)} />
+              </div>
+              <div className="cat-f wide">
+                <label className="cat-lbl">Lien boutique</label>
+                <input className="input-full" value={ouvert.url ?? ''} placeholder="https://…" onChange={(e) => maj('url', e.target.value)} />
+              </div>
+              <div className="cat-f wide">
+                <label className="cat-lbl">Ce que fait le produit, et pour qui</label>
+                <textarea className="input-full cat-ta" rows={3} value={ouvert.pitch} placeholder="ex. lampe de bureau sans fil, 3 températures, 40 h d’autonomie — pour étudiants et télétravail en petit espace" onChange={(e) => maj('pitch', e.target.value)} />
+              </div>
+              <div className="cat-f wide">
+                <label className="cat-lbl">Bénéfices, un par ligne</label>
+                <textarea
+                  className="input-full cat-ta" rows={4}
+                  value={ouvert.benefits.join('\n')}
+                  placeholder={'se recharge en 2 h\ns’accroche partout sans percer\nne chauffe pas'}
+                  onChange={(e) => maj('benefits', e.target.value.split('\n'))}
+                />
+              </div>
+            </section>
+            {/* Les photos sont le cœur de la fiche : sans elles, la vidéo montre
+                un produit inventé. La PREMIÈRE sert de référence. */}
+            <section className="cat-sec sous-titres">
+              <div className="cat-sub">Photos du produit</div>
+              <div className="muted small sty-intro">
+                La première sert de référence : c’est elle que l’IA reprend pour que le vrai produit apparaisse dans chaque plan.
+              </div>
+              <div className="sty-liste">
+                {ouvert.photos.map((nom, i) => (
+                  <div key={nom} className="card sty-item">
+                    <div className="sty-vign img">
+                      <img src={`/api/products/photo/${encodeURIComponent(nom)}`} alt={`Photo ${i + 1}`} />
+                    </div>
+                    <div className="sty-nom">{i === 0 ? 'Référence' : `Photo ${i + 1}`}</div>
+                    <div className="sty-actions">
+                      <button className="btn xsmall danger" onClick={() => void retirerPhoto(nom)}>Retirer</button>
+                    </div>
+                  </div>
+                ))}
+                <label className={`card sty-ajout${busy ? ' occupe' : ''}`}>
+                  <span className="sty-plus">+</span>
+                  <span>{busy ? 'Envoi…' : 'Ajouter une photo'}</span>
+                  <input
+                    type="file" accept="image/*" hidden
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) void ajouterPhoto(f); e.currentTarget.value = '' }}
+                  />
+                </label>
+              </div>
+            </section>
+          </div>
+          <div className="cat-foot">
+            <span className="cat-count">{ouvert.id ? '' : 'Enregistre d’abord la fiche pour pouvoir y ajouter des photos.'}</span>
+            <button className="btn ghost-sm danger" onClick={() => void supprimer(ouvert)} disabled={!ouvert.id}>Supprimer</button>
+            <button className="btn primary" disabled={busy || !ouvert.name.trim()} onClick={() => void enregistrer()}>
+              {busy ? 'Enregistrement…' : 'Enregistrer'}
+            </button>
+          </div>
+        </div>
+      </>
+    )
+  }
+
+  // ── Liste ─────────────────────────────────────────────────────────────────
+  return (
+    <>
+      <div className="page-head">
+        <div><h1>Produits</h1></div>
+      </div>
+      <div className="cat-grid">
+        {produits.map((p) => (
+          <button key={p.id} className="card cat-card cat-tile" onClick={() => setOuvert(p)}>
+            <div className="cat-head">
+              {p.photos[0]
+                ? <span className="prod-vign"><img src={`/api/products/photo/${encodeURIComponent(p.photos[0])}`} alt="" /></span>
+                : <span className="cat-ico"><Icon name="sources" size={16} /></span>}
+              <div>
+                <div className="cat-title">{p.name}</div>
+                <div className="muted small cat-hint">{p.pitch || 'Aucune description — l’IA n’aura que le nom.'}</div>
+              </div>
+            </div>
+            <div className="cat-apercu">
+              <div className="cat-ap"><span className="cat-ap-l">Prix</span><span className="cat-ap-v">{p.price || '—'}</span></div>
+              <div className="cat-ap"><span className="cat-ap-l">Bénéfices</span><span className="cat-ap-v">{p.benefits.length || '—'}</span></div>
+              <div className={`cat-ap${p.photos.length ? ' on' : ''}`}>
+                <span className="cat-ap-l">Photos</span>
+                <span className="cat-ap-v">{p.photos.length || 'aucune'}</span>
+              </div>
+            </div>
+            <div className="cat-tile-foot">
+              <span className={`cat-count${p.photos.length ? ' on' : ''}`}>
+                {p.photos.length ? 'Prêt à filmer' : 'Sans photo, le produit sera inventé'}
+              </span>
+              <span className="cat-go">
+                Ouvrir
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
+              </span>
+            </div>
+          </button>
+        ))}
+        <button
+          className="card sty-ajout prod-ajout"
+          onClick={() => setOuvert({ id: '', name: '', pitch: '', benefits: [], photos: [], createdAt: Date.now() })}
+        >
+          <span className="sty-plus">+</span>
+          <span>Nouveau produit</span>
+        </button>
+      </div>
+    </>
+  )
+}
 
 function NichesPage({ toast }: { toast: (m: string) => void }): JSX.Element {
   const [niches, setNiches] = useState<NicheT[]>([])
