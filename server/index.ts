@@ -90,7 +90,14 @@ const PRICES: Record<string, { in: number; out: number }> = {
  */
 function scriptModel(): string {
   const pick = repo.getSetting('script_model') || repo.getSetting(FLAG_MODEL) || 'haiku'
-  return MODEL_MAP[pick] ?? MODEL_MAP.haiku
+  return viaProvider(MODEL_MAP[pick] ?? MODEL_MAP.haiku)
+}
+
+/** Adapte l'identifiant de modèle au fournisseur. DeepInfra range les modèles
+ *  par éditeur et attend `anthropic/claude-…` ; l'identifiant nu y renvoie un
+ *  404 « model does not exist ». */
+function viaProvider(model: string): string {
+  return claudeProvider() === 'deepinfra' && !model.includes('/') ? `anthropic/${model}` : model
 }
 
 /**
@@ -125,7 +132,9 @@ async function getTrendsCached(): Promise<string[]> {
 }
 
 function addSpend(model: string, usage: Usage): void {
-  const p = PRICES[model] ?? PRICES['claude-haiku-4-5']
+  // Le préfixe fournisseur ne doit pas atteindre la table de prix : les tarifs
+  // sont identiques des deux côtés, seul l'identifiant change.
+  const p = PRICES[model.replace(/^anthropic\//, '')] ?? PRICES['claude-haiku-4-5']
   const cost = (usage.input_tokens * p.in + usage.output_tokens * p.out) / 1_000_000
   repo.setSetting(SPEND_USD, String((parseFloat(repo.getSetting(SPEND_USD) ?? '0') || 0) + cost))
   repo.setSetting(SPEND_IN, String((parseInt(repo.getSetting(SPEND_IN) ?? '0', 10) || 0) + usage.input_tokens))
@@ -220,7 +229,7 @@ async function runForSource(sourceId: number, clipCount: number, profileOverride
     send({ sourceId, stage: 'ingest', status: 'running', progress: 0, message: m })
 
   const apiKey = getApiKey()
-  const model = MODEL_MAP[repo.getSetting(FLAG_MODEL) ?? 'haiku'] ?? MODEL_MAP.haiku
+  const model = viaProvider(MODEL_MAP[repo.getSetting(FLAG_MODEL) ?? 'haiku'] ?? MODEL_MAP.haiku)
   // Cadrage : la catégorie « Clips » prime sur le réglage global.
   const cfgClip = catCfg('clip', profileOverride)
   const reframeFocus = ((cfgClip.reframe || repo.getSetting(FLAG_REFRAME)) as ReframeFocus) || 'center'
@@ -2739,11 +2748,15 @@ app.post('/api/providers/check', wrap(async (_req, res) => {
     if (!key) return { state: 'unconfigured' }
     const to = withTimeout(15000)
     try {
-      const r = await fetch('https://api.anthropic.com/v1/messages', {
+      // Le ping doit viser le fournisseur RÉELLEMENT utilisé : viser Anthropic
+      // alors que les vidéos passent par DeepInfra annoncerait « crédits
+      // épuisés » sur une chaîne qui fonctionne.
+      const base = claudeProvider() === 'deepinfra' ? 'https://api.deepinfra.com/anthropic' : 'https://api.anthropic.com'
+      const r = await fetch(`${base}/v1/messages`, {
         method: 'POST',
         signal: to.signal,
         headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-        body: JSON.stringify({ model: 'claude-haiku-4-5', max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] })
+        body: JSON.stringify({ model: viaProvider('claude-haiku-4-5'), max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] })
       })
       if (r.ok) return { state: 'ok' }
       const t = await r.text()
