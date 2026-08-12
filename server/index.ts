@@ -20,6 +20,7 @@ import {
   setApiKey,
   clearApiKey,
   getApiKeyMasked,
+  claudeProvider,
   hasApiKey,
   getEncrypted,
   setEncrypted
@@ -2643,12 +2644,24 @@ app.delete('/api/settings/apikey', wrap((_req, res) => {
 app.get('/api/settings/validate', wrap(async (_req, res) => {
   const key = getApiKey()
   const masked = getApiKeyMasked()
-  if (!key) return res.json({ connected: false, masked: null })
+  const via = claudeProvider()
+  if (!key) return res.json({ connected: false, masked: null, via })
   try {
-    await new Anthropic({ apiKey: key, maxRetries: 5 }).models.list()
-    res.json({ connected: true, masked })
+    // `models.list()` n'existe pas sur le point d'entrée DeepInfra : on valide
+    // par un appel MINIMAL, qui a l'avantage d'éprouver le vrai chemin — clé,
+    // URL de base et modèle — au lieu d'un simple listing.
+    if (via === 'deepinfra') {
+      await new Anthropic({ apiKey: key, maxRetries: 2 }).messages.create({
+        model: scriptModel(),
+        max_tokens: 1,
+        messages: [{ role: 'user', content: 'ok' }]
+      })
+    } else {
+      await new Anthropic({ apiKey: key, maxRetries: 5 }).models.list()
+    }
+    res.json({ connected: true, masked, via })
   } catch (e) {
-    res.json({ connected: false, masked, error: String((e as Error)?.message ?? e) })
+    res.json({ connected: false, masked, via, error: String((e as Error)?.message ?? e) })
   }
 }))
 app.get('/api/settings/spend', wrap((_req, res) =>

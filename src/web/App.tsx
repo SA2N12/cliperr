@@ -5792,7 +5792,20 @@ function Settings({ toast, onTtProfile }: { toast: (m: string) => void; onTtProf
       {tab === 'ia' && (
       <div className="card">
         <h3 style={{ marginTop: 0 }}>IA (Claude)</h3>
-        <Field label={keyStatus.has ? `Clé configurée ✓ (${keyStatus.masked})` : 'Clé API Anthropic'}>
+        {/* Deux chemins vers les MÊMES modèles, au même tarif. DeepInfra revend
+            l'accès derrière un point d'entrée Anthropic-compatible : utile quand
+            un seul des deux comptes est approvisionné. */}
+        <Field label="Par où passent les appels Claude">
+          <select value={flags.claude_provider || 'anthropic'} onChange={(e) => setFlag('claude_provider', e.target.value)}>
+            <option value="anthropic">Anthropic — compte direct</option>
+            <option value="deepinfra">DeepInfra — même tarif, débité du compte DeepInfra</option>
+          </select>
+        </Field>
+        <Field label={
+          (flags.claude_provider === 'deepinfra')
+            ? 'Clé Anthropic (inutilisée tant que les appels passent par DeepInfra)'
+            : keyStatus.has ? `Clé configurée ✓ (${keyStatus.masked})` : 'Clé API Anthropic'
+        }>
           <div style={{ display: 'flex', gap: 8 }}>
             <input className="input-full" style={{ flex: 1 }} type="password" placeholder="sk-ant-…" value={apiKey} onChange={(e) => setApiKey(e.target.value)} />
             <button className="btn primary" onClick={async () => { await api.setApiKey(apiKey); setApiKey(''); setKeyStatus(await api.apiKeyStatus()); toast('Clé enregistrée') }} disabled={!apiKey.trim()}>Enregistrer</button>

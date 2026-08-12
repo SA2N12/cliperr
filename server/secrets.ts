@@ -60,7 +60,32 @@ export function setApiKey(value: string): void {
   setEncrypted(ANTHROPIC, value)
 }
 
+/** Point d'entrée Anthropic-compatible de DeepInfra. Le SDK officiel s'y branche
+ *  en changeant la seule `baseURL` : mêmes routes, mêmes outils, même schéma de
+ *  réponse. Rien d'autre du code n'a à savoir par où passent les appels. */
+const DEEPINFRA_ANTHROPIC = 'https://api.deepinfra.com/anthropic'
+
+/** Fournisseur des appels Claude : `anthropic` (direct) ou `deepinfra` (revente
+ *  au même tarif). Utile quand un seul des deux comptes est approvisionné. */
+export function claudeProvider(): 'anthropic' | 'deepinfra' {
+  return getSetting('claude_provider') === 'deepinfra' ? 'deepinfra' : 'anthropic'
+}
+
+/** Clé à passer au SDK Anthropic. En mode DeepInfra c'est le jeton DeepInfra —
+ *  et l'URL de base est posée dans l'environnement, que le SDK lit à la
+ *  construction de CHAQUE client. C'est ce qui évite de toucher les douze
+ *  endroits où un client est instancié. */
 export function getApiKey(): string | null {
+  if (claudeProvider() === 'deepinfra') {
+    const k = getEncrypted('deepinfra_key')
+    if (k) {
+      process.env.ANTHROPIC_BASE_URL = DEEPINFRA_ANTHROPIC
+      return k
+    }
+    // Jeton DeepInfra absent : on retombe sur Anthropic en direct plutôt que
+    // d'échouer avec une clé vide sur une URL détournée.
+  }
+  delete process.env.ANTHROPIC_BASE_URL
   return getEncrypted(ANTHROPIC)
 }
 
@@ -69,6 +94,8 @@ export function hasApiKey(): boolean {
 }
 
 export function getApiKeyMasked(): string | null {
+  // Masque la clé RÉELLEMENT utilisée : en mode DeepInfra, afficher la clé
+  // Anthropic ferait croire que c'est elle qui paie.
   const k = getApiKey()
   if (!k) return null
   if (k.length <= 12) return '…'
