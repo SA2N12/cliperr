@@ -291,6 +291,9 @@ export const api = {
   // ── Montage : rejouer un plan d'une vidéo déjà produite ──
   montages: () => req<{ videos: MontageVideoDTO[] }>('/api/montage'),
   montage: (stamp: string) => req<MontageDTO>(`/api/montage/${encodeURIComponent(stamp)}`),
+  // Reprise complète : rend la main tout de suite, le rendu part en tâche de fond.
+  remakeAll: (stamp: string, instruction: string) =>
+    post<{ ok: boolean; plans: number }>(`/api/montage/${encodeURIComponent(stamp)}/all`, { instruction }),
   deleteScene: (stamp: string, i: number) =>
     req<{ ok: boolean; durationSec: number }>(`/api/montage/${encodeURIComponent(stamp)}/scene/${i}`, { method: 'DELETE' }),
   // `narration` refait la voix ET les sous-titres, `instruction` corrige l'image.

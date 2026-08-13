@@ -3322,48 +3322,42 @@ app.delete('/api/montage/:stamp/scene/:i', wrap(async (req, res) => {
   res.json({ ok: true, durationSec: total })
 }))
 /** Rejoue UN plan avec une consigne, puis ré-aboute la vidéo. */
-app.post('/api/montage/:stamp/scene/:i', wrap(async (req, res) => {
-  const stamp = String(req.params.stamp ?? '')
-  const lu = lireManifeste(stamp)
-  if (!lu) return res.status(404).json({ error: 'Montage introuvable' })
-  const i = Number(req.params.i)
-  const sc = lu.m.scenes[i]
-  if (!sc?.file) return res.status(404).json({ error: 'Scène inconnue' })
-  const b = (req.body ?? {}) as { instruction?: unknown; narration?: unknown }
-  const consigne = String(b.instruction ?? '').trim().slice(0, 600)
-  // Texte du plan : il commande À LA FOIS la voix off et les sous-titres, qui
-  // sont générés à partir d'elle. Le modifier refait donc les deux.
-  const texte = String(b.narration ?? '').trim().slice(0, 400)
-  if (!consigne && !texte) {
-    return res.status(400).json({ error: 'Change le texte du plan, ou décris ce qu’il faut corriger à l’image.' })
-  }
-  const anthropicKey = getApiKey()
-  const openaiKey = getEncrypted('openai_key')
-  if (!anthropicKey || !openaiKey) return res.status(400).json({ error: 'Clés Claude et OpenAI requises (Réglages).' })
+type CtxMontage = Awaited<ReturnType<typeof getContext>>
 
+/** Rejoue UN plan dans les conditions du manifeste et remplace son fichier.
+ *  Partagé par la retouche d'un plan et la reprise complète : deux copies de
+ *  cette liste d'options divergeraient dès le premier réglage ajouté — c'est
+ *  déjà comme ça que le fournisseur de voix avait été oublié. */
+async function refaitLePlan(
+  ctx: CtxMontage,
+  lu: { dir: string; m: MontageManifest },
+  i: number,
+  edit: { consigne?: string; texte?: string },
+  cles: { anthropicKey: string; openaiKey: string }
+): Promise<void> {
+  const sc = lu.m.scenes[i]
+  if (!sc?.file) throw new Error(`Plan ${i + 1} introuvable`)
   const r = lu.m.reglages as Record<string, unknown>
-  const ctx = await getContext()
   // La consigne s'AJOUTE au prompt d'origine au lieu de le remplacer : le plan
   // doit rester le même, corrigé — pas devenir un autre plan.
   const scene = {
-    narration: texte || sc.narration,
-    imagePrompt: consigne ? `${sc.imagePrompt}\n\nCORRECTION DEMANDÉE (impérative) : ${consigne}` : sc.imagePrompt,
+    narration: edit.texte || sc.narration,
+    imagePrompt: edit.consigne
+      ? `${sc.imagePrompt}\n\nCORRECTION DEMANDÉE (impérative) : ${edit.consigne}`
+      : sc.imagePrompt,
     speaker: sc.speaker ?? undefined
   }
   const out = await generateVideoFromIdea(ctx, {
     idea: { title: '', hook: '', angle: '', script: [], format: '', hashtags: [] },
-    anthropicKey,
+    anthropicKey: cles.anthropicKey,
     anthropicModel: scriptModel(),
-    openaiKey,
+    openaiKey: cles.openaiKey,
     voice: (r.voice as string) || undefined,
     // Le fournisseur DOIT suivre la voix. Sans lui, une voix ElevenLabs part
     // dans le TTS OpenAI, qui ne la reconnaît pas et retombe sur « ash » sans
     // lever d'erreur : le plan refait parle d'une autre voix que ses voisins.
-    // Déduit de la voix pour les manifestes écrits avant qu'on le stocke.
     voiceProvider: (r.voiceProvider as string) || (r.voice ? providerForVoice(String(r.voice)) : undefined),
     elevenKey: getEncrypted('elevenlabs_key'),
-    // Options d'animation omises au premier jet : elles décident du chemin de
-    // rendu, donc un plan refait sans elles ne ressemble pas aux autres.
     falLipsyncModel: repo.getSetting('fal_lipsync_model') || undefined,
     prunaLipsync: repo.getSetting('pruna_lipsync') === '1',
     seedanceTalking: repo.getSetting('seedance_talking') === '1',
@@ -3389,27 +3383,96 @@ app.post('/api/montage/:stamp/scene/:i', wrap(async (req, res) => {
     remakeScenes: [scene],
     onProgress: (m) => emitLog(`Montage — plan ${i + 1} : ${m}`)
   })
-
-  // La scène refaite remplace l'ancienne, puis on ré-aboute : les plans intacts
-  // ne sont pas recalculés, c'est tout l'intérêt.
   await copyFile(out.filePath, join(lu.dir, sc.file))
-  const fichiers = lu.m.scenes.map((s) => (s.file ? join(lu.dir, s.file) : '')).filter((f) => f && existsSync(f))
-  const finalPath = join(paths.clips, lu.m.finalName)
-  const total = await assembleScenes(ctx, fichiers, finalPath, (r.musicTrack as string) || null)
-
-  // Le plan refait n'a AUCUNE raison de durer ce que durait l'ancien : un texte
+  // Un plan refait n'a AUCUNE raison de durer ce que durait l'ancien : un texte
   // plus court raccourcit la voix, donc la scène. Sans cette mise à jour, les
   // blocs de la timeline se décaleraient dès la première retouche.
   sc.durationSec = out.durationSec
-  if (texte) sc.narration = texte
+  if (edit.texte) sc.narration = edit.texte
+}
+
+/** Ré-aboute les plans du manifeste et réécrit celui-ci. Le fichier final est
+ *  remplacé EN PLACE : la ligne en base pointe toujours au bon endroit. */
+async function reassembleMontage(ctx: CtxMontage, lu: { dir: string; m: MontageManifest }): Promise<number> {
+  const fichiers = lu.m.scenes.map((s) => (s.file ? join(lu.dir, s.file) : '')).filter((f) => f && existsSync(f))
+  const total = await assembleScenes(
+    ctx,
+    fichiers,
+    join(paths.clips, lu.m.finalName),
+    ((lu.m.reglages as Record<string, unknown>).musicTrack as string) || null
+  )
   lu.m.durationSec = total
   writeFileSync(join(lu.dir, 'manifest.json'), JSON.stringify(lu.m, null, 2))
-  // Le fichier est remplacé EN PLACE : la ligne en base pointe toujours au bon
-  // endroit, rien à mettre à jour. (La durée est portée par la source, pas par
-  // le clip — la toucher ici demanderait de remonter à l'idée pour un champ
-  // d'affichage, au risque d'écrire dans une colonne qui n'existe pas.)
+  return total
+}
+
+app.post('/api/montage/:stamp/scene/:i', wrap(async (req, res) => {
+  const lu = lireManifeste(String(req.params.stamp ?? ''))
+  if (!lu) return res.status(404).json({ error: 'Montage introuvable' })
+  const i = Number(req.params.i)
+  if (!lu.m.scenes[i]?.file) return res.status(404).json({ error: 'Scène inconnue' })
+  const b = (req.body ?? {}) as { instruction?: unknown; narration?: unknown }
+  const consigne = String(b.instruction ?? '').trim().slice(0, 600)
+  // Texte du plan : il commande À LA FOIS la voix off et les sous-titres, qui
+  // sont générés à partir de lui. Le modifier refait donc les deux.
+  const texte = String(b.narration ?? '').trim().slice(0, 400)
+  if (!consigne && !texte) {
+    return res.status(400).json({ error: 'Change le texte du plan, ou décris ce qu’il faut corriger à l’image.' })
+  }
+  const anthropicKey = getApiKey()
+  const openaiKey = getEncrypted('openai_key')
+  if (!anthropicKey || !openaiKey) return res.status(400).json({ error: 'Clés Claude et OpenAI requises (Réglages).' })
+
+  const ctx = await getContext()
+  await refaitLePlan(ctx, lu, i, { consigne, texte }, { anthropicKey, openaiKey })
+  const total = await reassembleMontage(ctx, lu)
   emitLog(`Montage — plan ${i + 1} refait, vidéo réassemblée (${Math.round(total)} s)`)
   res.json({ ok: true, durationSec: total })
+}))
+
+/** Reprend TOUS les plans avec une consigne commune. Plusieurs minutes de
+ *  rendu : la requête expirerait bien avant la fin, donc le travail part en
+ *  tâche de fond et l'avancement passe par la Console. On s'enchaîne sur
+ *  `videoChain` pour ne pas concurrencer une génération en cours. */
+app.post('/api/montage/:stamp/all', wrap(async (req, res) => {
+  const stamp = String(req.params.stamp ?? '')
+  const lu = lireManifeste(stamp)
+  if (!lu) return res.status(404).json({ error: 'Montage introuvable' })
+  const consigne = String((req.body as { instruction?: unknown })?.instruction ?? '').trim().slice(0, 600)
+  if (!consigne) return res.status(400).json({ error: 'Décris ce qu’il faut changer sur l’ensemble du clip.' })
+  const anthropicKey = getApiKey()
+  const openaiKey = getEncrypted('openai_key')
+  if (!anthropicKey || !openaiKey) return res.status(400).json({ error: 'Clés Claude et OpenAI requises (Réglages).' })
+  const n = lu.m.scenes.length
+
+  videoChain = videoChain
+    .then(async () => {
+      const ctx = await getContext()
+      emitLog(`Montage — reprise des ${n} plans : « ${consigne} »`)
+      let refaits = 0
+      for (let i = 0; i < n; i++) {
+        try {
+          // Le manifeste est relu à chaque tour : un plan supprimé pendant la
+          // reprise ne doit pas faire échouer les suivants.
+          const frais = lireManifeste(stamp)
+          if (!frais?.m.scenes[i]?.file) continue
+          await refaitLePlan(ctx, frais, i, { consigne }, { anthropicKey, openaiKey })
+          writeFileSync(join(frais.dir, 'manifest.json'), JSON.stringify(frais.m, null, 2))
+          refaits++
+        } catch (e) {
+          // Un plan qui échoue ne doit pas emporter les autres : on garde
+          // l'ancien et on continue, plutôt que de rendre un clip amputé.
+          emitLog(`Montage — plan ${i + 1} inchangé (${e instanceof Error ? e.message : String(e)})`)
+        }
+      }
+      const final = lireManifeste(stamp)
+      if (final) {
+        const total = await reassembleMontage(ctx, final)
+        emitLog(`Montage — ${refaits}/${n} plans refaits, vidéo réassemblée (${Math.round(total)} s)`)
+      }
+    })
+    .then(() => undefined, () => undefined)
+  res.json({ ok: true, plans: n })
 }))
 app.get('/api/products/:id/videos', wrap((req, res) => {
   const p = productLibrary()[String(req.params.id ?? '')]

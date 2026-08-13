@@ -4031,6 +4031,8 @@ function MontagePage({ toast }: { toast: (m: string) => void }): JSX.Element {
   const [consignes, setConsignes] = useState<Record<number, string>>({})
   /** Texte réécrit par plan, tant qu'il n'est pas renvoyé. */
   const [textes, setTextes] = useState<Record<number, string>>({})
+  /** Consigne appliquée à TOUS les plans. */
+  const [global, setGlobal] = useState('')
   const [busy, setBusy] = useState<number | null>(null)
   const [sel, setSel] = useState(0)
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -4094,6 +4096,18 @@ function MontagePage({ toast }: { toast: (m: string) => void }): JSX.Element {
   const enLecture = (ouvert?.scenes ?? []).findIndex(
     (s, i) => tete >= debutDe(i) && tete < debutDe(i) + (s.durationSec ?? 0)
   )
+  const refaireTout = async (): Promise<void> => {
+    if (!ouvert) return
+    const c = global.trim()
+    if (!c) { toast('Décris ce qu’il faut changer sur l’ensemble du clip'); return }
+    const n = ouvert.scenes.length
+    if (!window.confirm(`Refaire les ${n} plans ? Chacun est régénéré : compte plusieurs minutes, et le coût d’une vidéo entière.`)) return
+    try {
+      await api.remakeAll(ouvert.stamp, c)
+      setGlobal('')
+      toast(`Reprise des ${n} plans lancée — suis l’avancement dans la Console, puis recharge`)
+    } catch (e) { toast('Erreur : ' + (e as Error).message) }
+  }
   const supprimerPlan = async (i: number): Promise<void> => {
     if (!ouvert) return
     // Le manifeste est la seule trace du texte et du prompt de ce plan : une
@@ -4276,6 +4290,26 @@ function MontagePage({ toast }: { toast: (m: string) => void }): JSX.Element {
                 {enLecture >= 0 ? ` · plan ${enLecture + 1} à l’écran` : ''}
               </div>
              </div>
+            </section>
+            {/* Consigne de clip. Distincte des retouches de plan : elle
+                s'applique à tous, donc elle relance TOUT le rendu — d'où la
+                confirmation et l'exécution en tâche de fond. */}
+            <section className="cat-sec sous-titres">
+              <div className="cat-sub">Tout le clip</div>
+              <div className="cat-f wide">
+                <label className="cat-lbl">Consigne appliquée aux {ouvert.scenes.length} plans</label>
+                <textarea
+                  className="input-full cat-ta" rows={2}
+                  value={global}
+                  placeholder="ex. ambiance plus lumineuse, décor de penderie et non de garage"
+                  onChange={(e) => setGlobal(e.target.value)}
+                />
+              </div>
+              <div className="sty-actions">
+                <button className="btn small" disabled={busy !== null} onClick={() => void refaireTout()}>
+                  Refaire les {ouvert.scenes.length} plans
+                </button>
+              </div>
             </section>
             {(() => {
               const s = ouvert.scenes[sel]
