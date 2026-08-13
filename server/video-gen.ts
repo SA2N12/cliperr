@@ -1728,8 +1728,13 @@ NO TEXT — CRITICAL: nothing written anywhere in the frame. No subtitles, no ca
           // Le modèle d'animation glisse parfois un horodatage ou un filigrane
           // sur le bord bas (« 17-38 2D-E-4?b… »). On rogne 8 % : assez pour les
           // faire disparaître, trop peu pour amputer la scène.
-          `[0:v]crop=iw:ih*0.92:0:0,scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setpts=${ratio.toFixed(4)}*PTS,fps=30,setsar=1${subFilter}[v]`,
-          '-map', '[v]', '-map', '1:a',
+          // `apad` : la voix fait `dur − 0,4` (padding ligne ~1576) alors que
+          // l'image fait `dur`. Sans silence de complément, chaque scène sort
+          // avec une piste audio plus courte que sa vidéo, et le `concat -c copy`
+          // CUMULE ce déficit — 0,4 s par plan, soit plus de 3 s à la fin d'une
+          // pub de huit plans. C'est là qu'était le décalage voix/sous-titres.
+          `[0:v]crop=iw:ih*0.92:0:0,scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setpts=${ratio.toFixed(4)}*PTS,fps=30,setsar=1${subFilter}[v];[1:a]apad[a]`,
+          '-map', '[v]', '-map', '[a]',
           '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
           '-c:a', 'aac', '-ar', '44100', '-ac', '2', '-b:a', '128k',
           '-t', String(dur),
@@ -1743,8 +1748,10 @@ NO TEXT — CRITICAL: nothing written anywhere in the frame. No subtitles, no ca
           '-i', png,
           '-i', mp3,
           '-filter_complex',
-          `[0:v]scale=1188:2112:force_original_aspect_ratio=increase,crop=1188:2112,zoompan=z='min(zoom+0.0004,1.10)':d=${frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30,setsar=1${subFilter}[v]`,
-          '-map', '[v]', '-map', '1:a',
+          // Même complément de silence que pour les clips animés : la piste doit
+          // faire exactement la longueur de l'image, sinon le concat dérive.
+          `[0:v]scale=1188:2112:force_original_aspect_ratio=increase,crop=1188:2112,zoompan=z='min(zoom+0.0004,1.10)':d=${frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30,setsar=1${subFilter}[v];[1:a]apad[a]`,
+          '-map', '[v]', '-map', '[a]',
           '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
           '-c:a', 'aac', '-ar', '44100', '-ac', '2', '-b:a', '128k',
           '-t', String(dur),
