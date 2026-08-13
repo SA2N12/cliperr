@@ -4027,6 +4027,8 @@ function MontagePage({ toast }: { toast: (m: string) => void }): JSX.Element {
   const [videos, setVideos] = useState<MontageVideoDTO[]>([])
   const [ouvert, setOuvert] = useState<MontageDTO | null>(null)
   const [consignes, setConsignes] = useState<Record<number, string>>({})
+  /** Texte réécrit par plan, tant qu'il n'est pas renvoyé. */
+  const [textes, setTextes] = useState<Record<number, string>>({})
   const [busy, setBusy] = useState<number | null>(null)
   const [sel, setSel] = useState(0)
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -4126,15 +4128,25 @@ function MontagePage({ toast }: { toast: (m: string) => void }): JSX.Element {
   const refaire = async (i: number): Promise<void> => {
     if (!ouvert) return
     const c = (consignes[i] ?? '').trim()
-    if (!c) { toast('Décris ce qu’il faut corriger sur ce plan'); return }
+    const origine = ouvert.scenes[i]?.narration ?? ''
+    const t = (textes[i] ?? origine).trim()
+    const texteChange = t && t !== origine.trim()
+    if (!c && !texteChange) { toast('Change le texte du plan, ou décris ce qu’il faut corriger à l’image'); return }
     setBusy(i)
     try {
-      const r = await api.remakeScene(ouvert.stamp, i, c)
-      setOuvert({ ...ouvert, durationSec: r.durationSec })
+      await api.remakeScene(ouvert.stamp, i, {
+        instruction: c || undefined,
+        narration: texteChange ? t : undefined
+      })
+      // On relit le manifeste plutôt que de rafistoler l'état local : le plan
+      // refait a une NOUVELLE durée, donc toute la timeline se redécoupe.
+      const frais = await api.montage(ouvert.stamp)
+      setOuvert(frais)
       setConsignes((o) => ({ ...o, [i]: '' }))
+      setTextes({})
       setRev((n) => n + 1)
       charger()
-      toast(`Plan ${i + 1} refait — vidéo réassemblée (${Math.round(r.durationSec)} s) ✓`)
+      toast(`Plan ${i + 1} refait — vidéo réassemblée (${Math.round(frais.durationSec)} s) ✓`)
     } catch (e) { toast('Erreur : ' + (e as Error).message) } finally { setBusy(null) }
   }
 
@@ -4251,9 +4263,19 @@ function MontagePage({ toast }: { toast: (m: string) => void }): JSX.Element {
               return (
                 <section className="cat-sec sous-titres">
                   <div className="cat-sub">Plan {s.index + 1} · {(s.durationSec ?? 0).toFixed(1)} s</div>
-                  <div className="muted small sty-intro">« {s.narration} »</div>
+                  {/* Le texte commande la voix off ET les sous-titres, qui en
+                      sont tirés : le réécrire refait les deux, et change la
+                      durée du plan. */}
                   <div className="cat-f wide">
-                    <label className="cat-lbl">Ce qu’il faut corriger sur ce plan</label>
+                    <label className="cat-lbl">Texte dit dans ce plan</label>
+                    <textarea
+                      className="input-full cat-ta" rows={2}
+                      value={textes[s.index] ?? s.narration}
+                      onChange={(e) => setTextes((o) => ({ ...o, [s.index]: e.target.value }))}
+                    />
+                  </div>
+                  <div className="cat-f wide">
+                    <label className="cat-lbl">Ce qu’il faut corriger à l’image (facultatif)</label>
                     <textarea
                       className="input-full cat-ta" rows={2}
                       value={consignes[s.index] ?? ''}

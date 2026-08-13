@@ -291,8 +291,9 @@ export const api = {
   // ── Montage : rejouer un plan d'une vidéo déjà produite ──
   montages: () => req<{ videos: MontageVideoDTO[] }>('/api/montage'),
   montage: (stamp: string) => req<MontageDTO>(`/api/montage/${encodeURIComponent(stamp)}`),
-  remakeScene: (stamp: string, i: number, instruction: string) =>
-    post<{ ok: boolean; durationSec: number }>(`/api/montage/${encodeURIComponent(stamp)}/scene/${i}`, { instruction }),
+  // `narration` refait la voix ET les sous-titres, `instruction` corrige l'image.
+  remakeScene: (stamp: string, i: number, p: { instruction?: string; narration?: string }) =>
+    post<{ ok: boolean; durationSec: number }>(`/api/montage/${encodeURIComponent(stamp)}/scene/${i}`, p),
   deleteProduct: (id: string) => req<{ ok: boolean }>(`/api/products/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   addProductPhoto: async (id: string, file: File): Promise<{ ok: boolean; product: ProductDTO }> => {
     const fd = new FormData()

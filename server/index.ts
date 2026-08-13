@@ -3295,8 +3295,14 @@ app.post('/api/montage/:stamp/scene/:i', wrap(async (req, res) => {
   const i = Number(req.params.i)
   const sc = lu.m.scenes[i]
   if (!sc?.file) return res.status(404).json({ error: 'Scène inconnue' })
-  const consigne = String((req.body as { instruction?: unknown })?.instruction ?? '').trim().slice(0, 600)
-  if (!consigne) return res.status(400).json({ error: 'Décris ce qu’il faut corriger sur ce plan.' })
+  const b = (req.body ?? {}) as { instruction?: unknown; narration?: unknown }
+  const consigne = String(b.instruction ?? '').trim().slice(0, 600)
+  // Texte du plan : il commande À LA FOIS la voix off et les sous-titres, qui
+  // sont générés à partir d'elle. Le modifier refait donc les deux.
+  const texte = String(b.narration ?? '').trim().slice(0, 400)
+  if (!consigne && !texte) {
+    return res.status(400).json({ error: 'Change le texte du plan, ou décris ce qu’il faut corriger à l’image.' })
+  }
   const anthropicKey = getApiKey()
   const openaiKey = getEncrypted('openai_key')
   if (!anthropicKey || !openaiKey) return res.status(400).json({ error: 'Clés Claude et OpenAI requises (Réglages).' })
@@ -3306,8 +3312,8 @@ app.post('/api/montage/:stamp/scene/:i', wrap(async (req, res) => {
   // La consigne s'AJOUTE au prompt d'origine au lieu de le remplacer : le plan
   // doit rester le même, corrigé — pas devenir un autre plan.
   const scene = {
-    narration: sc.narration,
-    imagePrompt: `${sc.imagePrompt}\n\nCORRECTION DEMANDÉE (impérative) : ${consigne}`,
+    narration: texte || sc.narration,
+    imagePrompt: consigne ? `${sc.imagePrompt}\n\nCORRECTION DEMANDÉE (impérative) : ${consigne}` : sc.imagePrompt,
     speaker: sc.speaker ?? undefined
   }
   const out = await generateVideoFromIdea(ctx, {
@@ -3343,6 +3349,11 @@ app.post('/api/montage/:stamp/scene/:i', wrap(async (req, res) => {
   const finalPath = join(paths.clips, lu.m.finalName)
   const total = await assembleScenes(ctx, fichiers, finalPath, (r.musicTrack as string) || null)
 
+  // Le plan refait n'a AUCUNE raison de durer ce que durait l'ancien : un texte
+  // plus court raccourcit la voix, donc la scène. Sans cette mise à jour, les
+  // blocs de la timeline se décaleraient dès la première retouche.
+  sc.durationSec = out.durationSec
+  if (texte) sc.narration = texte
   lu.m.durationSec = total
   writeFileSync(join(lu.dir, 'manifest.json'), JSON.stringify(lu.m, null, 2))
   // Le fichier est remplacé EN PLACE : la ligne en base pointe toujours au bon
