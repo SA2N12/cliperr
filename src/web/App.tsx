@@ -4030,12 +4030,69 @@ function MontagePage({ toast }: { toast: (m: string) => void }): JSX.Element {
   const [busy, setBusy] = useState<number | null>(null)
   const [sel, setSel] = useState(0)
   const videoRef = useRef<HTMLVideoElement>(null)
+  const pisteRef = useRef<HTMLDivElement>(null)
+  const rafRef = useRef(0)
+  /** Position de la tête de lecture, en secondes. */
+  const [tete, setTete] = useState(0)
   // Le fichier est remplacé EN PLACE : sans ce compteur dans l'URL, le
   // navigateur rejouerait la version d'avant depuis son cache.
   const [rev, setRev] = useState(0)
   /** Début d'un plan dans la vidéo assemblée = somme des plans qui précèdent. */
   const debutDe = (i: number): number =>
     (ouvert?.scenes ?? []).slice(0, i).reduce((t, s) => t + (s.durationSec ?? 0), 0)
+
+  // La tête suit la lecture image par image. `timeupdate` ne se déclenche que 4
+  // à 5 fois par seconde : la ligne sauterait au lieu de glisser.
+  useEffect(() => {
+    const v = videoRef.current
+    if (!v) return
+    const tick = (): void => {
+      setTete(v.currentTime)
+      rafRef.current = requestAnimationFrame(tick)
+    }
+    const demarre = (): void => { cancelAnimationFrame(rafRef.current); rafRef.current = requestAnimationFrame(tick) }
+    const arrete = (): void => { cancelAnimationFrame(rafRef.current); setTete(v.currentTime) }
+    v.addEventListener('play', demarre)
+    v.addEventListener('pause', arrete)
+    v.addEventListener('ended', arrete)
+    v.addEventListener('seeked', arrete)
+    v.addEventListener('loadedmetadata', arrete)
+    return () => {
+      cancelAnimationFrame(rafRef.current)
+      v.removeEventListener('play', demarre)
+      v.removeEventListener('pause', arrete)
+      v.removeEventListener('ended', arrete)
+      v.removeEventListener('seeked', arrete)
+      v.removeEventListener('loadedmetadata', arrete)
+    }
+  }, [rev, ouvert?.stamp])
+
+  const total = Math.max(0.1, ouvert?.durationSec ?? 0)
+  /** Place la tête là où on a cliqué sur la piste (clic ou glisser). */
+  const viser = (clientX: number): void => {
+    const el = pisteRef.current
+    const v = videoRef.current
+    if (!el || !v) return
+    const r = el.getBoundingClientRect()
+    const p = Math.max(0, Math.min(1, (clientX - r.left) / r.width))
+    v.currentTime = p * total
+    setTete(p * total)
+  }
+  const auPointeur = (e: React.PointerEvent<HTMLDivElement>): void => {
+    // Un clic SUR un bloc est géré par le bloc (il sélectionne aussi le plan) —
+    // ici on ne traite que le fond de piste, pour ne pas viser deux fois.
+    if ((e.target as HTMLElement).closest('.mont-bloc')) return
+    e.currentTarget.setPointerCapture(e.pointerId)
+    viser(e.clientX)
+  }
+  const enLecture = (ouvert?.scenes ?? []).findIndex(
+    (s, i) => tete >= debutDe(i) && tete < debutDe(i) + (s.durationSec ?? 0)
+  )
+  /** Repères de la règle : ~8 marques, sur un pas rond. */
+  const pas = [1, 2, 5, 10, 15, 30, 60].find((p) => total / p <= 8) ?? 60
+  const marques: number[] = []
+  for (let t = 0; t <= total; t += pas) marques.push(t)
+  const mmss = (s: number): string => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
 
   const charger = useCallback((): void => {
     api.montages().then((r) => setVideos(r.videos ?? [])).catch(() => undefined)
@@ -4083,26 +4140,49 @@ function MontagePage({ toast }: { toast: (m: string) => void }): JSX.Element {
                 controls
                 playsInline
               />
-              {/* Timeline : chaque plan occupe la largeur de sa durée, comme sur
-                  une piste de montage. Cliquer un bloc le sélectionne ET place
-                  la tête de lecture à son début — sans ça, retrouver le plan
-                  fautif dans une vidéo de 17 s se fait à tâtons. */}
-              <div className="mont-piste">
-                {ouvert.scenes.map((s) => (
-                  <button
-                    key={s.index}
-                    className={`mont-bloc${sel === s.index ? ' actif' : ''}`}
-                    style={{ flexGrow: Math.max(0.4, s.durationSec ?? 1) }}
-                    title={s.narration}
-                    onClick={() => { setSel(s.index); const v = videoRef.current; if (v) { v.currentTime = debutDe(s.index); void v.play().catch(() => undefined) } }}
-                  >
-                    <span className="mont-bloc-n">{s.index + 1}</span>
-                    <span className="mont-bloc-d">{(s.durationSec ?? 0).toFixed(1)}s</span>
-                  </button>
-                ))}
+              {/* Banc de montage. Les blocs sont positionnés en COORDONNÉES DE
+                  TEMPS (et non en flex-grow) : c'est la seule façon qu'ils
+                  s'alignent exactement sur la règle et sur la tête de lecture,
+                  qui partagent le même repère. */}
+              <div className="mont-tl">
+                <div className="mont-regle">
+                  {marques.map((m) => (
+                    <span key={m} className="mont-tick" style={{ left: `${(m / total) * 100}%` }}>
+                      {mmss(m)}
+                    </span>
+                  ))}
+                </div>
+                <div
+                  className="mont-piste"
+                  ref={pisteRef}
+                  onPointerDown={auPointeur}
+                  onPointerMove={(e) => { if (e.buttons === 1) viser(e.clientX) }}
+                >
+                  {ouvert.scenes.map((s, i) => (
+                    <button
+                      key={s.index}
+                      className={`mont-bloc${sel === s.index ? ' actif' : ''}${enLecture === i ? ' lit' : ''}`}
+                      style={{
+                        left: `${(debutDe(i) / total) * 100}%`,
+                        width: `${((s.durationSec ?? 0) / total) * 100}%`
+                      }}
+                      title={s.narration}
+                      onClick={() => {
+                        setSel(s.index)
+                        const v = videoRef.current
+                        if (v) { v.currentTime = debutDe(i); setTete(debutDe(i)) }
+                      }}
+                    >
+                      <span className="mont-bloc-n">{s.index + 1}</span>
+                      <span className="mont-bloc-d">{(s.durationSec ?? 0).toFixed(1)}s</span>
+                    </button>
+                  ))}
+                  <div className="mont-tete" style={{ left: `${(tete / total) * 100}%` }} />
+                </div>
               </div>
               <div className="muted small">
-                {ouvert.scenes.length} plans · {ouvert.durationSec.toFixed(1)} s au total
+                {mmss(tete)} / {mmss(ouvert.durationSec)} · {ouvert.scenes.length} plans
+                {enLecture >= 0 ? ` · plan ${enLecture + 1} à l’écran` : ''}
               </div>
             </section>
             {(() => {
