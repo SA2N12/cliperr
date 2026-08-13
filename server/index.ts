@@ -3338,6 +3338,22 @@ async function refaitLePlan(
   const sc = lu.m.scenes[i]
   if (!sc?.file) throw new Error(`Plan ${i + 1} introuvable`)
   const r = lu.m.reglages as Record<string, unknown>
+  // PHOTO DE RÉFÉRENCE. Sans elle, l'image-à-image n'a rien à reproduire : le
+  // modèle réinvente le produit à partir du texte, et l'objet se déforme d'un
+  // plan à l'autre. Les manifestes écrits avant qu'on la stocke n'en ont pas —
+  // on la retrouve alors par le catalogue, à partir du nom du produit.
+  let refPath = (r.characterRefPath as string) || undefined
+  if (refPath && !existsSync(refPath)) refPath = undefined
+  const nomProduit = (r.productRef as { name?: string } | null)?.name
+  if (!refPath && nomProduit) {
+    const prod = Object.values(productLibrary()).find((p) => p.name === nomProduit)
+    refPath = prod?.photos.map((f) => join(paths.uploads, f)).find((f) => existsSync(f))
+    if (refPath) emitLog(`Montage — plan ${i + 1} : photo de référence retrouvée dans le catalogue`)
+  }
+  // Un produit sans référence se déformerait en silence : on le dit.
+  if (!refPath && nomProduit) {
+    emitLog(`⚠ Montage — plan ${i + 1} : aucune photo de référence pour « ${nomProduit} » — le produit risque d’être réinventé`)
+  }
   // La consigne s'AJOUTE au prompt d'origine au lieu de le remplacer : le plan
   // doit rester le même, corrigé — pas devenir un autre plan.
   const scene = {
@@ -3364,7 +3380,7 @@ async function refaitLePlan(
     publishPublic: publishPublicFile,
     lang: (r.lang as 'fr' | 'en') || 'fr',
     imageStyle: (r.imageStyle as string) || undefined,
-    characterRefPath: (r.characterRefPath as string) || undefined,
+    characterRefPath: refPath,
     productRef: (r.productRef as { name: string } | null) ?? undefined,
     animateScenes: !!r.animateScenes,
     mute: !!r.mute,
