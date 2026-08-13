@@ -2,7 +2,7 @@ import express, { type Request, type Response } from 'express'
 import cookieParser from 'cookie-parser'
 import multer from 'multer'
 import cron, { type ScheduledTask } from 'node-cron'
-import { mkdirSync, existsSync, readdirSync, rmSync, readFileSync } from 'fs'
+import { mkdirSync, existsSync, readdirSync, rmSync, readFileSync, writeFileSync } from 'fs'
 import { mkdir, copyFile, unlink, readdir, writeFile, readFile } from 'fs/promises'
 import { randomBytes } from 'crypto'
 import { join, basename } from 'path'
@@ -11,7 +11,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { appPaths, config, assertConfig, type AppPaths } from './config'
 import { handleLogin, handleLogout, isAuthed, requireAuth } from './auth'
 import { sseHandler, emitProgress, emitLog, emitIdeaVideo } from './sse'
-import { generateVideoFromIdea, mediaDuration, chooseMusicTrack, genImage, genImageDeepinfra, genImageGemini, ttsPreview, listElevenVoices, OPENAI_VOICES, sceneAss, subStyle, SUB_DEFAUT, type SubStyle } from './video-gen'
+import { generateVideoFromIdea, mediaDuration, assembleScenes, chooseMusicTrack, genImage, genImageDeepinfra, genImageGemini, ttsPreview, listElevenVoices, OPENAI_VOICES, sceneAss, subStyle, SUB_DEFAUT, type SubStyle } from './video-gen'
 import { veoQuota } from './veo-quota'
 import { generateCarousel } from './carousel-gen'
 import { uploadPostTikTokPhotos } from '../src/main/publish/uploadpost'
@@ -457,6 +457,18 @@ Garde le ton et l'impact. N'invente pas de contenu nouveau.`
 
 // ── Génération de vidéo « faceless » depuis une idée (une à la fois) ──
 let videoChain: Promise<void> = Promise.resolve()
+/** Débit PAR LANGUE des voix TTS. Le réglage n'agit que sur le TTS — donc
+ *  surtout sur le français : en anglais la voix vient de Veo/Seedance, générée
+ *  avec l'image et insensible à ce paramètre. Un même chiffre donnait un
+ *  français trop pressé pour un anglais inchangé, d'où deux valeurs.
+ *  Au niveau module car le montage doit rejouer un plan au MÊME débit, sans
+ *  avoir accès à la config de catégorie du jour de la génération. */
+function speechSpeedFor(l: 'fr' | 'en', catSpeed?: unknown): number {
+  if (Number.isFinite(catSpeed) && (catSpeed as number) > 0) return catSpeed as number
+  const v = parseFloat(repo.getSetting(l === 'en' ? 'speech_speed_en' : 'speech_speed') || '')
+  return Number.isFinite(v) && v > 0 ? v : l === 'en' ? 1.4 : 1.2
+}
+
 async function runVideoGen(
   ideaId: number,
   opts: { profile?: string; autoPublish?: boolean; imageStyle?: string; characterRefPath?: string; productRef?: { name: string }; animateScenes?: boolean; dialogue?: boolean; noMusic?: boolean; videoType?: string; music?: string; lang?: 'fr' | 'en'; quality?: 'wan' | 'seedance' | 'veo' } = {}
@@ -540,11 +552,7 @@ async function runVideoGen(
     // le français : en anglais la voix vient de Veo/Seedance, générée avec l'image
     // et insensible à ce paramètre. Un même chiffre donnait donc un français trop
     // pressé pour un anglais inchangé → deux valeurs distinctes.
-    const speedFor = (l: 'fr' | 'en'): number => {
-      if (Number.isFinite(cat.speed) && (cat.speed as number) > 0) return cat.speed as number
-      const v = parseFloat(repo.getSetting(l === 'en' ? 'speech_speed_en' : 'speech_speed') || '')
-      return Number.isFinite(v) && v > 0 ? v : l === 'en' ? 1.4 : 1.2
-    }
+    const speedFor = (l: 'fr' | 'en'): number => speechSpeedFor(l, cat.speed)
     const { filePath, durationSec, usage } = await generateVideoFromIdea(ctx, {
       anthropicKey,
       anthropicModel: model,
@@ -3363,7 +3371,9 @@ app.post('/api/montage/:stamp/scene/:i', wrap(async (req, res) => {
     falVideoModel: repo.getSetting('fal_video_model') || undefined,
     deepinfraKey: getEncrypted('deepinfra_key'),
     groqKey: getEncrypted('groq_key'),
-    speechSpeed: speedFor((r.lang as 'fr' | 'en') || 'fr'),
+    // Débit relu du manifeste quand il y est : un plan refait doit parler au
+    // MÊME rythme que ses voisins, sinon le raccord s'entend.
+    speechSpeed: speechSpeedFor((r.lang as 'fr' | 'en') || 'fr', r.speechSpeed),
     remakeScenes: [scene],
     onProgress: (m) => emitLog(`Montage — plan ${i + 1} : ${m}`)
   })

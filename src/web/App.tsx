@@ -14,7 +14,9 @@ import {
   type ImgLibDTO,
   type PresetDTO,
   type PresetLibDTO,
-  type ProductDTO
+  type ProductDTO,
+  type MontageVideoDTO,
+  type MontageDTO
 } from './api'
 
 type Page = 'dashboard' | 'autopilot' | 'categories' | 'niches' | 'produits' | 'montage' | 'analyse' | 'clipping' | 'genai' | 'ideas' | 'history' | 'clips' | 'providers' | 'settings'

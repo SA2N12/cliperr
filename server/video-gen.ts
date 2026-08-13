@@ -1840,6 +1840,7 @@ NO TEXT — CRITICAL: nothing written anywhere in the frame. No subtitles, no ca
               videoEngine: opts.videoEngine ?? null,
               productRef: opts.productRef ?? null,
               musicTrack: opts.musicTrack ?? null,
+              speechSpeed: opts.speechSpeed ?? null,
               // L'habillage des sous-titres se stocke RÉSOLU : un identifiant
               // renverrait vers une bibliothèque qui aura peut-être changé de
               // défaut d'ici la retouche, et le plan refait détonnerait.

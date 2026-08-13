@@ -12,7 +12,7 @@
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
     "typecheck:server": "tsc --noEmit -p tsconfig.server.json",
-    "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "typecheck": "npm run typecheck:node && npm run typecheck:web && npm run typecheck:server",
     "server": "tsx server/index.ts",
     "server:dev": "tsx watch server/index.ts",
     "web:dev": "vite -c vite.web.config.ts",
