@@ -4033,6 +4033,8 @@ function MontagePage({ toast }: { toast: (m: string) => void }): JSX.Element {
   const [textes, setTextes] = useState<Record<number, string>>({})
   /** Consigne appliquée à TOUS les plans. */
   const [global, setGlobal] = useState('')
+  /** Prompt d'image reecrit par plan, tant qu'il n'est pas renvoye. */
+  const [prompts, setPrompts] = useState<Record<number, string>>({})
   /** Dernière ligne d'avancement du rendu en cours, s'il y en a un. */
   const [avance, setAvance] = useState<string | null>(null)
   const [busy, setBusy] = useState<number | null>(null)
@@ -4189,12 +4191,16 @@ function MontagePage({ toast }: { toast: (m: string) => void }): JSX.Element {
     const origine = ouvert.scenes[i]?.narration ?? ''
     const t = (textes[i] ?? origine).trim()
     const texteChange = t && t !== origine.trim()
-    if (!c && !texteChange) { toast('Change le texte du plan, ou décris ce qu’il faut corriger à l’image'); return }
+    const pOrig = ouvert.scenes[i]?.imagePrompt ?? ''
+    const p = (prompts[i] ?? pOrig).trim()
+    const promptChange = p && p !== pOrig.trim()
+    if (!c && !texteChange && !promptChange) { toast('Change le texte, le prompt, ou décris la correction'); return }
     setBusy(i)
     try {
       await api.remakeScene(ouvert.stamp, i, {
         instruction: c || undefined,
-        narration: texteChange ? t : undefined
+        narration: texteChange ? t : undefined,
+        imagePrompt: promptChange ? p : undefined
       })
       // On relit le manifeste plutôt que de rafistoler l'état local : le plan
       // refait a une NOUVELLE durée, donc toute la timeline se redécoupe.
@@ -4202,6 +4208,7 @@ function MontagePage({ toast }: { toast: (m: string) => void }): JSX.Element {
       setOuvert(frais)
       setConsignes((o) => ({ ...o, [i]: '' }))
       setTextes({})
+      setPrompts({})
       setRev((n) => n + 1)
       charger()
       toast(`Plan ${i + 1} refait — vidéo réassemblée (${Math.round(frais.durationSec)} s) ✓`)
@@ -4329,6 +4336,18 @@ function MontagePage({ toast }: { toast: (m: string) => void }): JSX.Element {
                   onChange={(e) => setGlobal(e.target.value)}
                 />
               </div>
+              {ouvert.idea && (
+                <div className="muted small mont-origine">
+                  <div><b>Idée d’origine :</b> {ouvert.idea.hook || ouvert.idea.title}</div>
+                  {ouvert.idea.angle && <div><b>Angle de vente :</b> {ouvert.idea.angle}</div>}
+                  <div>
+                    <b>Storyboard écrit par :</b> {ouvert.model ?? 'non enregistré (vidéo antérieure)'}
+                    {ouvert.modelActuel && ouvert.model !== ouvert.modelActuel
+                      ? ' — un plan refait maintenant partira de ' + ouvert.modelActuel
+                      : ''}
+                  </div>
+                </div>
+              )}
               <div className="sty-actions">
                 <button className="btn small" disabled={busy !== null || !!avance} onClick={() => void refaireTout()}>
                   Refaire les {ouvert.scenes.length} plans
@@ -4358,8 +4377,19 @@ function MontagePage({ toast }: { toast: (m: string) => void }): JSX.Element {
                       onChange={(e) => setTextes((o) => ({ ...o, [s.index]: e.target.value }))}
                     />
                   </div>
+                  {/* Le prompt d'image est CE QUI FABRIQUE le plan. Le cacher
+                      obligeait à corriger à l'aveugle par consignes successives,
+                      sans jamais voir ce qu'on corrigeait. */}
                   <div className="cat-f wide">
-                    <label className="cat-lbl">Ce qu’il faut corriger à l’image (facultatif)</label>
+                    <label className="cat-lbl">Description de l’image envoyée au modèle</label>
+                    <textarea
+                      className="input-full cat-ta mont-prompt" rows={5}
+                      value={prompts[s.index] ?? s.imagePrompt}
+                      onChange={(e) => setPrompts((o) => ({ ...o, [s.index]: e.target.value }))}
+                    />
+                  </div>
+                  <div className="cat-f wide">
+                    <label className="cat-lbl">Ou décris la correction, elle s’ajoute au prompt</label>
                     <textarea
                       className="input-full cat-ta" rows={2}
                       value={consignes[s.index] ?? ''}

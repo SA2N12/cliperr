@@ -5643,3 +5643,22 @@ video:-webkit-full-screen {
 }
 @keyframes mont-tourne { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .mont-spin { animation: none; } }
+
+/* Montage — prompt d'image : c'est de l'anglais technique et long, une police a
+   chasse fixe le rend bien plus lisible qu'un texte courant. */
+.mont-prompt {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.mont-origine {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 2px 0 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-2);
+}

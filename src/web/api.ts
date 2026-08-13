@@ -63,6 +63,11 @@ export type MontageDTO = {
   durationSec: number
   finalName: string
   scenes: MontageSceneDTO[]
+  /** Modèle qui a écrit le storyboard, tel qu'enregistré à la génération. */
+  model?: string | null
+  /** Modèle configuré aujourd'hui : un plan refait maintenant part de celui-là. */
+  modelActuel?: string
+  idea?: { title: string; hook: string; angle: string | null; script: string[] } | null
 }
 
 export interface PublishOverrides {
@@ -297,7 +302,7 @@ export const api = {
   deleteScene: (stamp: string, i: number) =>
     req<{ ok: boolean; durationSec: number }>(`/api/montage/${encodeURIComponent(stamp)}/scene/${i}`, { method: 'DELETE' }),
   // `narration` refait la voix ET les sous-titres, `instruction` corrige l'image.
-  remakeScene: (stamp: string, i: number, p: { instruction?: string; narration?: string }) =>
+  remakeScene: (stamp: string, i: number, p: { instruction?: string; narration?: string; imagePrompt?: string }) =>
     post<{ ok: boolean; durationSec: number }>(`/api/montage/${encodeURIComponent(stamp)}/scene/${i}`, p),
   deleteProduct: (id: string) => req<{ ok: boolean }>(`/api/products/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   addProductPhoto: async (id: string, file: File): Promise<{ ok: boolean; product: ProductDTO }> => {

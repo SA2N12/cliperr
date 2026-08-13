@@ -1827,6 +1827,15 @@ NO TEXT — CRITICAL: nothing written anywhere in the frame. No subtitles, no ca
           {
             stamp,
             durationSec: total,
+            // Qui a écrit le storyboard, et à partir de quoi : sans ça on ne peut
+            // ni juger un plan raté, ni le réécrire en connaissance de cause.
+            model: opts.anthropicModel ?? null,
+            idea: {
+              title: opts.idea.title,
+              hook: opts.idea.hook,
+              angle: (opts.idea as { angle?: string }).angle ?? null,
+              script: opts.idea.script ?? []
+            },
             finalName: basename(finalPath),
             // Réglages à rejouer à l'identique quand on refait un plan : sans
             // eux, la scène corrigée détonnerait au milieu des autres.

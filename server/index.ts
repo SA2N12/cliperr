@@ -3293,7 +3293,17 @@ app.get('/api/montage/:stamp', wrap(async (req, res) => {
     }
     try { writeFileSync(join(lu.dir, 'manifest.json'), JSON.stringify(lu.m, null, 2)) } catch { /* mesure refaite au prochain appel */ }
   }
-  res.json({ stamp: req.params.stamp, durationSec: lu.m.durationSec, finalName: lu.m.finalName, scenes: lu.m.scenes })
+  res.json({
+    stamp: req.params.stamp,
+    durationSec: lu.m.durationSec,
+    finalName: lu.m.finalName,
+    scenes: lu.m.scenes,
+    // De quoi comprendre CE QUI a produit la vidéo : le modèle qui a écrit le
+    // storyboard, et l'idée dont il est parti. Sans ça, on retouche à l'aveugle.
+    model: (lu.m as { model?: string }).model ?? null,
+    idea: (lu.m as { idea?: unknown }).idea ?? null,
+    modelActuel: scriptModel()
+  })
 }))
 /** Retire un plan et ré-aboute. Irréversible : le manifeste est la seule trace
  *  du texte et du prompt de ce plan, et le fichier part avec. */
@@ -3332,7 +3342,7 @@ async function refaitLePlan(
   ctx: CtxMontage,
   lu: { dir: string; m: MontageManifest },
   i: number,
-  edit: { consigne?: string; texte?: string },
+  edit: { consigne?: string; texte?: string; promptImage?: string },
   cles: { anthropicKey: string; openaiKey: string }
 ): Promise<void> {
   const sc = lu.m.scenes[i]
@@ -3356,11 +3366,16 @@ async function refaitLePlan(
   }
   // La consigne s'AJOUTE au prompt d'origine au lieu de le remplacer : le plan
   // doit rester le même, corrigé — pas devenir un autre plan.
+  // Prompt réécrit à la main, sinon la consigne s'AJOUTE au prompt d'origine :
+  // le plan doit rester le même, corrigé — pas devenir un autre plan.
+  const promptFinal = edit.promptImage?.trim()
+    ? edit.promptImage.trim()
+    : edit.consigne
+      ? `${sc.imagePrompt}\n\nCORRECTION DEMANDÉE (impérative) : ${edit.consigne}`
+      : sc.imagePrompt
   const scene = {
     narration: edit.texte || sc.narration,
-    imagePrompt: edit.consigne
-      ? `${sc.imagePrompt}\n\nCORRECTION DEMANDÉE (impérative) : ${edit.consigne}`
-      : sc.imagePrompt,
+    imagePrompt: promptFinal,
     speaker: sc.speaker ?? undefined
   }
   const out = await generateVideoFromIdea(ctx, {
@@ -3405,6 +3420,10 @@ async function refaitLePlan(
   // blocs de la timeline se décaleraient dès la première retouche.
   sc.durationSec = out.durationSec
   if (edit.texte) sc.narration = edit.texte
+  // LE PROMPT CORRIGÉ REMPLACE L'ANCIEN. Sans ça, la correction ne valait que
+  // pour ce rendu-là : la retouche suivante repartait du prompt d'origine et
+  // ramenait ce qu'on venait de faire disparaître.
+  sc.imagePrompt = promptFinal
 }
 
 /** Ré-aboute les plans du manifeste et réécrit celui-ci. Le fichier final est
@@ -3427,12 +3446,14 @@ app.post('/api/montage/:stamp/scene/:i', wrap(async (req, res) => {
   if (!lu) return res.status(404).json({ error: 'Montage introuvable' })
   const i = Number(req.params.i)
   if (!lu.m.scenes[i]?.file) return res.status(404).json({ error: 'Scène inconnue' })
-  const b = (req.body ?? {}) as { instruction?: unknown; narration?: unknown }
+  const b = (req.body ?? {}) as { instruction?: unknown; narration?: unknown; imagePrompt?: unknown }
   const consigne = String(b.instruction ?? '').trim().slice(0, 600)
   // Texte du plan : il commande À LA FOIS la voix off et les sous-titres, qui
   // sont générés à partir de lui. Le modifier refait donc les deux.
   const texte = String(b.narration ?? '').trim().slice(0, 400)
-  if (!consigne && !texte) {
+  // Prompt réécrit à la main : il REMPLACE celui du manifeste, au lieu de s'y ajouter.
+  const promptImage = String(b.imagePrompt ?? '').trim().slice(0, 2000)
+  if (!consigne && !texte && !promptImage) {
     return res.status(400).json({ error: 'Change le texte du plan, ou décris ce qu’il faut corriger à l’image.' })
   }
   const anthropicKey = getApiKey()
@@ -3440,7 +3461,7 @@ app.post('/api/montage/:stamp/scene/:i', wrap(async (req, res) => {
   if (!anthropicKey || !openaiKey) return res.status(400).json({ error: 'Clés Claude et OpenAI requises (Réglages).' })
 
   const ctx = await getContext()
-  await refaitLePlan(ctx, lu, i, { consigne, texte }, { anthropicKey, openaiKey })
+  await refaitLePlan(ctx, lu, i, { consigne, texte, promptImage }, { anthropicKey, openaiKey })
   const total = await reassembleMontage(ctx, lu)
   emitLog(`Montage — plan ${i + 1} refait, vidéo réassemblée (${Math.round(total)} s)`)
   res.json({ ok: true, durationSec: total })
