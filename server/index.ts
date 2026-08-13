@@ -3325,6 +3325,15 @@ app.post('/api/products/:id/video', wrap(async (req, res) => {
       videoType: 'genai',
       characterRefPath: photo,
       productRef: { name: p.name },
+      // Une pub se regarde EN MOUVEMENT : le zoom Ken Burns sur une image fixe
+      // trahit la vidéo générée en une seconde, et un produit qu'on ne voit pas
+      // fonctionner ne se vend pas. On anime chaque plan dès qu'un moteur est
+      // disponible, plutôt que de simuler le mouvement.
+      animateScenes: !!(getEncrypted('fal_key') || getEncrypted('deepinfra_key')),
+      // Aucune musique ajoutée. Sur une niche elle porte le montage ; sur une
+      // démonstration elle se plaque par-dessus. Et TikTok laisse de toute façon
+      // coller un son tendance à la publication, ce qui convertit mieux.
+      noMusic: true,
       profile: String((req.body as { user?: unknown })?.user ?? '') || undefined
     }))
     .then(() => undefined, () => undefined)
