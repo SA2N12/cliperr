@@ -4036,7 +4036,8 @@ function ProduitsPage({ toast }: { toast: (m: string) => void }): JSX.Element {
         pitch: ouvert.pitch,
         benefits: ouvert.benefits.join('\n'),
         price: ouvert.price,
-        url: ouvert.url
+        url: ouvert.url,
+        inspirations: (ouvert.inspirations ?? []).join('\n')
       })
       setOuvert(r.product)
       charger()
@@ -4137,6 +4138,24 @@ function ProduitsPage({ toast }: { toast: (m: string) => void }): JSX.Element {
                     onChange={(e) => { const f = e.target.files?.[0]; if (f) void ajouterPhoto(f); e.currentTarget.value = '' }}
                   />
                 </label>
+              </div>
+            </section>
+            {/* Décrire une bonne publicité dans un prompt marche moins bien que
+                d'en donner une à copier : on en reprend la FORME, jamais le
+                contenu — le produit montré reste le nôtre. */}
+            <section className="cat-sec sous-titres">
+              <div className="cat-sub">Inspirations</div>
+              <div className="muted small sty-intro">
+                Des pubs qui marchent, une URL par ligne. On en reprend le rythme, le découpage et la
+                mécanique — jamais le produit ni le discours. Elles défilent d’une vidéo à l’autre.
+              </div>
+              <div className="cat-f wide">
+                <textarea
+                  className="input-full cat-ta" rows={4}
+                  value={(ouvert.inspirations ?? []).join('\n')}
+                  placeholder={'https://www.tiktok.com/@…/video/…\nhttps://youtube.com/shorts/…'}
+                  onChange={(e) => maj('inspirations', e.target.value.split('\n'))}
+                />
               </div>
             </section>
           </div>

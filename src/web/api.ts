@@ -36,6 +36,8 @@ export type ProductDTO = {
   price?: string
   url?: string
   photos: string[]
+  /** Pubs dont on reprend la FORME (rythme, montage), jamais le contenu. */
+  inspirations?: string[]
   createdAt: number
 }
 
@@ -258,7 +260,7 @@ export const api = {
   // Catalogue produits (TikTok Shop). Les PHOTOS sont l'essentiel : elles
   // servent de reference image-a-image pour que le vrai produit apparaisse.
   products: () => req<{ products: ProductDTO[] }>('/api/products'),
-  saveProduct: (p: { id?: string; name: string; pitch: string; benefits: string; price?: string; url?: string }) =>
+  saveProduct: (p: { id?: string; name: string; pitch: string; benefits: string; price?: string; url?: string; inspirations?: string }) =>
     post<{ ok: boolean; product: ProductDTO }>('/api/products', p),
   genProductVideo: (id: string, user?: string) =>
     post<{ ok: boolean; ideaId: number; title: string }>(`/api/products/${encodeURIComponent(id)}/video`, { user }),
