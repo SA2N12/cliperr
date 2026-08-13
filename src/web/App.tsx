@@ -4028,9 +4028,14 @@ function MontagePage({ toast }: { toast: (m: string) => void }): JSX.Element {
   const [ouvert, setOuvert] = useState<MontageDTO | null>(null)
   const [consignes, setConsignes] = useState<Record<number, string>>({})
   const [busy, setBusy] = useState<number | null>(null)
+  const [sel, setSel] = useState(0)
+  const videoRef = useRef<HTMLVideoElement>(null)
   // Le fichier est remplacé EN PLACE : sans ce compteur dans l'URL, le
   // navigateur rejouerait la version d'avant depuis son cache.
   const [rev, setRev] = useState(0)
+  /** Début d'un plan dans la vidéo assemblée = somme des plans qui précèdent. */
+  const debutDe = (i: number): number =>
+    (ouvert?.scenes ?? []).slice(0, i).reduce((t, s) => t + (s.durationSec ?? 0), 0)
 
   const charger = useCallback((): void => {
     api.montages().then((r) => setVideos(r.videos ?? [])).catch(() => undefined)
@@ -4038,7 +4043,7 @@ function MontagePage({ toast }: { toast: (m: string) => void }): JSX.Element {
   useEffect(() => { charger() }, [charger])
 
   const ouvrir = async (stamp: string): Promise<void> => {
-    try { setOuvert(await api.montage(stamp)); setConsignes({}) }
+    try { setOuvert(await api.montage(stamp)); setConsignes({}); setSel(0) }
     catch (e) { toast('Erreur : ' + (e as Error).message) }
   }
   const refaire = async (i: number): Promise<void> => {
@@ -4072,33 +4077,58 @@ function MontagePage({ toast }: { toast: (m: string) => void }): JSX.Element {
             <section className="cat-sec">
               <video
                 key={rev}
+                ref={videoRef}
                 className="mont-apercu"
                 src={`/media/clips/${encodeURIComponent(ouvert.finalName)}?v=${rev}`}
                 controls
                 playsInline
               />
-              <div className="muted small">Durée actuelle : {ouvert.durationSec.toFixed(1)} s</div>
-            </section>
-            {ouvert.scenes.map((s) => (
-              <section key={s.index} className="cat-sec sous-titres">
-                <div className="cat-sub">Plan {s.index + 1}</div>
-                <div className="muted small sty-intro">« {s.narration} »</div>
-                <div className="cat-f wide">
-                  <label className="cat-lbl">Ce qu’il faut corriger sur ce plan</label>
-                  <textarea
-                    className="input-full cat-ta" rows={2}
-                    value={consignes[s.index] ?? ''}
-                    placeholder="ex. le produit est déformé, montre-le entier et posé bien à plat sur la tringle"
-                    onChange={(e) => setConsignes((o) => ({ ...o, [s.index]: e.target.value }))}
-                  />
-                </div>
-                <div className="sty-actions">
-                  <button className="btn small" disabled={busy !== null} onClick={() => void refaire(s.index)}>
-                    {busy === s.index ? 'Refait le plan…' : 'Refaire ce plan'}
+              {/* Timeline : chaque plan occupe la largeur de sa durée, comme sur
+                  une piste de montage. Cliquer un bloc le sélectionne ET place
+                  la tête de lecture à son début — sans ça, retrouver le plan
+                  fautif dans une vidéo de 17 s se fait à tâtons. */}
+              <div className="mont-piste">
+                {ouvert.scenes.map((s) => (
+                  <button
+                    key={s.index}
+                    className={`mont-bloc${sel === s.index ? ' actif' : ''}`}
+                    style={{ flexGrow: Math.max(0.4, s.durationSec ?? 1) }}
+                    title={s.narration}
+                    onClick={() => { setSel(s.index); const v = videoRef.current; if (v) { v.currentTime = debutDe(s.index); void v.play().catch(() => undefined) } }}
+                  >
+                    <span className="mont-bloc-n">{s.index + 1}</span>
+                    <span className="mont-bloc-d">{(s.durationSec ?? 0).toFixed(1)}s</span>
                   </button>
-                </div>
-              </section>
-            ))}
+                ))}
+              </div>
+              <div className="muted small">
+                {ouvert.scenes.length} plans · {ouvert.durationSec.toFixed(1)} s au total
+              </div>
+            </section>
+            {(() => {
+              const s = ouvert.scenes[sel]
+              if (!s) return null
+              return (
+                <section className="cat-sec sous-titres">
+                  <div className="cat-sub">Plan {s.index + 1} · {(s.durationSec ?? 0).toFixed(1)} s</div>
+                  <div className="muted small sty-intro">« {s.narration} »</div>
+                  <div className="cat-f wide">
+                    <label className="cat-lbl">Ce qu’il faut corriger sur ce plan</label>
+                    <textarea
+                      className="input-full cat-ta" rows={2}
+                      value={consignes[s.index] ?? ''}
+                      placeholder="ex. le produit est déformé, montre-le entier et posé bien à plat sur la tringle"
+                      onChange={(e) => setConsignes((o) => ({ ...o, [s.index]: e.target.value }))}
+                    />
+                  </div>
+                  <div className="sty-actions">
+                    <button className="btn small" disabled={busy !== null} onClick={() => void refaire(s.index)}>
+                      {busy === s.index ? 'Refait le plan…' : 'Refaire ce plan'}
+                    </button>
+                  </div>
+                </section>
+              )
+            })()}
           </div>
         </div>
       </>

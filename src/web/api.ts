@@ -55,6 +55,8 @@ export type MontageSceneDTO = {
   imagePrompt: string
   speaker: string | null
   file: string | null
+  /** Largeur du bloc sur la timeline, et point d'entrée dans l'aperçu. */
+  durationSec?: number
 }
 export type MontageDTO = {
   stamp: string

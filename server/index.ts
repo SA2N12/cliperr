@@ -11,7 +11,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { appPaths, config, assertConfig, type AppPaths } from './config'
 import { handleLogin, handleLogout, isAuthed, requireAuth } from './auth'
 import { sseHandler, emitProgress, emitLog, emitIdeaVideo } from './sse'
-import { generateVideoFromIdea, chooseMusicTrack, genImage, genImageDeepinfra, genImageGemini, ttsPreview, listElevenVoices, OPENAI_VOICES, sceneAss, subStyle, SUB_DEFAUT, type SubStyle } from './video-gen'
+import { generateVideoFromIdea, mediaDuration, chooseMusicTrack, genImage, genImageDeepinfra, genImageGemini, ttsPreview, listElevenVoices, OPENAI_VOICES, sceneAss, subStyle, SUB_DEFAUT, type SubStyle } from './video-gen'
 import { veoQuota } from './veo-quota'
 import { generateCarousel } from './carousel-gen'
 import { uploadPostTikTokPhotos } from '../src/main/publish/uploadpost'
@@ -3231,7 +3231,7 @@ type MontageManifest = {
   durationSec: number
   finalName: string
   reglages: Record<string, unknown>
-  scenes: { index: number; narration: string; imagePrompt: string; speaker: string | null; file: string | null }[]
+  scenes: { index: number; narration: string; imagePrompt: string; speaker: string | null; file: string | null; durationSec?: number }[]
 }
 function lireManifeste(stamp: string): { dir: string; m: MontageManifest } | null {
   if (!/^\d+$/.test(stamp)) return null // le stamp entre dans un chemin : chiffres seuls
@@ -3269,9 +3269,22 @@ app.get('/api/montage', wrap((_req, res) => {
     .sort((a, b) => Number(b?.stamp) - Number(a?.stamp))
   res.json({ videos })
 }))
-app.get('/api/montage/:stamp', wrap((req, res) => {
+app.get('/api/montage/:stamp', wrap(async (req, res) => {
   const lu = lireManifeste(String(req.params.stamp ?? ''))
   if (!lu) return res.status(404).json({ error: 'Montage introuvable — cette vidéo a été produite avant l’archivage des scènes.' })
+  // Durée de chaque plan : elle donne sa largeur sur la timeline et son point
+  // d'entrée dans l'aperçu. Mesurée à la lecture plutôt qu'écrite à la
+  // génération, pour que les vidéos déjà produites en profitent aussi — puis
+  // recopiée dans le manifeste, la mesure ne servant qu'une fois.
+  if (lu.m.scenes.some((s) => typeof s.durationSec !== 'number')) {
+    const ctx = await getContext()
+    for (const s of lu.m.scenes) {
+      if (typeof s.durationSec === 'number' || !s.file) continue
+      const f = join(lu.dir, s.file)
+      s.durationSec = existsSync(f) ? await mediaDuration(ctx.bin.ffprobe, f).catch(() => 0) : 0
+    }
+    try { writeFileSync(join(lu.dir, 'manifest.json'), JSON.stringify(lu.m, null, 2)) } catch { /* mesure refaite au prochain appel */ }
+  }
   res.json({ stamp: req.params.stamp, durationSec: lu.m.durationSec, finalName: lu.m.finalName, scenes: lu.m.scenes })
 }))
 /** Rejoue UN plan avec une consigne, puis ré-aboute la vidéo. */

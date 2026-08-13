@@ -1083,7 +1083,7 @@ async function hasAudioStream(ffprobe: string, file: string): Promise<boolean> {
 }
 
 /** Durée d'un média en secondes (ffprobe). */
-async function mediaDuration(ffprobe: string, file: string): Promise<number> {
+export async function mediaDuration(ffprobe: string, file: string): Promise<number> {
   const out = await runCapture(ffprobe, [
     '-v',
     'error',
