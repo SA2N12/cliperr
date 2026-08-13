@@ -3222,6 +3222,123 @@ app.post('/api/products', (req, res) => {
 /** Vidéos déjà produites pour un produit. Le lien remonte par la source
  *  `idea:<id>` que pose `runVideoGen` : c'est le seul fil entre une idée et le
  *  fichier qui en est sorti, l'idée ne portant pas le chemin de sa vidéo. */
+// ── Montage : retoucher UN plan sans tout régénérer ────────────────────────
+// Une vidéo ratée l'est presque toujours par un seul plan. La régénérer en
+// entier coûte le prix complet et sacrifie les plans réussis — d'où le
+// manifeste déposé à la génération, qui permet de rejouer un plan seul.
+type MontageManifest = {
+  stamp: number
+  durationSec: number
+  finalName: string
+  reglages: Record<string, unknown>
+  scenes: { index: number; narration: string; imagePrompt: string; speaker: string | null; file: string | null }[]
+}
+function lireManifeste(stamp: string): { dir: string; m: MontageManifest } | null {
+  if (!/^\d+$/.test(stamp)) return null // le stamp entre dans un chemin : chiffres seuls
+  const dir = join(paths.clips, 'montage', `idea-${stamp}`)
+  const f = join(dir, 'manifest.json')
+  if (!existsSync(f)) return null
+  try {
+    return { dir, m: JSON.parse(readFileSync(f, 'utf8')) as MontageManifest }
+  } catch {
+    return null
+  }
+}
+/** Vidéos retouchables : celles dont les scènes ont été conservées. */
+app.get('/api/montage', wrap((_req, res) => {
+  const root = join(paths.clips, 'montage')
+  if (!existsSync(root)) return res.json({ videos: [] })
+  const clipsParFichier = new Map(repo.listClips().filter((c) => c.filePath).map((c) => [basename(c.filePath as string), c]))
+  const videos = readdirSync(root)
+    .map((d) => /^idea-(\d+)$/.exec(d)?.[1])
+    .filter((s): s is string => !!s)
+    .map((stamp) => {
+      const lu = lireManifeste(stamp)
+      if (!lu) return null
+      const clip = clipsParFichier.get(lu.m.finalName)
+      return {
+        stamp,
+        title: clip?.title ?? null,
+        clipId: clip?.id ?? null,
+        durationSec: lu.m.durationSec,
+        scenes: lu.m.scenes.length,
+        publishStatus: clip?.publishStatus ?? null
+      }
+    })
+    .filter(Boolean)
+    .sort((a, b) => Number(b?.stamp) - Number(a?.stamp))
+  res.json({ videos })
+}))
+app.get('/api/montage/:stamp', wrap((req, res) => {
+  const lu = lireManifeste(String(req.params.stamp ?? ''))
+  if (!lu) return res.status(404).json({ error: 'Montage introuvable — cette vidéo a été produite avant l’archivage des scènes.' })
+  res.json({ stamp: req.params.stamp, durationSec: lu.m.durationSec, finalName: lu.m.finalName, scenes: lu.m.scenes })
+}))
+/** Rejoue UN plan avec une consigne, puis ré-aboute la vidéo. */
+app.post('/api/montage/:stamp/scene/:i', wrap(async (req, res) => {
+  const stamp = String(req.params.stamp ?? '')
+  const lu = lireManifeste(stamp)
+  if (!lu) return res.status(404).json({ error: 'Montage introuvable' })
+  const i = Number(req.params.i)
+  const sc = lu.m.scenes[i]
+  if (!sc?.file) return res.status(404).json({ error: 'Scène inconnue' })
+  const consigne = String((req.body as { instruction?: unknown })?.instruction ?? '').trim().slice(0, 600)
+  if (!consigne) return res.status(400).json({ error: 'Décris ce qu’il faut corriger sur ce plan.' })
+  const anthropicKey = getApiKey()
+  const openaiKey = getEncrypted('openai_key')
+  if (!anthropicKey || !openaiKey) return res.status(400).json({ error: 'Clés Claude et OpenAI requises (Réglages).' })
+
+  const r = lu.m.reglages as Record<string, unknown>
+  const ctx = await getContext()
+  // La consigne s'AJOUTE au prompt d'origine au lieu de le remplacer : le plan
+  // doit rester le même, corrigé — pas devenir un autre plan.
+  const scene = {
+    narration: sc.narration,
+    imagePrompt: `${sc.imagePrompt}\n\nCORRECTION DEMANDÉE (impérative) : ${consigne}`,
+    speaker: sc.speaker ?? undefined
+  }
+  const out = await generateVideoFromIdea(ctx, {
+    idea: { title: '', hook: '', angle: '', script: [], format: '', hashtags: [] },
+    anthropicKey,
+    anthropicModel: scriptModel(),
+    openaiKey,
+    voice: (r.voice as string) || undefined,
+    lang: (r.lang as 'fr' | 'en') || 'fr',
+    imageStyle: (r.imageStyle as string) || undefined,
+    characterRefPath: (r.characterRefPath as string) || undefined,
+    productRef: (r.productRef as { name: string } | null) ?? undefined,
+    animateScenes: !!r.animateScenes,
+    mute: !!r.mute,
+    paidEngine: (r.paidEngine as 'wan' | 'seedance' | 'veo' | null) ?? undefined,
+    videoEngine: (r.videoEngine as string) || undefined,
+    subStyle: (r.subStyle as SubStyle | null) ?? undefined,
+    burnSubtitles: true,
+    geminiKey: getEncrypted('gemini_key'),
+    falKey: getEncrypted('fal_key'),
+    falVideoModel: repo.getSetting('fal_video_model') || undefined,
+    deepinfraKey: getEncrypted('deepinfra_key'),
+    groqKey: getEncrypted('groq_key'),
+    speechSpeed: speedFor((r.lang as 'fr' | 'en') || 'fr'),
+    remakeScenes: [scene],
+    onProgress: (m) => emitLog(`Montage — plan ${i + 1} : ${m}`)
+  })
+
+  // La scène refaite remplace l'ancienne, puis on ré-aboute : les plans intacts
+  // ne sont pas recalculés, c'est tout l'intérêt.
+  await copyFile(out.filePath, join(lu.dir, sc.file))
+  const fichiers = lu.m.scenes.map((s) => (s.file ? join(lu.dir, s.file) : '')).filter((f) => f && existsSync(f))
+  const finalPath = join(paths.clips, lu.m.finalName)
+  const total = await assembleScenes(ctx, fichiers, finalPath, (r.musicTrack as string) || null)
+
+  lu.m.durationSec = total
+  writeFileSync(join(lu.dir, 'manifest.json'), JSON.stringify(lu.m, null, 2))
+  // Le fichier est remplacé EN PLACE : la ligne en base pointe toujours au bon
+  // endroit, rien à mettre à jour. (La durée est portée par la source, pas par
+  // le clip — la toucher ici demanderait de remonter à l'idée pour un champ
+  // d'affichage, au risque d'écrire dans une colonne qui n'existe pas.)
+  emitLog(`Montage — plan ${i + 1} refait, vidéo réassemblée (${Math.round(total)} s)`)
+  res.json({ ok: true, durationSec: total })
+}))
 app.get('/api/products/:id/videos', wrap((req, res) => {
   const p = productLibrary()[String(req.params.id ?? '')]
   if (!p) return res.status(404).json({ error: 'Produit inconnu' })

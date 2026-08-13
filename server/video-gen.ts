@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { z } from 'zod'
 import { writeFile, readFile, mkdir, rm, copyFile } from 'fs/promises'
 import { existsSync } from 'fs'
-import { join, basename } from 'path'
+import { join, basename, dirname } from 'path'
 import { run, runCapture, type PipelineContext } from '../src/main/pipeline/context'
 import type { Usage } from '../src/main/pipeline/highlights'
 import type { ViralIdea } from '../src/shared/types'
@@ -91,6 +91,11 @@ export interface VideoGenOptions {
   lang?: 'fr' | 'en'
   /** Active l'animation vidéo des scènes (mode série). */
   animateScenes?: boolean
+  /** Refonte d'UN plan : on saute l'écriture du storyboard, on rend la ou les
+   *  scènes fournies, et on s'arrête avant l'assemblage. La boucle de rendu est
+   *  réutilisée TELLE QUELLE — en extraire une copie la ferait diverger du
+   *  chemin qui produit toutes les autres vidéos. */
+  remakeScenes?: Scene[]
   /** Mode dialogue : les personnages parlent (voix + intonation par personnage), pas de narrateur. */
   dialogue?: boolean
   /** Incruster les sous-titres (défaut : oui). Off pour une repro dialoguée : les
@@ -1303,8 +1308,11 @@ export async function generateVideoFromIdea(
   const voice = opts.voice || 'ash' // ash = plus expressive/dynamique qu'onyx (par défaut)
   const log = opts.onProgress
   // La langue est tracée : c'est le premier endroit où un mauvais réglage se voit.
-  log?.(`Écriture du storyboard (IA) — dialogues en ${opts.lang === 'en' ? 'ANGLAIS' : 'français'}…`)
-  const { scenes, cast, usage } = await buildStoryboard(
+  const remake = opts.remakeScenes
+  if (!remake) log?.(`Écriture du storyboard (IA) — dialogues en ${opts.lang === 'en' ? 'ANGLAIS' : 'français'}…`)
+  const { scenes, cast, usage } = remake
+    ? { scenes: remake, cast: [] as CastMember[], usage: null as Usage | null }
+    : await buildStoryboard(
     opts.anthropicKey,
     opts.anthropicModel || 'claude-haiku-4-5',
     opts.idea,
@@ -1761,6 +1769,17 @@ NO TEXT — CRITICAL: nothing written anywhere in the frame. No subtitles, no ca
       sceneFiles.push(scene)
     }
 
+    // Refonte d'un plan : on s'arrête ici. Ni assemblage, ni musique, ni
+    // manifeste — l'appelant recolle la scène dans le montage existant.
+    if (remake) {
+      const only = sceneFiles[0]
+      if (!only) throw new Error('Scène non produite')
+      await mkdir(ctx.dirs.clips, { recursive: true })
+      const keep = join(ctx.dirs.clips, `scene-${stamp}.mp4`)
+      await copyFile(only, keep)
+      return { filePath: keep, durationSec: await mediaDuration(ctx.bin.ffprobe, only), usage: null }
+    }
+
     log?.('Assemblage final…')
     const list = join(work, 'list.txt')
     await writeFile(list, sceneFiles.map((f) => `file '${f.replace(/'/g, "'\\''")}'`).join('\n'))
@@ -1820,7 +1839,12 @@ NO TEXT — CRITICAL: nothing written anywhere in the frame. No subtitles, no ca
               paidEngine: opts.paidEngine ?? null,
               videoEngine: opts.videoEngine ?? null,
               productRef: opts.productRef ?? null,
-              musicTrack: opts.musicTrack ?? null
+              musicTrack: opts.musicTrack ?? null,
+              // L'habillage des sous-titres se stocke RÉSOLU : un identifiant
+              // renverrait vers une bibliothèque qui aura peut-être changé de
+              // défaut d'ici la retouche, et le plan refait détonnerait.
+              subStyle: opts.subStyle ?? null,
+              characterRefPath: opts.characterRefPath ?? null
             },
             scenes: scenes.map((s, i) => ({
               index: i,
@@ -1839,6 +1863,49 @@ NO TEXT — CRITICAL: nothing written anywhere in the frame. No subtitles, no ca
       // livrée. Refuser de la rendre pour ça serait absurde.
     }
     return { filePath: finalPath, durationSec: total, usage }
+  } finally {
+    await rm(work, { recursive: true, force: true })
+  }
+}
+
+/** Ré-aboute des scènes DÉJÀ rendues, avec la musique d'origine. C'est ce qui
+ *  rend le montage économique : on remplace un fichier de scène et on
+ *  reconstruit la vidéo sans recalculer les plans intacts. */
+export async function assembleScenes(
+  ctx: PipelineContext,
+  sceneFiles: string[],
+  outPath: string,
+  musicTrack?: string | null
+): Promise<number> {
+  if (!sceneFiles.length) throw new Error('Aucune scène à assembler')
+  const work = join(ctx.dirs.downloads, `assemble-${Date.now()}`)
+  await mkdir(work, { recursive: true })
+  try {
+    const list = join(work, 'list.txt')
+    await writeFile(list, sceneFiles.map((f) => `file '${f.replace(/'/g, "'\\''")}'`).join('\n'))
+    const concatPath = join(work, 'concat.mp4')
+    await run(ctx.bin.ffmpeg, ['-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', list, '-c', 'copy', concatPath])
+    const total = await mediaDuration(ctx.bin.ffprobe, concatPath)
+    await mkdir(dirname(outPath), { recursive: true })
+    if (musicTrack && existsSync(musicTrack)) {
+      // Même ducking qu'à la génération : la musique doit se comporter à
+      // l'identique, sinon un plan refait s'entend au changement de mixage.
+      const fadeSt = Math.max(0, total - 2)
+      await run(ctx.bin.ffmpeg, [
+        '-y', '-loglevel', 'error',
+        '-i', concatPath,
+        '-stream_loop', '-1', '-i', musicTrack,
+        '-filter_complex',
+        `[0:a]asplit=2[vk][vm];[1:a]volume=0.55,afade=t=out:st=${fadeSt.toFixed(2)}:d=2[bg];[bg][vk]sidechaincompress=threshold=0.02:ratio=8:attack=15:release=400[bgd];[vm][bgd]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.96[a]`,
+        '-map', '0:v', '-map', '[a]',
+        '-c:v', 'copy', '-c:a', 'aac', '-b:a', '160k',
+        '-t', String(total),
+        outPath
+      ])
+    } else {
+      await run(ctx.bin.ffmpeg, ['-y', '-loglevel', 'error', '-i', concatPath, '-c', 'copy', outPath])
+    }
+    return total
   } finally {
     await rm(work, { recursive: true, force: true })
   }
