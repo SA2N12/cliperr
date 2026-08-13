@@ -5452,3 +5452,16 @@ video:-webkit-full-screen {
   object-fit: contain;
   background: var(--panel-2);
 }
+
+/* Montage — aperçu de la vidéo en cours de retouche. Hauteur bridée : une
+   verticale 9:16 en pleine largeur pousserait les plans hors de l'écran, et
+   c'est sur eux qu'on travaille. */
+.mont-apercu {
+  display: block;
+  max-height: 46vh;
+  max-width: 100%;
+  aspect-ratio: 9 / 16;
+  border-radius: 10px;
+  background: #000;
+  margin-bottom: 10px;
+}

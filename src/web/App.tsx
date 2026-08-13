@@ -17,7 +17,7 @@ import {
   type ProductDTO
 } from './api'
 
-type Page = 'dashboard' | 'autopilot' | 'categories' | 'niches' | 'produits' | 'analyse' | 'clipping' | 'genai' | 'ideas' | 'history' | 'clips' | 'providers' | 'settings'
+type Page = 'dashboard' | 'autopilot' | 'categories' | 'niches' | 'produits' | 'montage' | 'analyse' | 'clipping' | 'genai' | 'ideas' | 'history' | 'clips' | 'providers' | 'settings'
 
 const ICONS: Record<string, string> = {
   dashboard: 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z',
@@ -599,6 +599,9 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
       // Le catalogue alimente le contenu promotionnel, au meme titre que les
       // niches alimentent le tout-venant.
       { id: 'produits', label: 'Produits', icon: 'sources' },
+      // Une vidéo est presque toujours ratée par UN plan : le montage le rejoue
+      // seul, au lieu de tout régénérer.
+      { id: 'montage', label: 'Montage', icon: 'play' },
       { id: 'clips', label: 'Clips', icon: 'clips' }
     ],
     [
@@ -791,6 +794,7 @@ function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
         {page === 'categories' && <CategoriesPage toast={showToast} profiles={pub?.profiles ?? []} />}
         {page === 'niches' && <NichesPage toast={showToast} />}
         {page === 'produits' && <ProduitsPage toast={showToast} />}
+        {page === 'montage' && <MontagePage toast={showToast} />}
         {page === 'clipping' && <Clipage sources={sources} clips={clips} progress={progress} onRefresh={refresh} toast={showToast} />}
         {page === 'genai' && <GenAI toast={showToast} />}
         {page === 'history' && <History sources={sources} clips={clips} progress={progress} onRefresh={refresh} toast={showToast} goClips={() => setPage('clips')} />}
@@ -4016,6 +4020,117 @@ type CompteT = { user: string; nicheId: string | null; libre: string; effective:
  *  est au tout-venant : le sujet. Avec une différence décisive — ses PHOTOS,
  *  réinjectées comme référence image-à-image pour que le vrai produit
  *  apparaisse. Un produit inventé par l'IA ne vend rien et trompe l'acheteur. */
+/** Montage : rejouer UN plan d'une vidéo déjà produite. Une vidéo est presque
+ *  toujours ratée par une seule scène — la refaire en entier coûte le prix
+ *  complet et jette les plans réussis. */
+function MontagePage({ toast }: { toast: (m: string) => void }): JSX.Element {
+  const [videos, setVideos] = useState<MontageVideoDTO[]>([])
+  const [ouvert, setOuvert] = useState<MontageDTO | null>(null)
+  const [consignes, setConsignes] = useState<Record<number, string>>({})
+  const [busy, setBusy] = useState<number | null>(null)
+  // Le fichier est remplacé EN PLACE : sans ce compteur dans l'URL, le
+  // navigateur rejouerait la version d'avant depuis son cache.
+  const [rev, setRev] = useState(0)
+
+  const charger = useCallback((): void => {
+    api.montages().then((r) => setVideos(r.videos ?? [])).catch(() => undefined)
+  }, [])
+  useEffect(() => { charger() }, [charger])
+
+  const ouvrir = async (stamp: string): Promise<void> => {
+    try { setOuvert(await api.montage(stamp)); setConsignes({}) }
+    catch (e) { toast('Erreur : ' + (e as Error).message) }
+  }
+  const refaire = async (i: number): Promise<void> => {
+    if (!ouvert) return
+    const c = (consignes[i] ?? '').trim()
+    if (!c) { toast('Décris ce qu’il faut corriger sur ce plan'); return }
+    setBusy(i)
+    try {
+      const r = await api.remakeScene(ouvert.stamp, i, c)
+      setOuvert({ ...ouvert, durationSec: r.durationSec })
+      setConsignes((o) => ({ ...o, [i]: '' }))
+      setRev((n) => n + 1)
+      charger()
+      toast(`Plan ${i + 1} refait — vidéo réassemblée (${Math.round(r.durationSec)} s) ✓`)
+    } catch (e) { toast('Erreur : ' + (e as Error).message) } finally { setBusy(null) }
+  }
+
+  if (ouvert) {
+    return (
+      <>
+        <div className="cat-fil">
+          <button onClick={() => setOuvert(null)}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+            Montage
+          </button>
+          <span className="cat-fil-seg"><span className="cat-fil-sep">/</span><span className="cat-fil-ici">{ouvert.scenes.length} plans</span></span>
+        </div>
+        <div className="page-head"><div><h1>Montage</h1></div></div>
+        <div className="card cat-panel">
+          <div className="cat-body">
+            <section className="cat-sec">
+              <video
+                key={rev}
+                className="mont-apercu"
+                src={`/media/clips/${encodeURIComponent(ouvert.finalName)}?v=${rev}`}
+                controls
+                playsInline
+              />
+              <div className="muted small">Durée actuelle : {ouvert.durationSec.toFixed(1)} s</div>
+            </section>
+            {ouvert.scenes.map((s) => (
+              <section key={s.index} className="cat-sec sous-titres">
+                <div className="cat-sub">Plan {s.index + 1}</div>
+                <div className="muted small sty-intro">« {s.narration} »</div>
+                <div className="cat-f wide">
+                  <label className="cat-lbl">Ce qu’il faut corriger sur ce plan</label>
+                  <textarea
+                    className="input-full cat-ta" rows={2}
+                    value={consignes[s.index] ?? ''}
+                    placeholder="ex. le produit est déformé, montre-le entier et posé bien à plat sur la tringle"
+                    onChange={(e) => setConsignes((o) => ({ ...o, [s.index]: e.target.value }))}
+                  />
+                </div>
+                <div className="sty-actions">
+                  <button className="btn small" disabled={busy !== null} onClick={() => void refaire(s.index)}>
+                    {busy === s.index ? 'Refait le plan…' : 'Refaire ce plan'}
+                  </button>
+                </div>
+              </section>
+            ))}
+          </div>
+        </div>
+      </>
+    )
+  }
+
+  return (
+    <>
+      <div className="page-head"><div><h1>Montage</h1></div></div>
+      {!videos.length ? (
+        <div className="card cat-panel">
+          <div className="cat-body">
+            <div className="muted small">
+              Aucune vidéo retouchable. Seules les vidéos générées depuis l’archivage des plans le sont —
+              les plus anciennes ont perdu leurs scènes à l’assemblage.
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="sty-liste">
+          {videos.map((v) => (
+            <button key={v.stamp} className="card sty-item" onClick={() => void ouvrir(v.stamp)}>
+              <div className="sty-nom">{v.title ?? `Vidéo ${v.stamp}`}</div>
+              <div className="muted small">{v.scenes} plans · {v.durationSec.toFixed(1)} s</div>
+            </button>
+          ))}
+        </div>
+      )}
+    </>
+  )
+}
+
 function ProduitsPage({ toast }: { toast: (m: string) => void }): JSX.Element {
   const [produits, setProduits] = useState<ProductDTO[]>([])
   const [ouvert, setOuvert] = useState<ProductDTO | null>(null)

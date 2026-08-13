@@ -41,6 +41,28 @@ export type ProductDTO = {
   createdAt: number
 }
 
+export type MontageVideoDTO = {
+  stamp: string
+  title: string | null
+  clipId: number | null
+  durationSec: number
+  scenes: number
+  publishStatus: string | null
+}
+export type MontageSceneDTO = {
+  index: number
+  narration: string
+  imagePrompt: string
+  speaker: string | null
+  file: string | null
+}
+export type MontageDTO = {
+  stamp: string
+  durationSec: number
+  finalName: string
+  scenes: MontageSceneDTO[]
+}
+
 export interface PublishOverrides {
   caption?: string
   privacyLevel?: string
@@ -264,6 +286,11 @@ export const api = {
     post<{ ok: boolean; product: ProductDTO }>('/api/products', p),
   genProductVideo: (id: string, user?: string) =>
     post<{ ok: boolean; ideaId: number; title: string }>(`/api/products/${encodeURIComponent(id)}/video`, { user }),
+  // ── Montage : rejouer un plan d'une vidéo déjà produite ──
+  montages: () => req<{ videos: MontageVideoDTO[] }>('/api/montage'),
+  montage: (stamp: string) => req<MontageDTO>(`/api/montage/${encodeURIComponent(stamp)}`),
+  remakeScene: (stamp: string, i: number, instruction: string) =>
+    post<{ ok: boolean; durationSec: number }>(`/api/montage/${encodeURIComponent(stamp)}/scene/${i}`, { instruction }),
   deleteProduct: (id: string) => req<{ ok: boolean }>(`/api/products/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   addProductPhoto: async (id: string, file: File): Promise<{ ok: boolean; product: ProductDTO }> => {
     const fd = new FormData()
