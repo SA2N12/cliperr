@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { z } from 'zod'
 import { writeFile, readFile, mkdir, rm, copyFile } from 'fs/promises'
 import { existsSync } from 'fs'
-import { join } from 'path'
+import { join, basename } from 'path'
 import { run, runCapture, type PipelineContext } from '../src/main/pipeline/context'
 import type { Usage } from '../src/main/pipeline/highlights'
 import type { ViralIdea } from '../src/shared/types'
@@ -1790,6 +1790,53 @@ NO TEXT — CRITICAL: nothing written anywhere in the frame. No subtitles, no ca
       ])
     } else {
       await run(ctx.bin.ffmpeg, ['-y', '-loglevel', 'error', '-i', concatPath, '-c', 'copy', finalPath])
+    }
+    // ── Matière du montage ────────────────────────────────────────────────
+    // Corriger UN plan raté imposait jusqu'ici de tout régénérer, et de perdre
+    // au passage les plans réussis. On conserve donc les scènes assemblées —
+    // pour ré-abouter sans les recalculer — et le storyboard avec les réglages,
+    // qui seul permet de rejouer un plan dans les mêmes conditions.
+    // Le dossier de travail, lui, reste jetable : images, voix et clips bruts
+    // se régénèrent, et pèsent bien plus lourd que les scènes finies.
+    try {
+      const montageDir = join(ctx.dirs.clips, 'montage', `idea-${stamp}`)
+      await mkdir(montageDir, { recursive: true })
+      for (const f of sceneFiles) await copyFile(f, join(montageDir, basename(f)))
+      await writeFile(
+        join(montageDir, 'manifest.json'),
+        JSON.stringify(
+          {
+            stamp,
+            durationSec: total,
+            finalName: basename(finalPath),
+            // Réglages à rejouer à l'identique quand on refait un plan : sans
+            // eux, la scène corrigée détonnerait au milieu des autres.
+            reglages: {
+              imageStyle: opts.imageStyle ?? null,
+              animateScenes: !!opts.animateScenes,
+              voice: opts.voice ?? null,
+              lang: opts.lang ?? 'fr',
+              mute: !!opts.mute,
+              paidEngine: opts.paidEngine ?? null,
+              videoEngine: opts.videoEngine ?? null,
+              productRef: opts.productRef ?? null,
+              musicTrack: opts.musicTrack ?? null
+            },
+            scenes: scenes.map((s, i) => ({
+              index: i,
+              narration: s.narration,
+              imagePrompt: s.imagePrompt,
+              speaker: s.speaker ?? null,
+              file: sceneFiles[i] ? basename(sceneFiles[i]) : null
+            }))
+          },
+          null,
+          2
+        )
+      )
+    } catch {
+      // Le montage est un CONFORT : s'il échoue, la vidéo est déjà faite et
+      // livrée. Refuser de la rendre pour ça serait absurde.
     }
     return { filePath: finalPath, durationSec: total, usage }
   } finally {
