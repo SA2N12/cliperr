@@ -4306,7 +4306,7 @@ function MontagePage({ toast }: { toast: (m: string) => void }): JSX.Element {
                       {busy === s.index ? 'Refait le plan…' : 'Refaire ce plan'}
                     </button>
                     <button
-                      className="btn small danger"
+                      className="btn small danger-ghost"
                       disabled={busy !== null || ouvert.scenes.length <= 1}
                       title={ouvert.scenes.length <= 1 ? 'Une vidéo garde au moins un plan' : undefined}
                       onClick={() => void supprimerPlan(s.index)}
