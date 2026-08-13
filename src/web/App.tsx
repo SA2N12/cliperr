@@ -4131,7 +4131,12 @@ function MontagePage({ toast }: { toast: (m: string) => void }): JSX.Element {
         <div className="page-head"><div><h1>Montage</h1></div></div>
         <div className="card cat-panel">
           <div className="cat-body">
+            {/* `.cat-sec` est en `display: contents` : ses enfants tombent
+                directement dans la grille multi-colonnes du panneau. Sans ce
+                conteneur qui prend toute la largeur, le banc de montage se
+                retrouve écrasé dans une colonne. */}
             <section className="cat-sec">
+             <div className="mont-zone">
               <video
                 key={rev}
                 ref={videoRef}
@@ -4180,10 +4185,11 @@ function MontagePage({ toast }: { toast: (m: string) => void }): JSX.Element {
                   <div className="mont-tete" style={{ left: `${(tete / total) * 100}%` }} />
                 </div>
               </div>
-              <div className="muted small">
+              <div className="muted small mont-etat">
                 {mmss(tete)} / {mmss(ouvert.durationSec)} · {ouvert.scenes.length} plans
                 {enLecture >= 0 ? ` · plan ${enLecture + 1} à l’écran` : ''}
               </div>
+             </div>
             </section>
             {(() => {
               const s = ouvert.scenes[sel]

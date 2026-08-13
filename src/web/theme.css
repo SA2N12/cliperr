@@ -5466,23 +5466,43 @@ video:-webkit-full-screen {
   margin-bottom: 10px;
 }
 
-/* Montage — banc de montage. Regle, piste et tete de lecture partagent un seul
-   repere : le temps rapporte a la largeur. D'ou des blocs positionnes en
-   absolu (left/width en %) plutot qu'en flex, qui ne s'aligneraient sur rien. */
-.mont-tl { margin: 10px 0 8px; user-select: none; }
+/* Montage — banc de derushage : moniteur en haut, piste pleine largeur
+   dessous. Règle, piste et tête de lecture partagent un seul repère (le temps
+   rapporté à la largeur), d'où des blocs positionnés en absolu plutôt qu'en
+   flex, qui ne s'aligneraient sur rien.
+   `.cat-sec` étant en `display: contents`, c'est `.mont-zone` qui doit prendre
+   toute la grille — sans elle le banc s'écrase dans une colonne. */
+.mont-zone {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.mont-apercu {
+  display: block;
+  max-height: 42vh;
+  aspect-ratio: 9 / 16;
+  border-radius: 10px;
+  background: #000;
+}
+.mont-tl {
+  width: 100%;
+  margin-top: 10px;
+  user-select: none;
+}
 .mont-regle {
   position: relative;
-  height: 16px;
-  border-bottom: 1px solid var(--border, #2a2a2a);
+  height: 15px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
 }
 .mont-tick {
   position: absolute;
   top: 0;
   transform: translateX(-50%);
   font-size: 10px;
-  opacity: .5;
   white-space: nowrap;
-  padding-top: 1px;
 }
 .mont-tick::after {
   content: '';
@@ -5492,11 +5512,11 @@ video:-webkit-full-screen {
   width: 1px;
   height: 4px;
   background: currentColor;
-  opacity: .5;
+  opacity: .45;
 }
 .mont-piste {
   position: relative;
-  height: 54px;
+  height: 56px;
   margin-top: 5px;
   cursor: pointer;
   touch-action: none;
@@ -5510,42 +5530,41 @@ video:-webkit-full-screen {
   align-items: center;
   justify-content: center;
   gap: 2px;
-  border: 1px solid var(--border, #2a2a2a);
+  border: 1px solid var(--border);
   border-radius: 5px;
-  background: var(--card, #161616);
-  color: inherit;
+  background: var(--panel-2);
+  color: var(--text);
   cursor: pointer;
   padding: 0 2px;
   overflow: hidden;
   transition: border-color .12s, background .12s;
 }
-.mont-bloc + .mont-bloc { margin-left: 0; }
-.mont-bloc:hover { border-color: #4a4a4a; }
-/* Plan a l'ecran : liseré discret, distinct de la selection — la tete de
-   lecture et le plan sur lequel on travaille ne sont pas la meme chose. */
-.mont-bloc.lit { background: color-mix(in srgb, #ffffff 7%, var(--card, #161616)); }
+.mont-bloc:hover { border-color: var(--muted-2); }
+/* Plan À L'ÉCRAN : teinte neutre, distincte de la sélection — la tête de
+   lecture et le plan sur lequel on travaille ne sont pas la même chose. */
+.mont-bloc.lit { background: var(--accent-soft-2); }
 .mont-bloc.actif {
-  border-color: #22c55e;
-  background: color-mix(in srgb, #22c55e 16%, transparent);
+  border-color: var(--ap-green, #10b981);
+  background: var(--ap-green-soft, #ecfdf5);
 }
 .mont-bloc-n { font-weight: 600; font-size: 13px; line-height: 1; }
-.mont-bloc-d { font-size: 10px; opacity: .6; line-height: 1; }
+.mont-bloc-d { font-size: 10px; color: var(--muted); line-height: 1; }
 .mont-tete {
   position: absolute;
-  top: -7px;
+  top: -8px;
   bottom: -3px;
   width: 2px;
   margin-left: -1px;
-  background: #38bdf8;
+  background: #0ea5e9;
   pointer-events: none;
-  box-shadow: 0 0 6px rgba(56, 189, 248, .8);
 }
 .mont-tete::before {
   content: '';
   position: absolute;
-  top: -3px;
+  top: -2px;
   left: -4px;
   border-left: 5px solid transparent;
   border-right: 5px solid transparent;
-  border-top: 7px solid #38bdf8;
+  border-top: 7px solid #0ea5e9;
 }
+.mont-etat { align-self: flex-start; margin-top: 8px; }
