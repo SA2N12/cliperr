@@ -5479,10 +5479,14 @@ video:-webkit-full-screen {
   align-items: center;
   gap: 4px;
 }
+/* Largeur DÉDUITE de la hauteur plutôt que subie : dans un conteneur en
+   `align-items: stretch`, l'élément s'étirerait à la largeur de la barre de
+   transport et la vidéo se retrouverait cernée de bandes noires. */
 .mont-apercu {
   display: block;
-  max-height: 42vh;
-  aspect-ratio: 9 / 16;
+  height: 42vh;
+  width: calc(42vh * 9 / 16);
+  align-self: center;
   border-radius: 10px;
   background: #000;
 }
