@@ -5620,3 +5620,26 @@ video:-webkit-full-screen {
   background: var(--accent-soft);
 }
 .mont-boutons button.lect:hover { background: var(--accent-soft-2); }
+
+/* Montage — ligne d'avancement du rendu en cours. Un travail de fond doit se
+   voir depuis la page qui l'a lance, sinon on ne sait pas s'il est parti. */
+.mont-avance {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.mont-spin {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--border);
+  border-top-color: var(--ap-green, #10b981);
+  border-radius: 50%;
+  animation: mont-tourne .8s linear infinite;
+  flex: none;
+}
+@keyframes mont-tourne { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .mont-spin { animation: none; } }

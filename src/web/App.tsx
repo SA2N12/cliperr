@@ -4033,6 +4033,8 @@ function MontagePage({ toast }: { toast: (m: string) => void }): JSX.Element {
   const [textes, setTextes] = useState<Record<number, string>>({})
   /** Consigne appliquée à TOUS les plans. */
   const [global, setGlobal] = useState('')
+  /** Dernière ligne d'avancement du rendu en cours, s'il y en a un. */
+  const [avance, setAvance] = useState<string | null>(null)
   const [busy, setBusy] = useState<number | null>(null)
   const [sel, setSel] = useState(0)
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -4074,6 +4076,7 @@ function MontagePage({ toast }: { toast: (m: string) => void }): JSX.Element {
       v.removeEventListener('loadedmetadata', arrete)
     }
   }, [rev, ouvert?.stamp])
+
 
   const total = Math.max(0.1, ouvert?.durationSec ?? 0)
   /** Place la tête là où on a cliqué sur la piste (clic ou glisser). */
@@ -4154,6 +4157,27 @@ function MontagePage({ toast }: { toast: (m: string) => void }): JSX.Element {
     api.montages().then((r) => setVideos(r.videos ?? [])).catch(() => undefined)
   }, [])
   useEffect(() => { charger() }, [charger])
+  // Une reprise complète tourne en tâche de fond : sans retour ici, on lance un
+  // rendu de plusieurs minutes depuis une page qui ne bouge pas, et on ne sait
+  // pas s'il est parti. La Shell reçoit bien les logs, mais ne les descend pas.
+  const stampOuvert = ouvert?.stamp
+  useEffect(() => {
+    if (!stampOuvert) return
+    return subscribe({
+      onLog: (m) => {
+        if (!m.startsWith('Montage — ')) return
+        const ligne = m.slice('Montage — '.length)
+        setAvance(ligne)
+        // Réassemblage terminé : on relit le manifeste pour redécouper la
+        // timeline et rafraîchir l'aperçu, sans attendre un rechargement.
+        if (/réassemblée/.test(ligne)) {
+          void api.montage(stampOuvert)
+            .then((f) => { setOuvert(f); setRev((n) => n + 1); setAvance(null); charger() })
+            .catch(() => undefined)
+        }
+      }
+    })
+  }, [stampOuvert, charger])
 
   const ouvrir = async (stamp: string): Promise<void> => {
     try { setOuvert(await api.montage(stamp)); setConsignes({}); setSel(0) }
@@ -4306,10 +4330,16 @@ function MontagePage({ toast }: { toast: (m: string) => void }): JSX.Element {
                 />
               </div>
               <div className="sty-actions">
-                <button className="btn small" disabled={busy !== null} onClick={() => void refaireTout()}>
+                <button className="btn small" disabled={busy !== null || !!avance} onClick={() => void refaireTout()}>
                   Refaire les {ouvert.scenes.length} plans
                 </button>
               </div>
+              {avance && (
+                <div className="mont-avance">
+                  <span className="mont-spin" />
+                  {avance}
+                </div>
+              )}
             </section>
             {(() => {
               const s = ouvert.scenes[sel]
