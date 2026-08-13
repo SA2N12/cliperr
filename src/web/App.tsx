@@ -4092,6 +4092,24 @@ function MontagePage({ toast }: { toast: (m: string) => void }): JSX.Element {
   const enLecture = (ouvert?.scenes ?? []).findIndex(
     (s, i) => tete >= debutDe(i) && tete < debutDe(i) + (s.durationSec ?? 0)
   )
+  const supprimerPlan = async (i: number): Promise<void> => {
+    if (!ouvert) return
+    // Le manifeste est la seule trace du texte et du prompt de ce plan : une
+    // fois parti, il ne se retrouve pas. D'où la confirmation.
+    if (!window.confirm(`Supprimer le plan ${i + 1} ? Son texte et son image seront perdus.`)) return
+    setBusy(i)
+    try {
+      await api.deleteScene(ouvert.stamp, i)
+      const frais = await api.montage(ouvert.stamp)
+      setOuvert(frais)
+      setSel((n) => Math.max(0, Math.min(frais.scenes.length - 1, n > i ? n - 1 : n)))
+      setTextes({})
+      setConsignes({})
+      setRev((n) => n + 1)
+      charger()
+      toast(`Plan ${i + 1} supprimé — ${frais.scenes.length} plans, ${Math.round(frais.durationSec)} s ✓`)
+    } catch (e) { toast('Erreur : ' + (e as Error).message) } finally { setBusy(null) }
+  }
   const bascule = (): void => {
     const v = videoRef.current
     if (!v) return
@@ -4286,6 +4304,14 @@ function MontagePage({ toast }: { toast: (m: string) => void }): JSX.Element {
                   <div className="sty-actions">
                     <button className="btn small" disabled={busy !== null} onClick={() => void refaire(s.index)}>
                       {busy === s.index ? 'Refait le plan…' : 'Refaire ce plan'}
+                    </button>
+                    <button
+                      className="btn small danger"
+                      disabled={busy !== null || ouvert.scenes.length <= 1}
+                      title={ouvert.scenes.length <= 1 ? 'Une vidéo garde au moins un plan' : undefined}
+                      onClick={() => void supprimerPlan(s.index)}
+                    >
+                      Supprimer ce plan
                     </button>
                   </div>
                 </section>

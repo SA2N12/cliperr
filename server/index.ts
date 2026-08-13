@@ -3287,6 +3287,32 @@ app.get('/api/montage/:stamp', wrap(async (req, res) => {
   }
   res.json({ stamp: req.params.stamp, durationSec: lu.m.durationSec, finalName: lu.m.finalName, scenes: lu.m.scenes })
 }))
+/** Retire un plan et ré-aboute. Irréversible : le manifeste est la seule trace
+ *  du texte et du prompt de ce plan, et le fichier part avec. */
+app.delete('/api/montage/:stamp/scene/:i', wrap(async (req, res) => {
+  const lu = lireManifeste(String(req.params.stamp ?? ''))
+  if (!lu) return res.status(404).json({ error: 'Montage introuvable' })
+  const i = Number(req.params.i)
+  const sc = lu.m.scenes[i]
+  if (!sc) return res.status(404).json({ error: 'Scène inconnue' })
+  if (lu.m.scenes.length <= 1) {
+    return res.status(400).json({ error: 'Il faut au moins un plan. Supprime plutôt la vidéo entière depuis les Clips.' })
+  }
+  const ctx = await getContext()
+  lu.m.scenes.splice(i, 1)
+  // Les index disent la POSITION dans la vidéo : les laisser troués ferait
+  // pointer la timeline et le rejeu d'un plan sur le mauvais fichier.
+  lu.m.scenes.forEach((s, n) => { s.index = n })
+
+  const fichiers = lu.m.scenes.map((s) => (s.file ? join(lu.dir, s.file) : '')).filter((f) => f && existsSync(f))
+  const finalPath = join(paths.clips, lu.m.finalName)
+  const total = await assembleScenes(ctx, fichiers, finalPath, (lu.m.reglages as Record<string, unknown>).musicTrack as string || null)
+  lu.m.durationSec = total
+  writeFileSync(join(lu.dir, 'manifest.json'), JSON.stringify(lu.m, null, 2))
+  if (sc.file) await unlink(join(lu.dir, sc.file)).catch(() => undefined)
+  emitLog(`Montage — plan ${i + 1} supprimé, vidéo réassemblée (${Math.round(total)} s)`)
+  res.json({ ok: true, durationSec: total })
+}))
 /** Rejoue UN plan avec une consigne, puis ré-aboute la vidéo. */
 app.post('/api/montage/:stamp/scene/:i', wrap(async (req, res) => {
   const stamp = String(req.params.stamp ?? '')
