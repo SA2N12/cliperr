@@ -767,6 +767,10 @@ export type Product = {
   url?: string
   /** Photos réelles, dans `paths.uploads`. La première sert de référence. */
   photos: string[]
+  /** Pubs qui marchent, dont on reprend la FORME (rythme, structure, montage) —
+   *  jamais le contenu : le produit reste le nôtre. Décrire une bonne publicité
+   *  dans un prompt marche moins bien que d'en donner une à copier. */
+  inspirations?: string[]
   createdAt: number
 }
 function productLibrary(): Record<string, Product> {
@@ -3205,11 +3209,47 @@ app.post('/api/products', (req, res) => {
     price: String(b.price ?? '').trim().slice(0, 40) || undefined,
     url: String(b.url ?? '').trim().slice(0, 500) || undefined,
     photos: av?.photos ?? [],
+    // Une URL par ligne, comme les bénéfices : c'est la forme de saisie et celle
+    // dans laquelle on les fait défiler à la génération.
+    inspirations: b.inspirations === undefined
+      ? av?.inspirations ?? []
+      : String(b.inspirations).split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 12),
     createdAt: av?.createdAt ?? Date.now()
   }
   saveProducts(m)
   res.json({ ok: true, product: m[id] })
 })
+/** Vidéos déjà produites pour un produit. Le lien remonte par la source
+ *  `idea:<id>` que pose `runVideoGen` : c'est le seul fil entre une idée et le
+ *  fichier qui en est sorti, l'idée ne portant pas le chemin de sa vidéo. */
+app.get('/api/products/:id/videos', wrap((req, res) => {
+  const p = productLibrary()[String(req.params.id ?? '')]
+  if (!p) return res.status(404).json({ error: 'Produit inconnu' })
+  const srcParUrl = new Map(repo.listSources().map((s) => [s.url, s]))
+  const clipsTous = repo.listClips()
+  const clipsParSource = new Map<number, typeof clipsTous>()
+  for (const c of clipsTous) {
+    const l = clipsParSource.get(c.sourceId) ?? []
+    l.push(c)
+    clipsParSource.set(c.sourceId, l)
+  }
+  const videos = repo.listIdeas()
+    .filter((i) => i.niche === p.name)
+    .map((i) => {
+      const src = srcParUrl.get(`idea:${i.id}`)
+      const cl = (src ? clipsParSource.get(src.id) ?? [] : []).filter((c) => c.filePath)
+      return {
+        ideaId: i.id,
+        title: i.title,
+        angle: (i as { angle?: string }).angle ?? null,
+        createdAt: i.createdAt,
+        // Une idée sans clip = vidéo en cours ou échouée : on la montre quand
+        // même, sinon une génération qui rate disparaît sans laisser de trace.
+        clips: cl.map((c) => ({ id: c.id, publishStatus: c.publishStatus, publishedAccount: c.publishedAccount }))
+      }
+    })
+  res.json({ videos })
+}))
 app.post('/api/products/:id/photo', upload.single('file'), wrap((req, res) => {
   const m = productLibrary()
   const p = m[String(req.params.id ?? '')]
@@ -3251,11 +3291,18 @@ app.post('/api/products/:id/video', wrap(async (req, res) => {
   if (!photo) return res.status(400).json({ error: 'Ajoute au moins une photo au produit : sans référence, la vidéo montrerait un produit inventé.' })
 
   const model = scriptModel()
+  // On ne génère qu'UNE idée par appel : l'IA, qui ne voit qu'un appel à la
+  // fois, retomberait sur le premier angle de la liste à chaque fois. Le
+  // curseur vit donc ici — seul l'appelant se souvient de la vidéo d'avant.
+  const cleAngle = `product_angle_${p.id}`
+  const tour = (parseInt(repo.getSetting(cleAngle) || '', 10) || 0) + 1
+  repo.setSetting(cleAngle, String(tour))
   const { ideas, usage } = await generateProductIdeas({
     apiKey,
     model,
     product: { name: p.name, pitch: p.pitch, benefits: p.benefits, price: p.price },
     count: 1,
+    angle: tour,
     recentTitles: repo.listIdeas().filter((i) => i.niche === p.name).slice(0, 30).map((i) => i.title)
   })
   if (usage) addSpend(model, usage)

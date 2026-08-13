@@ -181,6 +181,10 @@ export interface ProductIdeaOptions {
   count: number
   /** Titres déjà publiés pour ce produit — vingt vidéos identiques plafonnent. */
   recentTitles?: string[]
+  /** Index d'angle IMPOSÉ (modulo la liste). Appelée une vidéo à la fois, l'IA
+   *  reprend spontanément le premier angle de la liste : la rotation ne peut
+   *  venir que de l'appelant, qui seul se souvient de la vidéo précédente. */
+  angle?: number
 }
 
 /** Angles de vente éprouvés en vidéo courte. On les impose plutôt que de laisser
@@ -239,6 +243,15 @@ export async function generateProductIdeas(
     ? `\n\n⛔ DÉJÀ PUBLIÉ POUR CE PRODUIT :\n${opts.recentTitles.slice(0, 30).map((t) => `- ${t}`).join('\n')}\nChange d'ANGLE et de FORME, pas seulement de mots : TikTok plafonne les vidéos bâties sur le même moule.`
     : ''
 
+  // Un angle imposé produit une FORME imposée : c'est ce qui empêche vingt
+  // vidéos de se ressembler quand on les génère une par une.
+  const impose = Number.isFinite(opts.angle)
+    ? ANGLES_VENTE[(((opts.angle as number) % ANGLES_VENTE.length) + ANGLES_VENTE.length) % ANGLES_VENTE.length]
+    : null
+  const blocAngles = impose
+    ? `ANGLE IMPOSÉ — construis l'idée sur CET angle précis, et sur aucun autre :\n${impose}`
+    : `Propose ${count} idées, chacune sur un ANGLE DIFFÉRENT pris dans cette liste :\n${ANGLES_VENTE.map((a, i) => `${i + 1}. ${a}`).join('\n')}`
+
   const prompt = `Tu écris des vidéos TikTok qui font VENDRE un produit précis, sur une boutique TikTok Shop.
 
 PRODUIT
@@ -247,8 +260,7 @@ Ce qu'il fait : ${p.pitch}
 ${p.benefits.length ? `Bénéfices :\n${p.benefits.map((b) => `- ${b}`).join('\n')}` : ''}
 ${p.price ? `Prix : ${p.price}` : ''}
 
-Propose ${count} idées, chacune sur un ANGLE DIFFÉRENT pris dans cette liste :
-${ANGLES_VENTE.map((a, i) => `${i + 1}. ${a}`).join('\n')}${dejaVu}
+${blocAngles}${dejaVu}
 
 RÈGLE CENTRALE — on MONTRE, on n'explique pas.
 Le spectateur doit comprendre l'intérêt du produit sans le son et sans lire. Chaque

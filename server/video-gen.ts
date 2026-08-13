@@ -113,7 +113,11 @@ async function buildStoryboard(
   /** `undefined` = AUCUN plafond : une scène par étape de la source (fidélité
    *  maximale). Un nombre force le regroupement (réglage `repro_max_scenes`). */
   reproMax?: number,
-  lang: 'fr' | 'en' = 'fr'
+  lang: 'fr' | 'en' = 'fr',
+  /** Nom du produit ⇒ on écrit une PUBLICITÉ, pas un explicatif. Une pub et une
+   *  vidéo de niche ne partagent ni le rythme, ni la valeur des plans, ni le
+   *  rôle du sujet : le même storyboard donnerait deux fois la même vidéo. */
+  promo?: string
 ): Promise<{ scenes: Scene[]; cast: CastMember[]; usage: Usage | null }> {
   // Mode anglais (reproductions) : les répliques/voix off sont écrites en anglais
   // natif — la source (souvent française) est TRADUITE fidèlement.
@@ -127,7 +131,9 @@ async function buildStoryboard(
       type: 'string',
       description: dialogue
         ? 'La RÉPLIQUE du personnage en français : courte (2 à 14 mots), très orale et expressive (interjections, exclamations). L\'histoire doit se comprendre uniquement par les répliques.'
-        : 'Une phrase de voix off en français : courte (≤ 18 mots), orale, percutante, tutoiement. La 1re est un hook choc qui crée une tension immédiate ; la dernière est une punchline + appel à l\'action.'
+        : promo
+          ? 'Une phrase de voix off en français : TRÈS courte (≤ 12 mots), orale, affirmative, tutoiement. La 1re nomme le problème par une image, jamais le produit. AUCUNE ne récite le prix ni n\'appelle à cliquer : le prix et le lien vivent dans la légende.'
+          : 'Une phrase de voix off en français : courte (≤ 18 mots), orale, percutante, tutoiement. La 1re est un hook choc qui crée une tension immédiate ; la dernière est une punchline + appel à l\'action.'
     },
     imagePrompt: {
       type: 'string',
@@ -209,8 +215,30 @@ ${styleHint ? `- STYLE VISUEL IMPOSÉ (celui de la source, à l'identique d'une 
 
 ${enBlock}Pour chaque scène : la RÉPLIQUE (speaker + narration en ${lang === 'en' ? 'ANGLAIS' : 'français'}) + un IMAGE PROMPT en anglais respectant ${styleHint ? 'STRICTEMENT le style imposé ci-dessus' : 'le style de la source'}, très détaillé, sans aucun texte. Chaque IMAGE PROMPT décrit SON PROPRE DÉCOR (lieu, arrière-plan, cadrage) : le style est commun à toutes les scènes, PAS le décor — fais-le évoluer au fil de l'histoire au lieu de répéter le même fond. Réponds uniquement via l'outil storyboard.`
 
+  // Publicité produit. Le template « niche » (hook choc, plans illustratifs de
+  // même valeur, CTA final récité) donne une vidéo qui EXPLIQUE le produit. Une
+  // pub le fait DÉSIRER : coupe rapide, objet en action, bascule montrée.
+  const promoPrompt = `Tu écris une PUBLICITÉ TikTok pour un produit RÉEL. Ce n'est pas une vidéo explicative : le spectateur doit avoir envie de l'objet, pas apprendre quelque chose.
+Produit : ${promo}
+Titre : ${idea.title}
+Hook : ${idea.hook}
+${(idea as { angle?: string }).angle ? `Angle de vente à tenir d'un bout à l'autre : ${(idea as { angle?: string }).angle}` : ''}
+Déroulé voulu :
+${(idea.script ?? []).map((s, i) => `${i + 1}. ${s}`).join('\n')}
+
+GRAMMAIRE PUBLICITAIRE — c'est elle qui distingue une pub d'un explicatif :
+- 6 à 8 scènes COURTES (2 à 3 s chacune), 16 à 22 s au total. La coupe rapide EST le format.
+- Scène 1 : un ÉTAT visible, cadré serré, qui agace ou fait envie. Aucune introduction, aucune annonce de ce qui va suivre.
+- Le PRODUIT est visible dans au moins deux scènes sur trois, et toujours EN TRAIN DE SERVIR — jamais simplement posé.
+- Une scène au moins montre la BASCULE : l'instant où le problème disparaît. C'est le plan qui vend, donne-lui l'image la plus nette et la plus lisible.
+- VARIE LES VALEURS DE PLAN d'une scène à l'autre : très gros plan sur le geste, plan large sur le résultat, plan à hauteur de main. Un explicatif enchaîne des plans de même valeur ; une pub, jamais.
+- Aucun plan décoratif : chaque scène fait avancer la démonstration.
+- Ne récite ni le prix ni le lien — ils vivent dans la légende.${enBlock}`
+
   const prompt = reproduce
     ? (dialogue ? reproduceDialoguePrompt : reproducePrompt)
+    : promo
+    ? promoPrompt
     : `Tu es un scénariste TikTok expert en RÉTENTION et en viralité. Transforme cette idée en storyboard de 4 à 5 scènes pour une vidéo verticale « faceless » COURTE de 20 à 28 secondes (la brièveté maximise le taux de complétion — le signal n°1 de l'algorithme TikTok pour être re-poussé au-delà du 1er lot de vues).
 Titre : ${idea.title}
 Hook : ${idea.hook}
@@ -1286,7 +1314,9 @@ export async function generateVideoFromIdea(
     // ⚠️ SANS ce paramètre, le storyboard reste en FRANÇAIS alors que le reste de
     // la chaîne bascule en anglais : les moteurs anglophones prononcent alors du
     // texte français (accent étranger) et les sous-titres restent en français.
-    opts.lang
+    opts.lang,
+    // Une photo de produit en référence ⇒ on tourne une pub, pas un explicatif.
+    opts.productRef?.name
   )
   if (!scenes.length) throw new Error('Storyboard vide — réessaie')
   const castMap = new Map(cast.map((c) => [c.name.trim().toLowerCase(), c]))
