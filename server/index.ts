@@ -3356,6 +3356,18 @@ app.post('/api/montage/:stamp/scene/:i', wrap(async (req, res) => {
     anthropicModel: scriptModel(),
     openaiKey,
     voice: (r.voice as string) || undefined,
+    // Le fournisseur DOIT suivre la voix. Sans lui, une voix ElevenLabs part
+    // dans le TTS OpenAI, qui ne la reconnaît pas et retombe sur « ash » sans
+    // lever d'erreur : le plan refait parle d'une autre voix que ses voisins.
+    // Déduit de la voix pour les manifestes écrits avant qu'on le stocke.
+    voiceProvider: (r.voiceProvider as string) || (r.voice ? providerForVoice(String(r.voice)) : undefined),
+    elevenKey: getEncrypted('elevenlabs_key'),
+    // Options d'animation omises au premier jet : elles décident du chemin de
+    // rendu, donc un plan refait sans elles ne ressemble pas aux autres.
+    falLipsyncModel: repo.getSetting('fal_lipsync_model') || undefined,
+    prunaLipsync: repo.getSetting('pruna_lipsync') === '1',
+    seedanceTalking: repo.getSetting('seedance_talking') === '1',
+    publishPublic: publishPublicFile,
     lang: (r.lang as 'fr' | 'en') || 'fr',
     imageStyle: (r.imageStyle as string) || undefined,
     characterRefPath: (r.characterRefPath as string) || undefined,
