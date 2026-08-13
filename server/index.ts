@@ -3295,7 +3295,11 @@ app.post('/api/products/:id/video', wrap(async (req, res) => {
   // fois, retomberait sur le premier angle de la liste à chaque fois. Le
   // curseur vit donc ici — seul l'appelant se souvient de la vidéo d'avant.
   const cleAngle = `product_angle_${p.id}`
-  const tour = (parseInt(repo.getSetting(cleAngle) || '', 10) || 0) + 1
+  const dejaFaites = repo.listIdeas().filter((i) => i.niche === p.name)
+  // Pas encore de curseur : on démarre APRÈS les vidéos déjà produites, sinon la
+  // première génération rejouerait un angle qu'on a déjà à l'écran.
+  const precedent = parseInt(repo.getSetting(cleAngle) || '', 10)
+  const tour = (Number.isFinite(precedent) ? precedent : dejaFaites.length) + 1
   repo.setSetting(cleAngle, String(tour))
   const { ideas, usage } = await generateProductIdeas({
     apiKey,
@@ -3303,7 +3307,7 @@ app.post('/api/products/:id/video', wrap(async (req, res) => {
     product: { name: p.name, pitch: p.pitch, benefits: p.benefits, price: p.price },
     count: 1,
     angle: tour,
-    recentTitles: repo.listIdeas().filter((i) => i.niche === p.name).slice(0, 30).map((i) => i.title)
+    recentTitles: dejaFaites.slice(0, 30).map((i) => i.title)
   })
   if (usage) addSpend(model, usage)
   if (!ideas.length) return res.status(502).json({ error: 'Aucun angle généré — réessaie.' })
