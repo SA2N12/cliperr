@@ -5568,3 +5568,51 @@ video:-webkit-full-screen {
   border-top: 7px solid #0ea5e9;
 }
 .mont-etat { align-self: flex-start; margin-top: 8px; }
+
+/* Moniteur programme : image, puis transport dessous. Le conteneur se
+   dimensionne sur la video (inline-flex), ce qui aligne la barre exactement
+   sur la largeur du plan plutot que sur celle du panneau. */
+.mont-moniteur {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+.mont-apercu { cursor: pointer; }
+.mont-transport {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 6px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+.mont-tc {
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--muted);
+  min-width: 34px;
+}
+.mont-tc:last-child { text-align: right; }
+.mont-boutons { display: flex; align-items: center; gap: 2px; }
+.mont-boutons button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 26px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  transition: background .12s;
+}
+.mont-boutons button:hover { background: var(--accent-soft-2); }
+.mont-boutons button.lect {
+  width: 32px;
+  background: var(--accent-soft);
+}
+.mont-boutons button.lect:hover { background: var(--accent-soft-2); }

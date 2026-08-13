@@ -4034,6 +4034,8 @@ function MontagePage({ toast }: { toast: (m: string) => void }): JSX.Element {
   const rafRef = useRef(0)
   /** Position de la tête de lecture, en secondes. */
   const [tete, setTete] = useState(0)
+  const [joue, setJoue] = useState(false)
+  const [muet, setMuet] = useState(false)
   // Le fichier est remplacé EN PLACE : sans ce compteur dans l'URL, le
   // navigateur rejouerait la version d'avant depuis son cache.
   const [rev, setRev] = useState(0)
@@ -4050,8 +4052,8 @@ function MontagePage({ toast }: { toast: (m: string) => void }): JSX.Element {
       setTete(v.currentTime)
       rafRef.current = requestAnimationFrame(tick)
     }
-    const demarre = (): void => { cancelAnimationFrame(rafRef.current); rafRef.current = requestAnimationFrame(tick) }
-    const arrete = (): void => { cancelAnimationFrame(rafRef.current); setTete(v.currentTime) }
+    const demarre = (): void => { setJoue(true); cancelAnimationFrame(rafRef.current); rafRef.current = requestAnimationFrame(tick) }
+    const arrete = (): void => { setJoue(!v.paused && !v.ended); cancelAnimationFrame(rafRef.current); setTete(v.currentTime) }
     v.addEventListener('play', demarre)
     v.addEventListener('pause', arrete)
     v.addEventListener('ended', arrete)
@@ -4088,6 +4090,24 @@ function MontagePage({ toast }: { toast: (m: string) => void }): JSX.Element {
   const enLecture = (ouvert?.scenes ?? []).findIndex(
     (s, i) => tete >= debutDe(i) && tete < debutDe(i) + (s.durationSec ?? 0)
   )
+  const bascule = (): void => {
+    const v = videoRef.current
+    if (!v) return
+    if (v.paused || v.ended) void v.play().catch(() => undefined)
+    else v.pause()
+  }
+  /** Saut de plan en plan : sur une pub de six plans de deux secondes, chercher
+   *  un raccord à la souris est illusoire. */
+  const versPlan = (pas2: number): void => {
+    const n = ouvert?.scenes.length ?? 0
+    if (!n) return
+    const i = Math.max(0, Math.min(n - 1, (enLecture < 0 ? 0 : enLecture) + pas2))
+    const v = videoRef.current
+    if (!v) return
+    v.currentTime = debutDe(i)
+    setTete(debutDe(i))
+    setSel(i)
+  }
   /** Repères de la règle : ~8 marques, sur un pas rond. */
   const pas = [1, 2, 5, 10, 15, 30, 60].find((p) => total / p <= 8) ?? 60
   const marques: number[] = []
@@ -4137,14 +4157,48 @@ function MontagePage({ toast }: { toast: (m: string) => void }): JSX.Element {
                 retrouve écrasé dans une colonne. */}
             <section className="cat-sec">
              <div className="mont-zone">
+              <div className="mont-moniteur">
+              {/* Pas de `controls` natifs : ils se posent SUR l'image et
+                  masquent le bas du plan — précisément la zone des sous-titres,
+                  qu'on vient vérifier ici. Le transport vit donc sous le
+                  moniteur, et la piste sert de barre de défilement. */}
               <video
                 key={rev}
                 ref={videoRef}
                 className="mont-apercu"
                 src={`/media/clips/${encodeURIComponent(ouvert.finalName)}?v=${rev}`}
-                controls
                 playsInline
+                onClick={bascule}
               />
+              <div className="mont-transport">
+                <span className="mont-tc">{mmss(tete)}</span>
+                <div className="mont-boutons">
+                  <button title="Début" onClick={() => { const v = videoRef.current; if (v) { v.currentTime = 0; setTete(0) } }}>
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M6 5h2v14H6zM19 5v14l-9-7z" /></svg>
+                  </button>
+                  <button title="Plan précédent" onClick={() => versPlan(-1)}>
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M8 5h2v14H8zM20 5v14l-9-7z" /></svg>
+                  </button>
+                  <button className="lect" title={joue ? 'Pause' : 'Lecture'} onClick={bascule}>
+                    {joue
+                      ? <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor"><path d="M7 5h4v14H7zM13 5h4v14h-4z" /></svg>
+                      : <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor"><path d="M7 4v16l13-8z" /></svg>}
+                  </button>
+                  <button title="Plan suivant" onClick={() => versPlan(1)}>
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M14 5h2v14h-2zM4 5v14l9-7z" /></svg>
+                  </button>
+                  <button
+                    title={muet ? 'Rétablir le son' : 'Couper le son'}
+                    onClick={() => { const v = videoRef.current; if (v) { v.muted = !v.muted; setMuet(v.muted) } }}
+                  >
+                    {muet
+                      ? <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M4 9v6h4l5 4V5L8 9H4zM19 9l-4 6h1.5l4-6H19z" /></svg>
+                      : <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M4 9v6h4l5 4V5L8 9H4zM16 8.5a5 5 0 010 7v-7z" /></svg>}
+                  </button>
+                </div>
+                <span className="mont-tc">{mmss(ouvert.durationSec)}</span>
+              </div>
+              </div>
               {/* Banc de montage. Les blocs sont positionnés en COORDONNÉES DE
                   TEMPS (et non en flex-grow) : c'est la seule façon qu'ils
                   s'alignent exactement sur la règle et sur la tête de lecture,
@@ -4186,7 +4240,7 @@ function MontagePage({ toast }: { toast: (m: string) => void }): JSX.Element {
                 </div>
               </div>
               <div className="muted small mont-etat">
-                {mmss(tete)} / {mmss(ouvert.durationSec)} · {ouvert.scenes.length} plans
+                {ouvert.scenes.length} plans
                 {enLecture >= 0 ? ` · plan ${enLecture + 1} à l’écran` : ''}
               </div>
              </div>
