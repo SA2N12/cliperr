@@ -299,6 +299,9 @@ export const api = {
   // Reprise complète : rend la main tout de suite, le rendu part en tâche de fond.
   remakeAll: (stamp: string, instruction: string) =>
     post<{ ok: boolean; plans: number }>(`/api/montage/${encodeURIComponent(stamp)}/all`, { instruction }),
+  // Copie de sauvegarde : le montage travaille en place, sans retour arrière.
+  duplicateMontage: (stamp: string) =>
+    post<{ ok: boolean; stamp: string; clipId: number }>(`/api/montage/${encodeURIComponent(stamp)}/duplicate`, {}),
   deleteScene: (stamp: string, i: number) =>
     req<{ ok: boolean; durationSec: number }>(`/api/montage/${encodeURIComponent(stamp)}/scene/${i}`, { method: 'DELETE' }),
   // `narration` refait la voix ET les sous-titres, `instruction` corrige l'image.

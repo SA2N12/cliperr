@@ -4101,6 +4101,15 @@ function MontagePage({ toast }: { toast: (m: string) => void }): JSX.Element {
   const enLecture = (ouvert?.scenes ?? []).findIndex(
     (s, i) => tete >= debutDe(i) && tete < debutDe(i) + (s.durationSec ?? 0)
   )
+  const dupliquer = async (): Promise<void> => {
+    if (!ouvert) return
+    setBusy(-1)
+    try {
+      await api.duplicateMontage(ouvert.stamp)
+      charger()
+      toast('Copie créée — elle apparaît dans la liste, et n’est pas publiable')
+    } catch (e) { toast('Erreur : ' + (e as Error).message) } finally { setBusy(null) }
+  }
   const refaireTout = async (): Promise<void> => {
     if (!ouvert) return
     const c = global.trim()
@@ -4225,7 +4234,14 @@ function MontagePage({ toast }: { toast: (m: string) => void }): JSX.Element {
           </button>
           <span className="cat-fil-seg"><span className="cat-fil-sep">/</span><span className="cat-fil-ici">{ouvert.scenes.length} plans</span></span>
         </div>
-        <div className="page-head"><div><h1>Montage</h1></div></div>
+        {/* Le montage travaille EN PLACE : un plan refait écrase l'ancien, sans
+            retour arrière. La copie est le seul filet avant d'y toucher. */}
+        <div className="page-head">
+          <div><h1>Montage</h1></div>
+          <button className="btn small" disabled={busy !== null} onClick={() => void dupliquer()}>
+            {busy === -1 ? 'Copie en cours…' : 'Dupliquer avant de retoucher'}
+          </button>
+        </div>
         <div className="card cat-panel">
           <div className="cat-body">
             {/* `.cat-sec` est en `display: contents` : ses enfants tombent

@@ -3305,6 +3305,52 @@ app.get('/api/montage/:stamp', wrap(async (req, res) => {
     modelActuel: scriptModel()
   })
 }))
+/** Duplique un montage : garder une version intacte avant de la retoucher.
+ *  Le montage travaille EN PLACE — un plan refait écrase l'ancien et il n'y a
+ *  pas de retour arrière. La copie est donc le seul filet. */
+app.post('/api/montage/:stamp/duplicate', wrap(async (req, res) => {
+  const lu = lireManifeste(String(req.params.stamp ?? ''))
+  if (!lu) return res.status(404).json({ error: 'Montage introuvable' })
+  const source0 = join(paths.clips, lu.m.finalName)
+  if (!existsSync(source0)) return res.status(404).json({ error: 'Vidéo introuvable sur le disque' })
+
+  const neuf = Date.now()
+  const dirNeuf = join(paths.clips, 'montage', `idea-${neuf}`)
+  await mkdir(dirNeuf, { recursive: true })
+  for (const s of lu.m.scenes) {
+    const f = s.file ? join(lu.dir, s.file) : ''
+    if (f && existsSync(f)) await copyFile(f, join(dirNeuf, s.file as string))
+  }
+  const finalNeuf = `idea-${neuf}.mp4`
+  const cheminNeuf = join(paths.clips, finalNeuf)
+  await copyFile(source0, cheminNeuf)
+  const mNeuf = { ...lu.m, stamp: neuf, finalName: finalNeuf }
+  writeFileSync(join(dirNeuf, 'manifest.json'), JSON.stringify(mNeuf, null, 2))
+
+  // Lignes en base calquées sur ce que pose une génération : sans source ni
+  // clip, la copie n'apparaîtrait ni dans Clips ni dans la liste des montages,
+  // qui retrouve les titres par le nom de fichier.
+  const ancien = repo.listClips().find((c) => c.filePath && basename(c.filePath) === lu.m.finalName)
+  const src = repo.createSource(`idea:copie-${neuf}`)
+  const titre = `${ancien?.title ?? 'Vidéo'} (copie)`
+  repo.updateSource(src.id, { status: 'done', title: titre, durationSec: mNeuf.durationSec, filePath: cheminNeuf })
+  const clip = repo.createClip({
+    sourceId: src.id,
+    startSec: 0,
+    endSec: mNeuf.durationSec,
+    filePath: cheminNeuf,
+    title: titre,
+    description: ancien?.description ?? null,
+    hashtags: ancien?.hashtags ?? null,
+    reason: 'Copie de sauvegarde avant montage',
+    profile: activeProfile()
+  })
+  // Une sauvegarde ne doit PAS partir en ligne : sans ça le pilote automatique
+  // publierait les deux versions de la même vidéo.
+  repo.updateClip(clip.id, { publishable: 0 })
+  emitLog(`Montage — copie créée : « ${titre} » (non publiable)`)
+  res.json({ ok: true, stamp: String(neuf), clipId: clip.id })
+}))
 /** Retire un plan et ré-aboute. Irréversible : le manifeste est la seule trace
  *  du texte et du prompt de ce plan, et le fichier part avec. */
 app.delete('/api/montage/:stamp/scene/:i', wrap(async (req, res) => {
